@@ -24,3 +24,6 @@ local.properties
 *.pfx
 *.pem
 *.key
+
+# Local project working agreements; never publish to GitHub.
+AGENTS.md
