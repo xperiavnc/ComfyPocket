@@ -234,7 +234,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     internal val _assetsSummary = MutableStateFlow<com.comfyui.mobile.model.AssetsSummaryData?>(null)
     val assetsSummary = _assetsSummary.asStateFlow()
 
-    internal val _downloadTasks = MutableStateFlow<List<com.comfyui.mobile.model.LmDownloadTaskItem>>(emptyList())
+    internal val _downloadTasks = MutableStateFlow<List<com.comfyui.mobile.model.CivitaiDownloadTaskItem>>(emptyList())
     val downloadTasks = _downloadTasks.asStateFlow()
 
     internal val _downloadStats = MutableStateFlow<Map<String, Any>>(emptyMap())

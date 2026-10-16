@@ -23,6 +23,7 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +39,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,6 +55,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.Coil
+import com.comfyui.mobile.market.MarketConnectionMode
+import com.comfyui.mobile.market.MarketViewModel
+import com.comfyui.mobile.network.ConnectionState
 import com.comfyui.mobile.model.CivitaiModelItem
 import com.comfyui.mobile.model.CivitaiFileItem
 import com.comfyui.mobile.model.CivitaiVersionItem
@@ -61,6 +67,9 @@ import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserFilterChipBar
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserManageFilterDialog
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserTypeTabs
 import com.comfyui.mobile.ui.screens.modelbrowser.loadPinnedFilterTags
+import com.comfyui.mobile.ui.screens.market.MarketModelInformation
+import com.comfyui.mobile.ui.screens.market.MarketDownloadQueueDialog
+import com.comfyui.mobile.ui.screens.market.MarketSettingsDialog
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -81,6 +90,7 @@ import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
@@ -98,29 +108,43 @@ fun ModelHubScreen(
     val servers by viewModel.servers.collectAsState()
     val currentServerId by viewModel.currentServerId.collectAsState()
     val currentServer = servers.firstOrNull { it.effectiveId == currentServerId || it.id == currentServerId }
+    val connectionState by viewModel.connectionState.collectAsState()
+    val remoteReady = currentServer != null && !currentServer.isRunningHub &&
+        connectionState == ConnectionState.CONNECTED
+    val market: MarketViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val marketSettings by market.settings.collectAsState()
+    val catalog by market.catalog.state.collectAsState()
+    val gridState = rememberLazyGridState()
+    val marketImageLoader = if (marketSettings.mode == MarketConnectionMode.DIRECT)
+        market.repository.imageLoader else Coil.imageLoader(context)
+    fun imageRequest(url: String): Any = if (marketSettings.mode == MarketConnectionMode.DIRECT)
+        market.repository.imageRequest(url) else url
 
     val assetsSummary by viewModel.assetsSummary.collectAsState()
 
-    var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
 
     // Tab 0: Civitai
-    var searchKeyword by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf("LORA") }
-    var selectedFilterTag by remember { mutableStateOf("全部") }
+    val searchKeyword = catalog.keyword
+    val selectedType = catalog.type
+    val selectedFilterTag = catalog.baseModel
     val pinnedFilterTags = remember { mutableStateListOf<String>().apply { addAll(loadPinnedFilterTags(context)) } }
     var showManageFilterDialog by remember { mutableStateOf(false) }
 
-    var civitaiPage by remember { mutableIntStateOf(1) }
-    var nextCursor by remember { mutableStateOf<String?>(null) }
-    var isSearching by remember { mutableStateOf(false) }
-    var searchError by remember { mutableStateOf<String?>(null) }
-    val civitaiModels = remember { mutableStateListOf<CivitaiModelItem>() }
-    var hasNextPage by remember { mutableStateOf(false) }
+    val isSearching = catalog.loading
+    val searchError = catalog.error
+    val civitaiModels = catalog.items
+    val hasNextPage = catalog.hasNextPage
+    var showMarketSettings by remember { mutableStateOf(false) }
+    var showDownloadQueue by remember { mutableStateOf(false) }
 
     var selectedModelDetail by remember { mutableStateOf<CivitaiModelItem?>(null) }
     var selectedVersion by remember { mutableStateOf<CivitaiVersionItem?>(null) }
     var selectedFile by remember { mutableStateOf<CivitaiFileItem?>(null) }
     var isSubmittingDownload by remember { mutableStateOf(false) }
+    var detailLoading by remember { mutableStateOf(false) }
+    var detailError by remember { mutableStateOf<String?>(null) }
+    var detailAttempt by remember { mutableIntStateOf(0) }
 
     fun resolveImageUrl(rawUrl: String?): String? {
         if (rawUrl.isNullOrBlank()) return null
@@ -132,47 +156,38 @@ fun ModelHubScreen(
         }
     }
 
-    fun loadCivitai(reset: Boolean = true) {
-        val targetPage = if (reset) 1 else civitaiPage + 1
-        val targetCursor = if (reset) null else nextCursor
-        isSearching = true
-        searchError = null
-        scope.launch {
-            val baseParam = if (selectedFilterTag == "全部") null else selectedFilterTag
-            val res = viewModel.searchCivitaiModels(
-                query = searchKeyword,
-                type = selectedType,
-                baseModel = baseParam,
-                page = targetPage,
-                cursor = targetCursor,
-                limit = 20
-            )
-            isSearching = false
-            res.onSuccess { pageData ->
-                if (reset) {
-                    civitaiModels.clear()
-                    civitaiPage = 1
-                } else {
-                    civitaiPage = targetPage
-                }
-                nextCursor = pageData.nextCursor
-                civitaiModels.addAll(pageData.items)
-                hasNextPage = !nextCursor.isNullOrBlank() || (civitaiPage < pageData.totalPages)
-                if (civitaiModels.isEmpty()) {
-                    searchError = "未找到相关模型，请尝试更换关键词"
-                }
-            }.onFailure { err ->
-                if (reset) civitaiModels.clear()
-                searchError = err.message ?: "搜索失败，请确认 ComfyUI 服务正常"
-            }
-        }
+    fun loadCivitai(reset: Boolean = true, forceRefresh: Boolean = false) {
+        market.catalog.load(reset, forceRefresh)
+        if (reset) scope.launch { gridState.scrollToItem(0) }
     }
 
-    // Auto poll assets
+    LaunchedEffect(currentServerId, currentServer?.baseUrl, remoteReady) {
+        market.bridgeContext("$currentServerId|${currentServer?.baseUrl.orEmpty()}", remoteReady)
+        if (remoteReady) viewModel.fetchAssetsSummary()
+    }
     LaunchedEffect(selectedTabIndex) {
-        viewModel.fetchAssetsSummary()
-        if (selectedTabIndex == 0 && civitaiModels.isEmpty()) {
-            loadCivitai(reset = true)
+        if (selectedTabIndex == 0) market.catalog.ensureLoaded()
+        if (selectedTabIndex == 1 && remoteReady) viewModel.fetchAssetsSummary()
+    }
+    LaunchedEffect(selectedModelDetail?.id, selectedVersion?.id, detailAttempt) {
+        val model = selectedModelDetail ?: return@LaunchedEffect
+        detailLoading = true
+        detailError = null
+        try {
+            val result = market.details(model, selectedVersion?.id, detailAttempt > 0)
+            selectedModelDetail = result.model
+            val version = result.model.versions.firstOrNull { it.id == selectedVersion?.id }
+                ?: result.model.versions.firstOrNull()
+            selectedVersion = version
+            selectedFile = version?.files?.firstOrNull { it.id == selectedFile?.id }
+                ?: version?.preferredFile()
+            detailError = result.warning
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            detailError = error.message ?: "模型详情加载失败，可点击重试"
+        } finally {
+            detailLoading = false
         }
     }
 
@@ -190,9 +205,15 @@ fun ModelHubScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = { showDownloadQueue = true }) {
+                        Icon(MiuixIcons.Download, contentDescription = "电脑下载队列")
+                    }
+                    IconButton(onClick = { showMarketSettings = true }) {
+                        Icon(MiuixIcons.Settings, contentDescription = "集市连接、代理与 Key 设置")
+                    }
                     IconButton(onClick = {
-                        viewModel.fetchAssetsSummary()
-                        if (selectedTabIndex == 0) loadCivitai(reset = true)
+                        if (remoteReady) viewModel.fetchAssetsSummary()
+                        if (selectedTabIndex == 0) loadCivitai(reset = true, forceRefresh = true)
                     }) {
                         Icon(MiuixIcons.Refresh, contentDescription = "刷新")
                     }
@@ -248,11 +269,21 @@ fun ModelHubScreen(
                             .fillMaxSize()
                             .padding(horizontal = 16.dp)
                     ) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                if (marketSettings.mode == MarketConnectionMode.DIRECT)
+                                    "手机直连" + if (marketSettings.proxyEnabled) " · HTTP 代理" else ""
+                                else "电脑桥接",
+                                style = MiuixTheme.textStyles.footnote1,
+                                color = scheme.onSecondaryContainer, modifier = Modifier.weight(1f)
+                            )
+                            TextButton(text = "连接设置", onClick = { showMarketSettings = true })
+                        }
                         ModelBrowserTypeTabs(
                             selectedType = selectedType,
                             onTypeSelected = {
-                                selectedType = it
-                                loadCivitai(reset = true)
+                                market.catalog.filter(type = it)
+                                scope.launch { gridState.scrollToItem(0) }
                             }
                         )
 
@@ -265,7 +296,7 @@ fun ModelHubScreen(
                         ) {
                             TextField(
                                 value = searchKeyword,
-                                onValueChange = { searchKeyword = it },
+                                onValueChange = market.catalog::keyword,
                                 label = "搜索模型",
                                 useLabelAsPlaceholder = true,
                                 singleLine = true,
@@ -288,17 +319,25 @@ fun ModelHubScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
-                                                ModelBrowserFilterChipBar(
+                        ModelBrowserFilterChipBar(
                             selectedFilterTag = selectedFilterTag,
                             pinnedFilterTags = pinnedFilterTags,
                             onFilterTagChange = {
-                                selectedFilterTag = it
-                                loadCivitai(reset = true)
+                                market.catalog.filter(baseModel = it)
+                                scope.launch { gridState.scrollToItem(0) }
                             },
                             onManageClick = { showManageFilterDialog = true }
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
+                        (catalog.notice ?: searchError?.takeIf { civitaiModels.isNotEmpty() })?.let { message ->
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                Text(message, style = MiuixTheme.textStyles.footnote1,
+                                    color = scheme.onSecondaryContainer, modifier = Modifier.weight(1f))
+                                if (searchError != null) TextButton(text = "重试",
+                                    onClick = market.catalog::retry)
+                            }
+                        }
 
                         // 4. 模型列表
                         Box(modifier = Modifier.fillMaxSize()) {
@@ -309,7 +348,7 @@ fun ModelHubScreen(
                             } else if (searchError != null && civitaiModels.isEmpty()) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(searchError ?: "未找到模型", style = MiuixTheme.textStyles.body2, color = scheme.error)
+                                        Text(searchError, style = MiuixTheme.textStyles.body2, color = scheme.error)
                                         Spacer(modifier = Modifier.height(8.dp))
                                         TextButton(text = "重试", onClick = { loadCivitai(reset = true) })
                                     }
@@ -320,6 +359,7 @@ fun ModelHubScreen(
                                     contentPadding = PaddingValues(bottom = 16.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    state = gridState,
                                     modifier = Modifier.fillMaxSize()
                                 ) {
                                     items(civitaiModels, key = { it.id }) { item ->
@@ -333,6 +373,8 @@ fun ModelHubScreen(
                                                 selectedModelDetail = item
                                                 selectedVersion = item.versions.firstOrNull()
                                                 selectedFile = item.versions.firstOrNull()?.preferredFile()
+                                                detailAttempt = 0
+                                                detailError = null
                                             }
                                         ) {
                                             Column(modifier = Modifier.padding(6.dp)) {
@@ -346,7 +388,8 @@ fun ModelHubScreen(
                                                     val displayImgUrl = resolveImageUrl(item.previewUrl)
                                                     if (!displayImgUrl.isNullOrBlank()) {
                                                         AsyncImage(
-                                                            model = displayImgUrl,
+                                                            model = imageRequest(displayImgUrl),
+                                                            imageLoader = marketImageLoader,
                                                             contentDescription = null,
                                                             contentScale = ContentScale.Crop,
                                                             modifier = Modifier.fillMaxSize()
@@ -415,7 +458,8 @@ fun ModelHubScreen(
                     ) {
                         if (plugins.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text("未检测到插件", style = MiuixTheme.textStyles.body2, color = scheme.onSecondaryContainer)
+                                Text(if (remoteReady) "未检测到插件" else "连接 ComfyUI 电脑后查看已装插件",
+                                    style = MiuixTheme.textStyles.body2, color = scheme.onSecondaryContainer)
                             }
                         } else {
                             LazyColumn(
@@ -476,13 +520,37 @@ fun ModelHubScreen(
         selectedFilterTag = selectedFilterTag,
         pinnedFilterTags = pinnedFilterTags,
         onFilterTagSelected = {
-            selectedFilterTag = it
-            loadCivitai(reset = true)
+            market.catalog.filter(baseModel = it)
+            scope.launch { gridState.scrollToItem(0) }
         },
         onDismiss = { showManageFilterDialog = false }
     )
 
-    // 模型详情与下载弹窗（结构优化：自选目录、固定底部下载栏，描述独立高度受限滚动）
+    if (showMarketSettings) {
+        MarketSettingsDialog(
+            initial = marketSettings,
+            onDismiss = { showMarketSettings = false },
+            onSave = { value ->
+                market.saveSettings(value).onSuccess {
+                    selectedModelDetail = null
+                    gridState.scrollToItem(0)
+                }
+            },
+            onTest = market.repository::testConnection
+        )
+    }
+    if (showDownloadQueue) {
+        androidx.compose.runtime.key(currentServerId, currentServer?.baseUrl) {
+            MarketDownloadQueueDialog(
+                connected = remoteReady,
+                onDismiss = { showDownloadQueue = false },
+                load = market.repository::downloadTasks,
+                action = market.repository::taskAction
+            )
+        }
+    }
+
+    // 详情整体滚动；下载栏固定，长简介和示例提示词不会挤出操作区。
     selectedModelDetail?.let { model ->
         val version = selectedVersion ?: model.versions.firstOrNull()
         val file = selectedFile ?: version?.preferredFile()
@@ -491,12 +559,8 @@ fun ModelHubScreen(
             version != null && version.sizeKB > 0 -> version.sizeKB
             else -> 0.0
         }
-        val vDesc = version?.description.orEmpty()
-        val descText = when {
-            vDesc.isBlank() -> model.description
-            model.description.isBlank() -> vDesc
-            else -> "${model.description}\n\n【版本说明】\n$vDesc"
-        }
+        val downloadReady = remoteReady && !detailLoading && !isSubmittingDownload &&
+            version != null && version.id > 0 && file?.isRequiredComponent != true
 
         var availableFolders by remember(model.id, model.type) { mutableStateOf<List<com.comfyui.mobile.model.ModelFolderItem>>(emptyList()) }
         var selectedFolder by remember(model.id, model.type) { mutableStateOf<com.comfyui.mobile.model.ModelFolderItem?>(null) }
@@ -504,14 +568,21 @@ fun ModelHubScreen(
         var isAddingFolder by remember { mutableStateOf(false) }
         var newFolderNameInput by remember { mutableStateOf("") }
         var downloadErrorDialogMsg by remember { mutableStateOf<String?>(null) }
+        var folderError by remember { mutableStateOf<String?>(null) }
 
-        LaunchedEffect(model.type) {
+        LaunchedEffect(model.type, currentServerId, remoteReady) {
+            availableFolders = emptyList()
+            selectedFolder = null
+            folderError = null
+            if (!remoteReady) return@LaunchedEffect
             val res = viewModel.getModelFolders(model.type)
             res.onSuccess { list ->
                 availableFolders = list
                 if (selectedFolder == null && list.isNotEmpty()) {
                     selectedFolder = list.first()
                 }
+            }.onFailure {
+                folderError = "目录读取失败，请检查电脑上的桥接插件"
             }
         }
 
@@ -525,6 +596,10 @@ fun ModelHubScreen(
                     .fillMaxWidth()
                     .heightIn(max = 560.dp)
             ) {
+                Column(
+                    modifier = Modifier.weight(1f, fill = false).fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
                 // 1. 顶部基础信息 (封面 + 标题 + 版本 + 大小)
                 val displayCoverUrl = resolveImageUrl(version?.previewUrl ?: model.previewUrl)
                 if (!displayCoverUrl.isNullOrBlank()) {
@@ -536,7 +611,8 @@ fun ModelHubScreen(
                             .background(scheme.surfaceContainerHigh)
                     ) {
                         AsyncImage(
-                            model = displayCoverUrl,
+                            model = imageRequest(displayCoverUrl),
+                            imageLoader = marketImageLoader,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
@@ -552,6 +628,15 @@ fun ModelHubScreen(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (detailLoading) Text("正在加载完整详情…", style = MiuixTheme.textStyles.footnote1)
+                detailError?.let { message ->
+                    Text(message, style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
+                    TextButton(text = "重试详情与提示词", onClick = { detailAttempt++ })
+                }
+                if (!version?.availability.isNullOrBlank()) {
+                    Text("基础模型：${version.baseModel} · 访问状态：${version.availability}",
+                        style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
+                }
                 Text(
                     text = "作者: ${model.creator} · 类型: ${model.type}",
                     style = MiuixTheme.textStyles.footnote1,
@@ -629,6 +714,10 @@ fun ModelHubScreen(
                     else String.format(java.util.Locale.US, "%.1f MB", sizeMB)
                     Text(text = "文件大小: $sizeStr", style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
                 }
+                file?.let {
+                    val metadata = listOf(it.format, it.precision).filter(String::isNotBlank).joinToString(" · ")
+                    if (metadata.isNotBlank()) Text(metadata, style = MiuixTheme.textStyles.footnote1)
+                }
 
                 // 保存目录
                 Spacer(modifier = Modifier.height(6.dp))
@@ -637,7 +726,7 @@ fun ModelHubScreen(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(scheme.surfaceContainerHigh)
-                        .clickable { showFolderPicker = true }
+                        .clickable { if (remoteReady) showFolderPicker = true }
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -649,7 +738,7 @@ fun ModelHubScreen(
                         color = scheme.onSurface
                     )
                     Text(
-                        text = selectedFolder?.name ?: "获取中...",
+                        text = selectedFolder?.name ?: if (remoteReady) folderError ?: "获取中…" else "连接电脑后可选",
                         style = MiuixTheme.textStyles.footnote1,
                         color = scheme.primary,
                         maxLines = 1,
@@ -661,37 +750,28 @@ fun ModelHubScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // 2. 模型描述（独立高度受限滚动区，彻底解决描述过长需划到底的问题）
-                Text(text = "模型描述：", style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold))
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .fillMaxWidth()
-                        .heightIn(min = 60.dp, max = 135.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(scheme.surfaceContainerHigh)
-                        .padding(10.dp)
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    Text(
-                        text = descText.ifBlank { "暂无模型描述" },
-                        style = MiuixTheme.textStyles.body2,
-                        color = scheme.onSurface
-                    )
+                MarketModelInformation(model, version, marketImageLoader) { imageRequest(it) }
+                Text("本机 Key 不发送到电脑。受限模型下载，请在 ComfyUI 设置 → Mobile Bridge → Civitai 配置电脑 Key。",
+                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer,
+                    modifier = Modifier.padding(top = 12.dp))
+                Text("手机与电脑账号权限可能不同，下载资格由电脑 Key 验证；手机未列出文件时由电脑选择主文件。",
+                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
                 }
-
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 3. 底部固定操作栏（始终贴底可见，无需滚动）
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 12.dp,
-                    colors = CardDefaults.defaultColors(color = scheme.primary),
+                    colors = CardDefaults.defaultColors(color = if (downloadReady) scheme.primary else scheme.surfaceContainerHigh),
                     pressFeedbackType = PressFeedbackType.Tilt,
                     showIndication = true,
                     onClick = {
-                        if (version == null) return@Card
+                        if (!remoteReady) {
+                            Toast.makeText(context, "请先连接 ComfyUI 电脑", Toast.LENGTH_SHORT).show()
+                            return@Card
+                        }
+                        if (!downloadReady) return@Card
                         isSubmittingDownload = true
                         scope.launch {
                             val res = viewModel.downloadCivitaiModel(
@@ -709,6 +789,7 @@ fun ModelHubScreen(
                             res.onSuccess { msg ->
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 selectedModelDetail = null
+                                 showDownloadQueue = true
                             }.onFailure { err ->
                                 downloadErrorDialogMsg = err.message ?: "下载提交失败"
                             }
@@ -722,12 +803,22 @@ fun ModelHubScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(MiuixIcons.Download, contentDescription = null, tint = scheme.onPrimary, modifier = Modifier.size(18.dp))
+                        Icon(MiuixIcons.Download, contentDescription = null,
+                            tint = if (downloadReady) scheme.onPrimary else scheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isSubmittingDownload) "正在提交任务..." else "远程下载到电脑",
+                            text = when {
+                                isSubmittingDownload -> "正在提交任务…"
+                                !remoteReady -> "连接电脑后可远程下载"
+                                detailLoading -> "正在读取文件信息…"
+                                version == null -> "当前模型暂无可选版本"
+                                file == null -> "由电脑验证并下载主文件"
+                                version.canDownload == false -> "验证电脑账号权限并下载"
+                                else -> "远程下载到电脑"
+                            },
                             style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
-                            color = scheme.onPrimary
+                            color = if (downloadReady) scheme.onPrimary else scheme.onSecondaryContainer
                         )
                     }
                 }

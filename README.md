@@ -9,6 +9,17 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/ComfyUI-Mobile-Bridge/`：独立的 Python 服务端桥接插件，不打入 APK。
 - `app-reconstructed/BUILD.md`：重建工程的构建版本与说明。
 - `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
+- `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
+- `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
+
+## Civitai 集市
+
+手机可独立直连 Civitai，支持自定义 HTTP 代理和 Key，查看模型简介、触发词、
+示例图正反提示词。模型安装仍下发给 ComfyUI 电脑。
+
+配套 Bridge 2.0 已去除 Lora Manager 依赖，使用原生校验下载队列。
+电脑 Key 在 **ComfyUI 设置 → Mobile Bridge → Civitai** 配置，支持保存、测试和清除，
+不从手机偷偷转发凭据。从旧单文件插件升级请替换整个目录并重启 ComfyUI。
 
 ## 构建
 
@@ -36,13 +47,14 @@ cd app-reconstructed
 
 ## 当前验证状态
 
-- 重构版构建成功，91 项 JVM 单元测试通过，其中 36 项为新增回归测试。
+- Android 构建成功，137 项 JVM、44 项 Bridge Python、10 项设置 GUI Node 测试通过
+  （共 191 项）；另完成本地浏览器烟测，测试命令见各模块文档。
 - 主 ViewModel 从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、
   参数持久化、日志和缓存管理五个组件。
 - 本地补丁回放和回滚演练通过；APK v2 签名校验通过。
 - 使用调试签名，尚未做真机 UI 或真实生成服务端到端测试。
-- 证书校验范围、桥接插件组件下载目录和图片代理域名校验的既有问题，
-  本次结构重构未处理。
+- 原有常规 ComfyUI 连接的证书策略未改；Civitai 直连使用独立正常 TLS 客户端。
+  Bridge 原生下载重新验证文件与注册目录，图片代理使用精确域名边界。
 
 本仓库基于提供的源码快照重建构建配置并做职责拆分，不代表已恢复原始发布工程。
 本机 SDK 路径、缓存、执行记录、原始备份和 APK 交付文件均排除在 Git 之外。

@@ -924,18 +924,20 @@ class ComfyRepository private constructor() {
                 role = role
             )
             val response = api?.downloadCivitaiModel(req)
-            if (response?.isSuccessful == true) {
+            if (response?.isSuccessful == true && response.body()?.code == 0) {
                 Result.success(response.body()?.msg ?: "已提交下载任务")
             } else {
                 val code = response?.code() ?: -1
                 val errRaw = response?.errorBody()?.string() ?: ""
-                var errMsg = errRaw
-                try {
-                    val jsonObj = org.json.JSONObject(errRaw)
-                    errMsg = jsonObj.optString("msg", jsonObj.optString("error", errRaw))
-                } catch (_: Exception) {}
-                Result.failure(IllegalStateException(errMsg.ifBlank { "提交下载失败 (HTTP $code)" }))
+                val errMsg = runCatching { org.json.JSONObject(errRaw).optString("msg") }
+                    .getOrNull()?.takeIf { it.isNotBlank() }
+                if (code == 404 && errMsg == null) return Result.failure(IllegalStateException(
+                    "请更新电脑上的 Mobile Bridge 2.0 并重启 ComfyUI，当前插件没有原生下载接口"))
+                Result.failure(IllegalStateException(
+                    response?.body()?.msg ?: errMsg ?: "提交下载失败 (HTTP $code)"))
             }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Log.e("Repository", "Civitai download failed", e)
             Result.failure(e)
@@ -946,12 +948,16 @@ class ComfyRepository private constructor() {
         return try {
             ensureApi()
             val response = api?.getCivitaiDownloadTasks()
-            if (response?.isSuccessful == true) {
+            if (response?.isSuccessful == true && response.body()?.code == 0) {
                 Result.success(response.body()?.data ?: com.comfyui.mobile.model.CivitaiTasksData())
             } else {
                 val code = response?.code() ?: -1
-                Result.failure(IllegalStateException("获取下载队列失败 (HTTP $code)"))
+                Result.failure(IllegalStateException(if (code == 404)
+                    "请更新电脑上的 Mobile Bridge 2.0 并重启 ComfyUI，以使用原生下载队列"
+                    else response?.body()?.msg ?: "获取下载队列失败 (HTTP $code)"))
             }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Log.e("Repository", "Civitai tasks failed", e)
             Result.failure(e)
@@ -966,11 +972,16 @@ class ComfyRepository private constructor() {
             ensureApi()
             val req = com.comfyui.mobile.model.CivitaiTaskActionRequest(action, downloadId)
             val response = api?.civitaiTaskAction(req)
-            if (response?.isSuccessful == true) {
+            if (response?.isSuccessful == true && response.body()?.code == 0) {
                 Result.success(Unit)
             } else {
-                Result.failure(IllegalStateException("任务操作失败 (HTTP ${response?.code()})"))
+                val raw = response?.errorBody()?.string().orEmpty()
+                val message = runCatching { org.json.JSONObject(raw).optString("msg") }.getOrNull()
+                Result.failure(IllegalStateException(message?.takeIf { it.isNotBlank() }
+                    ?: response?.body()?.msg ?: "任务操作失败 (HTTP ${response?.code()})"))
             }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             Log.e("Repository", "Civitai task action failed", e)
             Result.failure(e)

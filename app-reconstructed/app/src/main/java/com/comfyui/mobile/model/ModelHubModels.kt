@@ -33,7 +33,8 @@ data class CivitaiFileItem(
     val type: String = "Model",
     val primary: Boolean = false,
     /** 桥接给出的 "model" / "component"；旧桥接为空时按 type 判断 */
-    val role: String = ""
+    val role: String = "",
+    val precision: String = ""
 ) {
     /** Civitai files[].type 为 VAE / Text Encoder 视为必需组件（role 仅作补充，不能用 model 覆盖 type） */
     val isRequiredComponent: Boolean
@@ -60,6 +61,18 @@ data class CivitaiFileItem(
         }
 }
 
+data class CivitaiPreviewItem(
+    val id: Long = 0,
+    val url: String = "",
+    val prompt: String = "",
+    val negativePrompt: String = "",
+    val sampler: String = "",
+    val steps: String = "",
+    val seed: String = "",
+    val cfgScale: String = "",
+    val communityExample: Boolean = false
+)
+
 data class CivitaiVersionItem(
     val id: Long = 0,
     val name: String = "",
@@ -69,7 +82,10 @@ data class CivitaiVersionItem(
     val downloadUrl: String = "",
     val sizeKB: Double = 0.0,
     val previewUrl: String? = null,
-    val files: List<CivitaiFileItem> = emptyList()
+    val files: List<CivitaiFileItem> = emptyList(),
+    val images: List<CivitaiPreviewItem> = emptyList(),
+    val availability: String = "",
+    val canDownload: Boolean? = null
 ) {
     val authorFiles: List<CivitaiFileItem> get() = files.filterNot { it.isRequiredComponent }
     val componentFiles: List<CivitaiFileItem> get() = files.filter { it.isRequiredComponent }
@@ -99,7 +115,8 @@ data class CivitaiSearchPageData(
     val totalItems: Int = 0,
     val currentPage: Int = 1,
     val pageSize: Int = 20,
-    val totalPages: Int = 1
+    val totalPages: Int = 1,
+    val nextPage: Int? = null
 )
 
 data class CivitaiSearchResponse(
@@ -114,7 +131,7 @@ data class CivitaiDownloadRequest(
     val modelType: String? = null,
     val modelRoot: String? = null,
     val subfolder: String? = null,
-    /** Civitai file id for multi-file / quantization selection; LM uses file_params.id */
+    /** Civitai file id; Bridge resolves the URL and SHA-256 from official metadata. */
     val fileId: Long? = null,
     val downloadUrl: String? = null,
     /** Civitai files[].type, e.g. Model / VAE / Text Encoder */
@@ -144,7 +161,7 @@ data class CivitaiTaskActionRequest(
     val downloadId: String
 )
 
-data class LmDownloadTaskItem(
+data class CivitaiDownloadTaskItem(
     val download_id: String? = null,
     val model_id: Any? = null,
     val model_version_id: Any? = null,
@@ -165,7 +182,7 @@ data class LmDownloadTaskItem(
 }
 
 data class CivitaiTasksData(
-    val queue: List<LmDownloadTaskItem>? = null,
+    val queue: List<CivitaiDownloadTaskItem>? = null,
     val stats: Map<String, Any>? = null
 )
 

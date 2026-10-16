@@ -37,11 +37,20 @@ class SecretStore private constructor(context: Context) {
 
     fun removeLlmKey(profileId: String) = remove(llmAlias(profileId))
 
-    private fun put(alias: String, plaintext: String) {
-        val value = plaintext.trim()
+    fun putCivitaiKey(plaintext: String) = put("market:civitai", plaintext)
+
+    fun getCivitaiKey(): String = get("market:civitai").orEmpty()
+
+    fun putCivitaiProxyPassword(plaintext: String) =
+        put("market:proxy-password", plaintext, trim = false)
+
+    fun getCivitaiProxyPassword(): String = get("market:proxy-password").orEmpty()
+
+    private fun put(alias: String, plaintext: String, trim: Boolean = true) {
+        val value = if (trim) plaintext.trim() else plaintext
         synchronized(lock) {
             val map = readMap()
-            if (value.isBlank()) {
+            if (value.isEmpty()) {
                 map.remove(alias)
             } else {
                 map[alias] = encrypt(value)

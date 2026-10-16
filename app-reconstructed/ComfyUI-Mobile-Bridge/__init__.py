@@ -6,10 +6,10 @@ Provides high-performance, mobile-optimized model library API compatible with
 ComfyController Android app (RunningHub-aligned resource API format).
 
 Features:
-- Completely decoupled from ComfyUI-Lora-Manager: safe from any upstream updates.
+- Native Civitai download queue and server-only credentials with a ComfyUI settings GUI.
 - Aggregates and trims bloated model metadata into lightweight (~5KB) mobile responses.
 - Dynamically resolves preview image URLs to relative paths (port forwarding & tunnel friendly).
-- Seamless fallback to native ComfyUI model directories if Lora-Manager is not installed.
+- Reads registered ComfyUI model directories directly; no model-manager dependency.
 """
 
 from __future__ import annotations
@@ -21,13 +21,15 @@ import html
 import json
 import logging
 import hashlib
-import platform
-import shutil
 import urllib.parse
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import asyncio
-from aiohttp import web, ClientSession, ClientTimeout
+from aiohttp import web, ClientSession
+
+from .civitai_client import CivitaiError
+from .civitai_downloads import model_folder_keys
+from .civitai_service import CivitaiService
 
 logger = logging.getLogger("ComfyUI-Mobile-Bridge")
 
@@ -65,7 +67,7 @@ def _normalize_relative_preview_url(url: Optional[str]) -> Optional[str]:
         # If it points to localhost/127.0.0.1, convert to relative path
         for prefix in ("http://127.0.0.1:", "http://localhost:", "https://127.0.0.1:", "https://localhost:"):
             if url_str.startswith(prefix):
-                # e.g. http://127.0.0.1:8188/api/lm/... -> /api/lm/...
+                # e.g. http://127.0.0.1:8188/api/mobile/... -> /api/mobile/...
                 parts = url_str.split("/", 3)
                 if len(parts) >= 4:
                     return "/" + parts[3]
@@ -293,7 +295,7 @@ def _extract_model_description(item: Dict[str, Any], file_path: Optional[str] = 
 
         for fp in candidates:
             base_no_ext = os.path.splitext(fp)[0]
-            # 1. First check Lora-Manager sidecar: <model>.metadata.json
+            # 1. Read an existing metadata sidecar: <model>.metadata.json
             for meta_file in (f"{base_no_ext}.metadata.json", f"{fp}.metadata.json"):
                 if os.path.isfile(meta_file):
                     try:
@@ -360,59 +362,6 @@ def _extract_model_description(item: Dict[str, Any], file_path: Optional[str] = 
     return "\n\n".join(sections).strip()
 
 
-async def _fetch_from_lora_manager(
-    category: str,
-    keyword: str,
-    page: int,
-    page_size: int,
-    base_model: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
-    """Query ComfyUI-Lora-Manager internal API via localhost."""
-    port = _get_server_port()
-    # Route mapping
-    cat_lower = category.lower()
-    if cat_lower in ("lora", "loras"):
-        endpoint = f"http://127.0.0.1:{port}/api/lm/loras/list"
-    elif cat_lower in ("checkpoint", "checkpoints"):
-        endpoint = f"http://127.0.0.1:{port}/api/lm/checkpoints/list"
-    elif cat_lower in ("unet", "gguf", "other", "others"):
-        endpoint = f"http://127.0.0.1:{port}/api/lm/others/list"
-    else:
-        endpoint = f"http://127.0.0.1:{port}/api/lm/loras/list"
-
-    # Multi-value parameters list for aiohttp: supports multiple base_model parameters
-    query_params: List[tuple[str, str]] = [
-        ("page", str(page)),
-        ("page_size", str(page_size)),
-    ]
-    if keyword:
-        query_params.append(("search", keyword))
-        query_params.append(("query", keyword))
-        query_params.append(("search_tags", "true"))
-        query_params.append(("search_modelname", "true"))
-        query_params.append(("search_filename", "true"))
-
-    if base_model and base_model.lower() not in ("any", "all", "全部"):
-        aliases = _expand_base_model_aliases(base_model)
-        for a in aliases:
-            query_params.append(("base_model", a))
-
-    if cat_lower == "unet":
-        query_params.append(("sub_type", "unet"))
-    elif cat_lower == "gguf":
-        query_params.append(("sub_type", "gguf"))
-
-    try:
-        async with ClientSession() as session:
-            async with session.get(endpoint, params=query_params, timeout=3.0) as resp:
-                if resp.status == 200:
-                    return await resp.json()
-    except Exception as e:
-        logger.debug(f"Could not fetch from Lora-Manager ({endpoint}): {e}")
-        return None
-    return None
-
-
 def _find_native_preview(model_path: str) -> Optional[str]:
     """Find a preview image adjacent to the model file in native ComfyUI directory."""
     p = Path(model_path)
@@ -434,7 +383,7 @@ def _list_native_models(
     page_size: int,
     base_model: Optional[str] = None
 ) -> Dict[str, Any]:
-    """Native ComfyUI fallback when ComfyUI-Lora-Manager is not installed."""
+    """Read models directly from registered ComfyUI directories."""
     if folder_paths is None:
         return {"records": [], "total": 0, "current": page, "size": page_size, "pages": 0, "hasNext": False}
 
@@ -500,28 +449,14 @@ def _list_native_models(
 
 
 async def handle_mobile_status(request: web.Request) -> web.Response:
-    """Health & feature detection endpoint for mobile app."""
-    port = _get_server_port()
-    # Test if lora manager is reachable
-    lm_installed = False
-    try:
-        async with ClientSession() as session:
-            async with session.get(f"http://127.0.0.1:{port}/api/lm/loras/list", params={"page_size": 1}, timeout=1.0) as resp:
-                lm_installed = (resp.status == 200)
-    except Exception:
-        lm_installed = False
-
     return web.json_response({
-        "code": 0,
-        "msg": "success",
-        "data": {
-            "version": "1.0.0",
-            "name": "ComfyUI-Mobile-Bridge",
-            "loraManagerInstalled": lm_installed,
+        "code": 0, "msg": "success", "data": {
+            "version": "2.0.0", "name": "ComfyUI-Mobile-Bridge",
+            "loraManagerInstalled": False,
+            "capabilities": ["native-civitai-downloads", "civitai-server-settings"],
             "supportedTypes": ["CHECKPOINT", "LORA", "UNET", "GGUF"]
         }
     })
-
 
 def _get_allowed_preview_roots() -> List[Path]:
     """Collect all authorized root directories (models, extra_paths, outputs, etc.) from ComfyUI."""
@@ -661,73 +596,6 @@ async def handle_resource_list(request: web.Request) -> web.Response:
 
     base_model = params.get("baseModel") or params.get("base_model")
 
-    cat_map = {
-        "LORA": "loras",
-        "CHECKPOINT": "checkpoints",
-        "UNET": "diffusion_models",
-        "GGUF": "unet",
-    }
-    folder_type = cat_map.get(resource_type.upper(), "loras")
-
-    # 1. Try querying ComfyUI-Lora-Manager first
-    lm_result = await _fetch_from_lora_manager(resource_type, keyword, page, page_size, base_model)
-    if lm_result and isinstance(lm_result, dict) and "items" in lm_result:
-        items = lm_result.get("items") or []
-        records = []
-        for it in items:
-            civitai = it.get("civitai") or {}
-            trained_words = civitai.get("trainedWords") or []
-            if isinstance(trained_words, list):
-                tw_str = ", ".join(trained_words)
-            else:
-                tw_str = str(trained_words or "")
-
-            preview = _normalize_relative_preview_url(it.get("preview_url"))
-            model_name = it.get("model_name") or it.get("file_name") or ""
-            file_name = it.get("file_name") or model_name
-            folder = it.get("folder") or ""
-            file_path = it.get("file_path") or ""
-
-            node_model_name = _resolve_comfy_node_model_name(
-                folder_type=folder_type,
-                file_path=file_path,
-                file_name=file_name,
-                folder=folder,
-                model_name=model_name
-            )
-
-            records.append({
-                "id": file_path or it.get("sha256") or node_model_name,
-                "resourceName": model_name,
-                "resourceType": resource_type,
-                "nodeModelName": node_model_name,
-                "thumbnailUrl": preview,
-                "posterUrl": preview,
-                "desc": _extract_model_description(it, file_path),
-                "versions": [{
-                    "baseModel": it.get("base_model") or "",
-                    "triggerWords": tw_str,
-                    "versionResourceName": node_model_name
-                }]
-            })
-
-        total = int(lm_result.get("total") or len(records))
-        total_pages = int(lm_result.get("total_pages") or ((total + page_size - 1) // page_size if page_size else 1))
-
-        return web.json_response({
-            "code": 0,
-            "msg": "success",
-            "data": {
-                "records": records,
-                "total": total,
-                "current": page,
-                "size": page_size,
-                "pages": total_pages,
-                "hasNext": page < total_pages
-            }
-        })
-
-    # 2. Fallback to native ComfyUI folders
     native_data = _list_native_models(resource_type, keyword, page, page_size, base_model)
     return web.json_response({
         "code": 0,
@@ -805,15 +673,6 @@ async def handle_assets_summary(request: web.Request) -> web.Response:
         except Exception as e:
             logger.debug(f"Failed scanning custom_nodes: {e}")
 
-    # Check Lora-Manager installation
-    lm_installed = False
-    try:
-        async with ClientSession() as session:
-            async with session.get(f"http://127.0.0.1:{port}/api/lm/loras/list", params={"page_size": 1}, timeout=1.0) as resp:
-                lm_installed = (resp.status == 200)
-    except Exception:
-        lm_installed = False
-
     return web.json_response({
         "code": 0,
         "msg": "success",
@@ -824,7 +683,7 @@ async def handle_assets_summary(request: web.Request) -> web.Response:
             "unetCount": unet_count,
             "totalPlugins": len(plugins_list),
             "plugins": plugins_list[:50],  # Keep response compact
-            "loraManagerInstalled": lm_installed,
+            "loraManagerInstalled": False,
             "comfyManagerInstalled": cm_installed
         }
     })
@@ -859,7 +718,9 @@ async def handle_civitai_image_proxy(request: web.Request) -> web.StreamResponse
     allowed_hosts = ("image.civitai.com", "blobs-b2.civitai.com", "civitai.com", "civitai.red")
     try:
         parsed = urllib.parse.urlparse(target_url)
-        if not any(parsed.netloc.endswith(h) for h in allowed_hosts):
+        if (parsed.scheme != "https" or parsed.username or parsed.password
+                or parsed.port not in (None, 443) or not parsed.hostname
+                or not any(parsed.hostname == h or parsed.hostname.endswith("." + h) for h in allowed_hosts)):
             return web.Response(status=403, text="Forbidden image domain")
     except Exception:
         return web.Response(status=400, text="Invalid url")
@@ -882,7 +743,7 @@ async def handle_civitai_image_proxy(request: web.Request) -> web.StreamResponse
     try:
         async with ClientSession(trust_env=True) as session:
             headers = {"User-Agent": "ComfyController/1.0.0"}
-            async with session.get(target_url, headers=headers, timeout=15.0) as resp:
+            async with session.get(target_url, headers=headers, timeout=15.0, allow_redirects=False) as resp:
                 if resp.status == 200:
                     data = await resp.read()
                     content_type = resp.headers.get("Content-Type", "image/jpeg")
@@ -901,8 +762,8 @@ async def handle_civitai_image_proxy(request: web.Request) -> web.StreamResponse
                 else:
                     return web.Response(status=resp.status, text=f"Upstream status {resp.status}")
     except Exception as e:
-        logger.warning(f"Failed to proxy image {target_url}: {e}")
-        return web.Response(status=502, text=str(e))
+        logger.warning("Civitai image proxy request failed")
+        return web.Response(status=502, text="Image proxy request failed")
 
 
 async def handle_civitai_search(request: web.Request) -> web.Response:
@@ -910,14 +771,16 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
     query = request.query.get("query", "").strip()
     m_type = request.query.get("type", "").strip()
     base_model = request.query.get("baseModel", "").strip()
-    page = request.query.get("page", "1")
+    try:
+        page = max(1, int(request.query.get("page", "1")))
+        limit = max(1, min(50, int(request.query.get("limit", "20"))))
+    except ValueError:
+        return web.json_response({"code": 400, "msg": "分页参数无效"}, status=400)
     cursor = request.query.get("cursor", "").strip()
-    limit = request.query.get("limit", "20")
     sort = request.query.get("sort", "Highest Rated")
 
-    civitai_url = "https://civitai.com/api/v1/models"
     params: List[tuple[str, str]] = [
-        ("limit", limit),
+        ("limit", str(limit)),
         ("nsfw", "false"),
     ]
 
@@ -930,7 +793,7 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
         if cursor:
             params.append(("cursor", cursor))
         elif page:
-            params.append(("page", page))
+            params.append(("page", str(page)))
         if sort:
             params.append(("sort", sort))
 
@@ -949,141 +812,152 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
             params.append(("baseModels", a))
 
     try:
-        # Respect system proxy if configured
-        trust_env = True
-        async with ClientSession(trust_env=trust_env) as session:
-            headers = {"User-Agent": "ComfyController/1.0.0"}
-            async with session.get(civitai_url, params=params, headers=headers, timeout=15.0) as resp:
-                if resp.status != 200:
-                    err_txt = await resp.text()
-                    logger.warning(f"[ComfyUI-Mobile-Bridge] Civitai error HTTP {resp.status}: {err_txt}")
-                    return web.json_response({
-                        "code": resp.status,
-                        "msg": f"Civitai 请求失败 (HTTP {resp.status}): {err_txt[:120]}",
-                        "data": None
-                    }, status=502)
+        raw_data = await _get_civitai_service().client.json("models", params)
+        items = raw_data.get("items") or []
+        metadata = raw_data.get("metadata") or {}
 
-                raw_data = await resp.json()
-                items = raw_data.get("items") or []
-                metadata = raw_data.get("metadata") or {}
+        formatted_items = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            m_id = it.get("id")
+            name = it.get("name") or "未知模型"
+            model_type = it.get("type") or "LORA"
+            creator = (it.get("creator") or {}).get("username") or ""
+            stats = it.get("stats") or {}
+            tags = it.get("tags") or []
 
-                formatted_items = []
-                for it in items:
-                    m_id = it.get("id")
-                    name = it.get("name") or "未知模型"
-                    model_type = it.get("type") or "LORA"
-                    creator = (it.get("creator") or {}).get("username") or ""
-                    stats = it.get("stats") or {}
-                    tags = it.get("tags") or []
+            m_desc = _clean_html_text(it.get("description") or "")
+            raw_versions = it.get("modelVersions") or []
+            formatted_versions = []
+            preview_url = None
 
-                    m_desc = _clean_html_text(it.get("description") or "")
-                    raw_versions = it.get("modelVersions") or []
-                    formatted_versions = []
-                    preview_url = None
+            for v in raw_versions:
+                if not isinstance(v, dict):
+                    continue
+                v_id = v.get("id")
+                v_name = v.get("name") or ""
+                v_base = v.get("baseModel") or ""
+                trained_words = v.get("trainedWords") or []
+                v_desc = _clean_html_text(v.get("description") or "")
+                download_url = v.get("downloadUrl") or ""
 
-                    for v in raw_versions:
-                        v_id = v.get("id")
-                        v_name = v.get("name") or ""
-                        v_base = v.get("baseModel") or ""
-                        trained_words = v.get("trainedWords") or []
-                        v_desc = _clean_html_text(v.get("description") or "")
-                        download_url = v.get("downloadUrl") or ""
-
-                        files = v.get("files") or []
-                        formatted_files = []
-                        for f in files:
-                            if not isinstance(f, dict):
-                                continue
-                            f_meta = f.get("metadata") or {}
-                            if not isinstance(f_meta, dict):
-                                f_meta = {}
-                            f_download = f.get("downloadUrl") or download_url or ""
-                            formatted_files.append({
-                                "id": f.get("id") or 0,
-                                "name": (f.get("overrideName") or f.get("name") or ""),
-                                "sizeKB": f.get("sizeKB") or 0,
-                                "downloadUrl": f_download,
-                                "format": f_meta.get("format") or f.get("format") or "",
-                                "type": f.get("type") or "Model",
-                                # Civitai files[].type: VAE / Text Encoder = required components (case-insensitive)
-                                "role": (
-                                    "component"
-                                    if str(f.get("type") or "").strip().lower().replace("_", " ")
-                                    in ("vae", "text encoder", "textencoder")
-                                    else "model"
-                                ),
-                                "primary": bool(f.get("primary")),
-                            })
-                        primary_file = next((f for f in formatted_files if f.get("primary")), formatted_files[0] if formatted_files else {})
-                        size_kb = primary_file.get("sizeKB") or 0
-                        # Prefer primary file download URL when version-level URL is empty
-                        if not download_url and primary_file.get("downloadUrl"):
-                            download_url = primary_file.get("downloadUrl") or ""
-
-                        # Get preview image
-                        images = v.get("images") or []
-                        v_img = images[0].get("url") if images else None
-                        v_thumb = _optimize_civitai_image_url(v_img, width=450)
-                        v_detail = _optimize_civitai_image_url(v_img, width=800)
-                        if not preview_url and v_thumb:
-                            preview_url = v_thumb
-
-                        formatted_versions.append({
-                            "id": v_id,
-                            "name": v_name,
-                            "baseModel": v_base,
-                            "trainedWords": trained_words,
-                            "description": v_desc,
-                            "downloadUrl": download_url,
-                            "sizeKB": size_kb,
-                            "previewUrl": v_detail,
-                            "files": formatted_files,
-                        })
-
-                    formatted_items.append({
-                        "id": m_id,
-                        "name": name,
-                        "type": model_type,
-                        "creator": creator,
-                        "description": m_desc,
-                        "downloadCount": stats.get("downloadCount") or 0,
-                        "rating": stats.get("rating") or 0.0,
-                        "thumbsUpCount": stats.get("thumbsUpCount") or 0,
-                        "tags": tags[:5],
-                        "previewUrl": preview_url,
-                        "versions": formatted_versions
+                files = v.get("files") or []
+                formatted_files = []
+                for f in files:
+                    if not isinstance(f, dict):
+                        continue
+                    f_meta = f.get("metadata") or {}
+                    if not isinstance(f_meta, dict):
+                        f_meta = {}
+                    f_download = f.get("downloadUrl") or download_url or ""
+                    formatted_files.append({
+                        "id": f.get("id") or 0,
+                        "name": (f.get("overrideName") or f.get("name") or ""),
+                        "sizeKB": f.get("sizeKB") or 0,
+                        "downloadUrl": f_download,
+                        "format": f_meta.get("format") or f.get("format") or "",
+                        "precision": f_meta.get("fp") or "",
+                        "type": f.get("type") or "Model",
+                        # Civitai files[].type: VAE / Text Encoder = required components (case-insensitive)
+                        "role": (
+                            "component"
+                            if str(f.get("type") or "").strip().lower().replace("_", " ")
+                            in ("vae", "text encoder", "textencoder")
+                            else "model"
+                        ),
+                        "primary": bool(f.get("primary")),
                     })
+                primary_file = next((f for f in formatted_files if f.get("primary")), formatted_files[0] if formatted_files else {})
+                size_kb = primary_file.get("sizeKB") or 0
+                # Prefer primary file download URL when version-level URL is empty
+                if not download_url and primary_file.get("downloadUrl"):
+                    download_url = primary_file.get("downloadUrl") or ""
 
-                next_cursor = metadata.get("nextCursor")
-                return web.json_response({
-                    "code": 0,
-                    "msg": "success",
-                    "data": {
-                        "items": formatted_items,
-                        "nextCursor": str(next_cursor) if next_cursor is not None else None,
-                        "totalItems": metadata.get("totalItems") or len(formatted_items),
-                        "currentPage": metadata.get("currentPage") or int(page if not query else 1),
-                        "pageSize": metadata.get("pageSize") or int(limit),
-                        "totalPages": metadata.get("totalPages") or (2 if next_cursor else 1)
-                    }
+                # Get preview image
+                images = [image for image in (v.get("images") or []) if isinstance(image, dict)]
+                v_img = images[0].get("url") if images else None
+                v_thumb = _optimize_civitai_image_url(v_img, width=450)
+                v_detail = _optimize_civitai_image_url(v_img, width=800)
+                if not preview_url and v_thumb:
+                    preview_url = v_thumb
+
+                formatted_versions.append({
+                    "id": v_id,
+                    "name": v_name,
+                    "baseModel": v_base,
+                    "trainedWords": trained_words,
+                    "description": v_desc,
+                    "downloadUrl": download_url,
+                    "sizeKB": size_kb,
+                    "previewUrl": v_detail,
+                    "files": formatted_files,
+                    "availability": v.get("availability") or "",
+                    "canDownload": v.get("canDownload"),
+                    # Only expose metadata provided by the author; never invent prompts.
+                    "images": [
+                        {
+                            "id": image.get("id") or 0,
+                            "url": _optimize_civitai_image_url(image.get("url"), width=800) or "",
+                            "prompt": str((image.get("meta") or {}).get("prompt") or ""),
+                            "negativePrompt": str((image.get("meta") or {}).get("negativePrompt") or ""),
+                            "sampler": str((image.get("meta") or {}).get("sampler") or ""),
+                            "steps": str((image.get("meta") or {}).get("steps") or ""),
+                            "seed": str((image.get("meta") or {}).get("seed")) if (image.get("meta") or {}).get("seed") is not None else "",
+                            "cfgScale": str((image.get("meta") or {}).get("cfgScale")) if (image.get("meta") or {}).get("cfgScale") is not None else "",
+                        }
+                        for image in images[:12]
+                        if isinstance(image, dict)
+                        and isinstance(image.get("meta") or {}, dict)
+                        and image.get("type", "image") == "image"
+                    ],
                 })
-    except Exception as e:
-        logger.error(f"[ComfyUI-Mobile-Bridge] Civitai search error: {e}", exc_info=True)
-        return web.json_response({
-            "code": 500,
-            "msg": f"搜索请求异常: {str(e)}",
-            "data": None
-        }, status=500)
+
+            formatted_items.append({
+                "id": m_id,
+                "name": name,
+                "type": model_type,
+                "creator": creator,
+                "description": m_desc,
+                "downloadCount": stats.get("downloadCount") or 0,
+                "rating": stats.get("rating") or 0.0,
+                "thumbsUpCount": stats.get("thumbsUpCount") or 0,
+                "tags": tags[:5],
+                "previewUrl": preview_url,
+                "versions": formatted_versions
+            })
+
+
+        next_cursor = metadata.get("nextCursor")
+        next_page = None
+        next_url = metadata.get("nextPage")
+        if next_url:
+            parsed = urllib.parse.urlsplit(str(next_url))
+            if parsed.scheme == "https" and parsed.netloc == "civitai.com" and parsed.path == "/api/v1/models":
+                query_values = urllib.parse.parse_qs(parsed.query)
+                next_cursor = next_cursor or (query_values.get("cursor") or [None])[0]
+                value = (query_values.get("page") or [None])[0]
+                if value and value.isdecimal():
+                    next_page = int(value)
+        return web.json_response({"code": 0, "msg": "success", "data": {
+            "items": formatted_items,
+            "nextCursor": str(next_cursor) if next_cursor is not None else None,
+            "nextPage": next_page,
+            "totalItems": metadata.get("totalItems") or len(formatted_items),
+            "currentPage": metadata.get("currentPage") or (page if not query else 1),
+            "pageSize": metadata.get("pageSize") or limit,
+            "totalPages": metadata.get("totalPages") or (2 if next_cursor else 1)
+        }})
+    except CivitaiError as error:
+        return web.json_response({"code": error.status, "msg": str(error), "data": None}, status=error.status)
+    except Exception:
+        return web.json_response({"code": 502, "msg": "电脑访问 Civitai 失败，请检查电脑网络与代理", "data": None}, status=502)
 
 
 async def handle_model_folders(request: web.Request) -> web.Response:
     """Return available folders and subfolders on the server for a model type."""
     model_type = (request.query.get("type") or "LORA").upper()
-    cat_keys = ["loras"]
-    if "CHECKPOINT" in model_type:
-        cat_keys = ["checkpoints"]
-    elif "UNET" in model_type or "DIFFUSION" in model_type or "GGUF" in model_type:
-        cat_keys = ["diffusion_models", "unet", "checkpoints"]
+    cat_keys = model_folder_keys(model_type)
 
     results = []
     seen = set()
@@ -1095,11 +969,6 @@ async def handle_model_folders(request: web.Request) -> web.Response:
                 roots = folder_paths.get_folder_paths(cat) or []
             except Exception:
                 roots = []
-        if not roots:
-            # Fallback relative directory check
-            rel_path = os.path.join(".", "models", cat)
-            if os.path.isdir(rel_path):
-                roots = [os.path.abspath(rel_path)]
 
         for root in roots:
             if not root or not os.path.isdir(root):
@@ -1143,14 +1012,6 @@ async def handle_model_folders(request: web.Request) -> web.Response:
             except Exception as e:
                 logger.debug(f"Error scanning directories in {root_norm}: {e}")
 
-    if not results:
-        default_cat = "loras" if "LORA" in model_type else ("checkpoints" if "CHECKPOINT" in model_type else "unet")
-        results.append({
-            "name": default_cat,
-            "root": "",
-            "subfolder": ""
-        })
-
     return web.json_response({
         "code": 0,
         "msg": "success",
@@ -1160,266 +1021,17 @@ async def handle_model_folders(request: web.Request) -> web.Response:
     })
 
 
-async def _do_lm_download(port: int, lm_payload: dict) -> dict:
-    lm_download_url = f"http://127.0.0.1:{port}/api/lm/download-model"
-    timeout_client = ClientTimeout(total=7200) # Allow up to 2 hours for large downloads
-    try:
-        async with ClientSession(timeout=timeout_client) as session:
-            async with session.post(lm_download_url, json=lm_payload) as resp:
-                if resp.status == 200:
-                    res_data = await resp.json()
-                    return {"code": 0, "msg": "下载任务已添加至电脑后台队列", "data": res_data}
-                elif resp.status == 404:
-                    return {"code": 404, "msg": "未检测到 ComfyUI-Lora-Manager 下载服务，请确认已安装此扩展插件"}
-                else:
-                    err_body = await resp.text()
-                    clean_msg = err_body
-                    try:
-                        err_json = json.loads(err_body)
-                        if isinstance(err_json, dict):
-                            clean_msg = err_json.get("error") or err_json.get("message") or err_body
-                    except Exception:
-                        pass
-                    # Translate common Lora-Manager messages to friendly Chinese
-                    if "already exists in lora library" in clean_msg:
-                        clean_msg = "该模型已存在于本地 LoRA 库中，无需重复下载"
-                    elif "already exists in checkpoint library" in clean_msg:
-                        clean_msg = "该模型已存在于本地大模型库中，无需重复下载"
-                    elif "requires purchase" in clean_msg or "Early Access" in clean_msg:
-                        clean_msg = "该模型在 Civitai 需要购买或抢先体验权限，无法直接下载"
-                    elif "Failed to fetch model metadata" in clean_msg:
-                        clean_msg = "无法从 Civitai 获取模型信息，请检查网络或配置 Civitai API Key"
-
-                    logger.warning(f"[ComfyUI-Mobile-Bridge] Lora-Manager download response ({resp.status}): {clean_msg}")
-                    return {"code": resp.status, "msg": f"下载提交失败: {clean_msg}"}
-    except Exception as e:
-        logger.error(f"[ComfyUI-Mobile-Bridge] Download forward error: {e}")
-        return {"code": 500, "msg": f"无法连接到本地 Lora-Manager 下载服务: {str(e)}"}
+_civitai_service = None
 
 
-
-def _normalize_civitai_file_type(file_type: str) -> str:
-    return str(file_type or "").strip().lower().replace("_", " ").replace("-", " ")
-
-
-def _is_component_file_type(file_type: str) -> bool:
-    t = _normalize_civitai_file_type(file_type)
-    return t in ("vae", "text encoder", "textencoder") or t.endswith(" text encoder")
+def _get_civitai_service():
+    global _civitai_service
+    if _civitai_service is None:
+        _civitai_service = CivitaiService(folder_paths)
+    return _civitai_service
 
 
-def _resolve_component_root(file_type: str, file_role: str = "") -> str:
-    """Map a Civitai component file type to a ComfyUI model folder (first root)."""
-    t = _normalize_civitai_file_type(file_type)
-    role = (file_role or "").strip().lower()
-    if t == "vae":
-        keys = ["vae"]
-    elif t in ("text encoder", "textencoder") or "text encoder" in t:
-        # Newer ComfyUI: text_encoders; older: clip
-        keys = ["text_encoders", "clip"]
-    elif role == "component":
-        # role alone cannot choose vae vs TE — caller should pass fileType
-        return ""
-    else:
-        return ""
-
-    if folder_paths is not None:
-        for key in keys:
-            try:
-                roots = folder_paths.get_folder_paths(key) or []
-            except Exception:
-                roots = []
-            for r in roots:
-                if r:
-                    try:
-                        os.makedirs(r, exist_ok=True)
-                    except Exception:
-                        pass
-                    logger.info(f"[ComfyUI-Mobile-Bridge] component root via folder_paths[{key}] -> {r}")
-                    return os.path.normpath(r)
-
-    # Fallback: <ComfyUI>/models/<key>
-    try:
-        base = None
-        if folder_paths is not None:
-            base = getattr(folder_paths, "models_dir", None)
-        if not base:
-            # Prefer bridge's ComfyUI root (custom_nodes/../..) over process cwd
-            here = os.path.dirname(os.path.abspath(__file__))
-            guess = os.path.abspath(os.path.join(here, "..", "..", "models"))
-            base = guess if os.path.isdir(os.path.dirname(guess)) else os.path.join(os.getcwd(), "models")
-        target = os.path.join(base, keys[0])
-        os.makedirs(target, exist_ok=True)
-        logger.info(f"[ComfyUI-Mobile-Bridge] component root fallback -> {target}")
-        return os.path.normpath(target)
-    except Exception as e:
-        logger.warning(f"[ComfyUI-Mobile-Bridge] failed to resolve component root: {e}")
-        return ""
-
-
-async def handle_civitai_download(request: web.Request) -> web.Response:
-    """Trigger background model download via ComfyUI-Lora-Manager."""
-    port = _get_server_port()
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({"code": 400, "msg": "无效的 JSON 请求体"}, status=400)
-
-    model_id = body.get("modelId") or body.get("model_id")
-    model_version_id = body.get("modelVersionId") or body.get("model_version_id")
-    model_type = (body.get("modelType") or body.get("model_type") or "LORA").upper()
-    model_root = body.get("modelRoot") or body.get("model_root") or ""
-    subfolder = body.get("subfolder") or body.get("relative_path") or ""
-    # Optional Civitai file id for multi-file / quantization selection (LM file_params.id)
-    file_id = body.get("fileId") or body.get("file_id")
-    file_download_url = body.get("downloadUrl") or body.get("download_url") or ""
-    file_type = str(body.get("fileType") or body.get("file_type") or "").strip()
-    file_role = str(body.get("role") or "").strip().lower()
-
-    if not model_id or not model_version_id:
-        return web.json_response({"code": 400, "msg": "缺少必要参数 modelId 或 modelVersionId"}, status=400)
-
-    # If model_root is not provided, resolve fallback root from folder_paths
-    if not model_root and folder_paths is not None:
-        cat = "loras"
-        if "CHECKPOINT" in model_type:
-            cat = "checkpoints"
-        elif "UNET" in model_type or "DIFFUSION" in model_type or "GGUF" in model_type:
-            cat = "unet"
-        try:
-            roots = folder_paths.get_folder_paths(cat) or []
-            if not roots and cat == "unet":
-                roots = folder_paths.get_folder_paths("diffusion_models") or folder_paths.get_folder_paths("checkpoints") or []
-            if roots:
-                model_root = roots[0]
-        except Exception as e:
-            logger.warning(f"Failed to resolve folder_paths: {e}")
-
-    # Required components: auto-resolve ONLY when client did not pass modelRoot.
-    # Explicit modelRoot (user-picked folder) must be respected.
-    want_component = _is_component_file_type(file_type) or file_role == "component"
-    if want_component and not str(model_root or "").strip():
-        component_root = _resolve_component_root(file_type, file_role)
-        if not component_root:
-            return web.json_response(
-                {
-                    "code": 500,
-                    "msg": f"无法解析必需组件保存目录（fileType={file_type or '空'}）。请确认 ComfyUI 已注册 vae / text_encoders（或 clip）目录后重试。",
-                },
-                status=500,
-            )
-        model_root = component_root
-        subfolder = ""
-        logger.info(
-            f"[ComfyUI-Mobile-Bridge] component default root={model_root} type={file_type} role={file_role}"
-        )
-    elif want_component and str(model_root or "").strip():
-        logger.info(
-            f"[ComfyUI-Mobile-Bridge] component using client model_root={model_root} type={file_type}"
-        )
-
-    # Forward to Lora-Manager download API with explicit folder targets.
-    # LM selects a concrete file via file_params.id (Civitai file id).
-    lm_payload = {
-        "model_id": int(model_id),
-        "model_version_id": int(model_version_id),
-        "use_default_paths": False
-    }
-    if model_root:
-        lm_payload["model_root"] = str(model_root)
-        lm_payload["use_save_dir_as_root"] = True
-    if subfolder:
-        lm_payload["relative_path"] = str(subfolder)
-    if file_id is not None and str(file_id).strip() != "":
-        try:
-            lm_payload["file_params"] = {"id": int(file_id)}
-        except (TypeError, ValueError):
-            lm_payload["file_params"] = {"id": file_id}
-        # Also pass Civitai file type so LM file matching prefers VAE/TE when id alone is ambiguous
-        if file_type:
-            lm_payload["file_params"]["type"] = str(file_type)
-        # Keep download URL as diagnostic hint (LM resolves by id; URL unused by LM)
-        if file_download_url:
-            lm_payload["file_params"]["downloadUrl"] = str(file_download_url)
-
-    # Launch download in background task that stays alive
-    bg_task = asyncio.create_task(_do_lm_download(port, lm_payload))
-
-    # Wait up to 2.0s to check for immediate validation errors (e.g. model already exists)
-    done, _ = await asyncio.wait([bg_task], timeout=2.0)
-
-    if bg_task in done:
-        result = bg_task.result()
-        return web.json_response(result, status=result.get("code") if result.get("code", 0) != 0 else 200)
-    else:
-        # Download is running in background successfully
-        return web.json_response({
-            "code": 0,
-            "msg": "下载任务已添加至电脑后台队列并正在下载"
-        })
-
-
-async def handle_civitai_tasks(request: web.Request) -> web.Response:
-    """Fetch current download queue and stats from ComfyUI-Lora-Manager."""
-    port = _get_server_port()
-    queue_url = f"http://127.0.0.1:{port}/api/lm/downloads/queue"
-    stats_url = f"http://127.0.0.1:{port}/api/lm/downloads/stats"
-
-    queue_data = []
-    stats_data = {}
-
-    try:
-        async with ClientSession() as session:
-            async with session.get(queue_url, timeout=2.0) as q_resp:
-                if q_resp.status == 200:
-                    queue_data = await q_resp.json()
-            async with session.get(stats_url, timeout=2.0) as s_resp:
-                if s_resp.status == 200:
-                    stats_data = await s_resp.json()
-    except Exception as e:
-        logger.debug(f"Could not fetch download queue/stats: {e}")
-
-    return web.json_response({
-        "code": 0,
-        "msg": "success",
-        "data": {
-            "queue": queue_data if isinstance(queue_data, list) else (queue_data.get("items") or []),
-            "stats": stats_data
-        }
-    })
-
-
-async def handle_civitai_task_action(request: web.Request) -> web.Response:
-    """Control download tasks (pause / resume / cancel) in ComfyUI-Lora-Manager."""
-    port = _get_server_port()
-    try:
-        body = await request.json()
-    except Exception:
-        return web.json_response({"code": 400, "msg": "无效请求"}, status=400)
-
-    action = str(body.get("action") or "").lower()
-    download_id = str(body.get("downloadId") or "")
-    if not download_id:
-        return web.json_response({"code": 400, "msg": "缺少 downloadId 参数"}, status=400)
-
-    action_map = {
-        "pause": f"http://127.0.0.1:{port}/api/lm/pause-download?download_id={download_id}",
-        "resume": f"http://127.0.0.1:{port}/api/lm/resume-download?download_id={download_id}",
-        "cancel": f"http://127.0.0.1:{port}/api/lm/cancel-download-get?download_id={download_id}"
-    }
-
-    target_url = action_map.get(action)
-    if not target_url:
-        return web.json_response({"code": 400, "msg": f"不支持的操作: {action}"}, status=400)
-
-    try:
-        async with ClientSession() as session:
-            async with session.get(target_url, timeout=3.0) as resp:
-                return web.json_response({
-                    "code": 0 if resp.status == 200 else resp.status,
-                    "msg": "操作执行成功" if resp.status == 200 else "操作执行失败"
-                })
-    except Exception as e:
-        return web.json_response({"code": 500, "msg": str(e)}, status=500)
+WEB_DIRECTORY = "./web"
 
 
 # Register routes with ComfyUI server
@@ -1434,9 +1046,7 @@ if PromptServer is not None:
         app.router.add_get("/api/mobile/civitai/search", handle_civitai_search)
         app.router.add_get("/api/mobile/civitai/image-proxy", handle_civitai_image_proxy)
         app.router.add_get("/api/mobile/model-folders", handle_model_folders)
-        app.router.add_post("/api/mobile/civitai/download", handle_civitai_download)
-        app.router.add_get("/api/mobile/civitai/tasks", handle_civitai_tasks)
-        app.router.add_post("/api/mobile/civitai/task-action", handle_civitai_task_action)
+        _get_civitai_service().register(app)
         logger.info("[ComfyUI-Mobile-Bridge] Mobile endpoints registered successfully at /api/mobile/*")
     except Exception as err:
         logger.warning(f"[ComfyUI-Mobile-Bridge] Failed to register mobile endpoints: {err}")

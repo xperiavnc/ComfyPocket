@@ -88,15 +88,15 @@ interface ComfyApi {
         @retrofit2.http.Query("type") type: String
     ): Response<com.comfyui.mobile.model.ModelFoldersResponse>
 
-    @POST("api/mobile/civitai/download")
+    @POST("api/mobile/civitai/native-download")
     suspend fun downloadCivitaiModel(
         @Body request: com.comfyui.mobile.model.CivitaiDownloadRequest
     ): Response<com.comfyui.mobile.model.SimpleActionResponse>
 
-    @retrofit2.http.GET("api/mobile/civitai/tasks")
+    @retrofit2.http.GET("api/mobile/civitai/native-tasks")
     suspend fun getCivitaiDownloadTasks(): Response<com.comfyui.mobile.model.CivitaiTasksResponse>
 
-    @POST("api/mobile/civitai/task-action")
+    @POST("api/mobile/civitai/native-task-action")
     suspend fun civitaiTaskAction(
         @Body request: com.comfyui.mobile.model.CivitaiTaskActionRequest
     ): Response<com.comfyui.mobile.model.SimpleActionResponse>
