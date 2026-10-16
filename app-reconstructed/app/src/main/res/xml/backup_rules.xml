@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API keys live in noBackupFilesDir (SecretStore) and are stripped from shared prefs.
+     Exclude prefs that historically held plaintext keys, and never include the secrets file. -->
+<full-backup-content>
+    <include domain="sharedpref" path="."/>
+    <exclude domain="sharedpref" path="comfy_prefs.xml"/>
+    <include domain="database" path="."/>
+    <exclude domain="file" path="no_backup/"/>
+    <exclude domain="file" path="secrets.v1.json"/>
+</full-backup-content>

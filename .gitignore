@@ -1,0 +1,26 @@
+# Local inspection, delivery files, backups and execution evidence.
+/app-inspection/
+/app-review/
+/artifacts/
+/build-evidence/
+
+# Machine-specific settings and generated files.
+.gradle/
+.kotlin/
+**/build/
+.idea/
+*.iml
+local.properties
+.reconstruction-marker.json
+**/__pycache__/
+*.py[cod]
+
+# Credentials, signing material and local environment files.
+.env
+.env.*
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
