@@ -45,6 +45,8 @@ import androidx.navigation.NavController
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.model.LlmProfile
+import com.comfyui.mobile.agent.AgentReasoningEffort
+import com.comfyui.mobile.ui.screens.agent.AgentReasoningEffortSelector
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -69,6 +71,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     val llmBaseUrl by viewModel.llmBaseUrl.collectAsState()
     val llmApiKey by viewModel.llmApiKey.collectAsState()
     val llmModel by viewModel.llmModel.collectAsState()
+    val llmReasoningEffort by viewModel.llmReasoningEffort.collectAsState()
     val llmProfiles by viewModel.llmProfiles.collectAsState()
     val currentLlmProfileId by viewModel.currentLlmProfileId.collectAsState()
     val currentLlmProfile by viewModel.currentLlmProfile.collectAsState()
@@ -86,6 +89,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     var baseUrl by remember(currentLlmProfileId, llmBaseUrl) { mutableStateOf(llmBaseUrl) }
     var apiKey by remember(currentLlmProfileId, llmApiKey) { mutableStateOf(llmApiKey) }
     var model by remember(currentLlmProfileId, llmModel) { mutableStateOf(llmModel) }
+    var reasoningEffort by remember(currentLlmProfileId, llmReasoningEffort) { mutableStateOf(llmReasoningEffort) }
     var showPassword by remember { mutableStateOf(false) }
 
     // 独立编辑对话框状态，彻底隔离超长文本与主界面滚动，杜绝滑动卡顿
@@ -162,6 +166,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                         baseUrl = item.baseUrl
                                         apiKey = item.apiKey
                                         model = item.model
+                                        reasoningEffort = AgentReasoningEffort.fromStored(item.reasoningEffort)
                                         viewModel.selectLlmProfile(item.id)
                                     }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -191,6 +196,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     baseUrl = newP.baseUrl
                                     apiKey = newP.apiKey
                                     model = newP.model
+                                    reasoningEffort = AgentReasoningEffort.fromStored(newP.reasoningEffort)
                                 }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
@@ -301,6 +307,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         modifier = Modifier.fillMaxWidth()
     )
 
+                    AgentReasoningEffortSelector(reasoningEffort) { reasoningEffort = it }
+
                     Spacer(modifier = Modifier.height(2.dp))
 
                     Row(
@@ -314,7 +322,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     name = profileName.trim().ifBlank { model.trim().ifBlank { "未命名配置" } },
                                     baseUrl = baseUrl.trim(),
                                     apiKey = apiKey.trim(),
-                                    model = model.trim()
+                                    model = model.trim(),
+                                    reasoningEffort = reasoningEffort.wireValue
     )
                                 viewModel.addOrUpdateLlmProfile(prof, selectAfterSave = true)
                             },

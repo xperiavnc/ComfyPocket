@@ -1,22 +1,38 @@
 package com.comfyui.mobile.data
 
+import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.network.ChatCompletionRequest
 import com.comfyui.mobile.network.ChatCompletionResponse
 import com.comfyui.mobile.network.ChatMessageDto
+import com.comfyui.mobile.network.ChatStreamChunk
 import com.google.gson.Gson
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.util.concurrent.TimeUnit
+import okhttp3.Response
 
 data class LlmCompletionOutput(
     val content: String,
-    val reasoning: String? = null
-    )
+    val reasoning: String? = null,
+    val requestId: String = ""
+)
 
 class LlmClient(
     private val gson: Gson = Gson(),
@@ -26,16 +42,20 @@ class LlmClient(
         .readTimeout(180, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
-        // 手机开着 Clash/VPN 系统代理时，局域网/本机地址的请求会被代理接管，代理连不上就回 503。
         .proxySelector(LanBypassProxySelector)
-        .build()
-    ) {
-    @Volatile private var activeCall: okhttp3.Call? = null
+        .build(),
+    private val totalTimeoutMillis: Long = 240_000
+) {
+    private class ActiveCall(val call: Call, val cancelled: AtomicBoolean = AtomicBoolean(false))
+    private val activeCalls = ConcurrentHashMap<String, ActiveCall>()
+    val activeRequestIds: Set<String> get() = activeCalls.keys.toSet()
 
-    /** Cancels the request in flight (stop button); the caller sees an IOException. */
-    fun cancelActive() {
-        activeCall?.cancel()
+    fun cancelRequest(requestId: String) {
+        activeCalls[requestId]?.let { it.cancelled.set(true); it.call.cancel() }
     }
+
+    /** Owner teardown only. The stop button uses cancelRequest(turn.id), never this broad operation. */
+    fun cancelActive() = activeCalls.keys.toList().forEach(::cancelRequest)
 
     companion object {
         fun resolveEndpoint(baseUrl: String): String {
@@ -53,10 +73,17 @@ class LlmClient(
         }
     }
 
-    /**
-     * Vision: images are data URLs (data:image/jpeg;base64,...). They are attached to the LAST user
-     * message as an OpenAI content array: [{type:text},{type:image_url,image_url:{url}}].
-     */
+    private fun validate(baseUrl: String, apiKey: String, model: String) {
+        if (baseUrl.isBlank() || apiKey.isBlank() || model.isBlank()) {
+            throw LlmException(
+                LlmErrorType.CONFIG_INVALID,
+                "请先在右上角「Agent 设置」填写 API Base URL、Key 和模型名。",
+                suggestion = "同时核对当前选择的模型配置。"
+            )
+        }
+    }
+
+    /** Vision content remains per-message; a reasoning setting never alters message/image payloads. */
     private fun buildBody(
         request: ChatCompletionRequest,
         images: List<String>,
@@ -90,106 +117,119 @@ class LlmClient(
         msg.add("content", parts)
     }
 
+    /**
+     * The cancellation continuation lives while headers AND body are being read. Cancelling it
+     * closes the actual socket, even when the IO worker is blocked in a streaming read.
+     */
+    private suspend fun <T> executeCall(
+        requestId: String,
+        request: Request,
+        read: suspend (Response) -> T
+    ): T = coroutineScope {
+        require(requestId.isNotBlank()) { "Request ID is empty" }
+        require(totalTimeoutMillis > 0) { "Total timeout must be positive" }
+        currentCoroutineContext().ensureActive()
+        val entry = ActiveCall(client.newCall(request))
+        entry.call.timeout().timeout(totalTimeoutMillis, TimeUnit.MILLISECONDS)
+        check(activeCalls.putIfAbsent(requestId, entry) == null) { "Duplicate active request ID" }
+        try {
+            suspendCancellableCoroutine { continuation ->
+                val worker = launch(Dispatchers.IO) {
+                    try {
+                        val result = entry.call.execute().use { read(it) }
+                        if (entry.cancelled.get()) throw CancellationException("LLM request stopped")
+                        continuation.resume(result)
+                    } catch (e: CancellationException) {
+                        continuation.cancel(e)
+                    } catch (e: Exception) {
+                        if (entry.cancelled.get()) continuation.cancel(CancellationException("LLM request stopped", e))
+                        else continuation.resumeWithException(e)
+                    }
+                }
+                continuation.invokeOnCancellation {
+                    entry.call.cancel()
+                    worker.cancel()
+                }
+            }
+        } finally {
+            activeCalls.remove(requestId, entry)
+        }
+    }
+
+    private fun request(endpoint: String, apiKey: String, body: String, stream: Boolean): Request =
+        Request.Builder().url(endpoint)
+            .header("Authorization", "Bearer $apiKey")
+            .header("Content-Type", "application/json")
+            .apply {
+                if (stream) {
+                    header("Accept", "text/event-stream")
+                    header("Cache-Control", "no-cache")
+                    header("X-Accel-Buffering", "no")
+                }
+            }
+            .post(body.toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+
+    private fun checkHttp(response: Response, endpoint: String) {
+        if (!response.isSuccessful) {
+            throw LlmErrorMapper.map(
+                IllegalStateException("HTTP " + response.code), endpoint, response.code,
+                response.body?.string().orEmpty()
+            )
+        }
+    }
+
+    private fun incomplete(endpoint: String) = LlmException(
+        LlmErrorType.INCOMPLETE_RESPONSE,
+        "模型输出未完整结束，本轮未继续提交。",
+        suggestion = "请重试或增加服务商的输出长度限制；不会自动重发请求。",
+        endpoint = endpoint
+    )
+
     suspend fun chatCompletions(
         baseUrl: String,
         apiKey: String,
         model: String,
         messages: List<ChatMessageDto>,
         images: List<String> = emptyList(),
-        messageImages: Map<Int, List<String>> = emptyMap()
+        messageImages: Map<Int, List<String>> = emptyMap(),
+        requestId: String = UUID.randomUUID().toString(),
+        reasoningEffort: AgentReasoningEffort = AgentReasoningEffort.DEFAULT
     ): Result<LlmCompletionOutput> = withContext(Dispatchers.IO) {
-        var currentEndpoint = ""
-        var isConnecting = true
+        var endpoint = ""
+        var connecting = true
         try {
-            if (baseUrl.isBlank()) {
-                throw LlmException(
-                    errorType = LlmErrorType.CONFIG_INVALID,
-                    userMessage = "请先在右上角「Agent 设置」填写 API Base URL",
-                    suggestion = "例如：https://api.deepseek.com/v1"
-                )
-            }
-            if (apiKey.isBlank()) {
-                throw LlmException(
-                    errorType = LlmErrorType.CONFIG_INVALID,
-                    userMessage = "请先在右上角「Agent 设置」填写 API Key",
-                    suggestion = "请填写对应服务商提供的 Bearer Token / API Key"
-                )
-            }
-            if (model.isBlank()) {
-                throw LlmException(
-                    errorType = LlmErrorType.CONFIG_INVALID,
-                    userMessage = "请先在右上角「Agent 设置」填写模型名称",
-                    suggestion = "例如：deepseek-chat、gpt-4o-mini 等"
-                )
-            }
-
-            currentEndpoint = resolveEndpoint(baseUrl)
-
-            val bodyJson = buildBody(ChatCompletionRequest(model = model, messages = messages, temperature = 0.7), images, messageImages)
-            val req = Request.Builder()
-                .url(currentEndpoint)
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .build()
-
-            val resp = try {
-                val r = client.newCall(req).also { activeCall = it }.execute()
-                isConnecting = false
-                r
-            } catch (e: Exception) {
-                throw LlmErrorMapper.map(
-                    throwable = e,
-                    endpoint = currentEndpoint,
-                    isConnectingPhase = isConnecting
-                )
-            }
-
-            resp.use { response ->
-                val raw = response.body?.string().orEmpty()
-                if (!response.isSuccessful) {
-                    throw LlmErrorMapper.map(
-                        throwable = IllegalStateException("HTTP ${response.code}"),
-                        endpoint = currentEndpoint,
-                        httpCode = response.code,
-                        rawResponseBody = raw
-                    )
-                }
+            validate(baseUrl, apiKey, model)
+            endpoint = resolveEndpoint(baseUrl)
+            val body = buildBody(ChatCompletionRequest(
+                model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null, reasoning_effort = reasoningEffort.wireValue
+            ), images, messageImages)
+            val output = executeCall(requestId, request(endpoint, apiKey, body, false)) { response ->
+                connecting = false
+                checkHttp(response, endpoint)
                 val parsed = try {
-                    gson.fromJson(raw, ChatCompletionResponse::class.java)
+                    gson.fromJson(response.body?.string().orEmpty(), ChatCompletionResponse::class.java)
                 } catch (e: Exception) {
-                    throw LlmException(
-                        errorType = LlmErrorType.UNKNOWN,
-                        userMessage = "无法解析大模型响应内容（JSON 格式异常）",
-                        suggestion = "服务商可能返回了 HTML 错误页面或网关拦截信息",
-                        endpoint = currentEndpoint,
-                        httpCode = response.code,
-                        technicalDetail = raw.take(200),
-                        cause = e
-                    )
+                    throw LlmException(LlmErrorType.INCOMPLETE_RESPONSE, "模型响应 JSON 格式异常，本轮未继续提交。", endpoint = endpoint, cause = e)
                 }
-
-                val message = parsed?.choices?.firstOrNull()?.message
-                val content = message?.content.orEmpty().trim()
-                val reasoning = message?.reasoning_content?.trim()
-                if (content.isBlank() && reasoning.isNullOrBlank()) {
-                    throw LlmException(
-                        errorType = LlmErrorType.EMPTY_RESPONSE,
-                        userMessage = "大模型返回了空响应",
-                        suggestion = "模型可能拒绝回答或上下文超过限制，请简化输入后重试",
-                        endpoint = currentEndpoint,
-                        httpCode = response.code
-                    )
+                if (parsed?.error != null) {
+                    throw LlmException(LlmErrorType.SERVER_ERROR, "模型服务返回错误。", endpoint = endpoint)
                 }
-                Result.success(
-                    LlmCompletionOutput(
-                        content = if (content.isNotBlank()) content else reasoning.orEmpty(),
-                        reasoning = reasoning.takeIf { !it.isNullOrBlank() }
-                    )
-                )
+                val choice = parsed?.choices?.firstOrNull()
+                if (choice?.finish_reason != null && choice.finish_reason != "stop") throw incomplete(endpoint)
+                val content = choice?.message?.content.orEmpty().trim()
+                val reasoning = choice?.message?.reasoning_content?.trim().orEmpty()
+                if (content.isBlank() && reasoning.isBlank()) {
+                    throw LlmException(LlmErrorType.EMPTY_RESPONSE, "大模型返回了空响应。", endpoint = endpoint)
+                }
+                LlmCompletionOutput(content.ifBlank { reasoning }, reasoning.ifBlank { null }, requestId)
             }
-        } catch (e: Throwable) {
-            Result.failure(LlmErrorMapper.map(e, endpoint = currentEndpoint, isConnectingPhase = isConnecting))
+            Result.success(output)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(mapFailure(e, endpoint, connecting))
         }
     }
 
@@ -200,130 +240,80 @@ class LlmClient(
         messages: List<ChatMessageDto>,
         images: List<String> = emptyList(),
         messageImages: Map<Int, List<String>> = emptyMap(),
-        onProgress: (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit
+        requestId: String = UUID.randomUUID().toString(),
+        reasoningEffort: AgentReasoningEffort = AgentReasoningEffort.DEFAULT,
+        onProgress: suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit
     ): Result<LlmCompletionOutput> = withContext(Dispatchers.IO) {
-        var currentEndpoint = ""
-        var isConnecting = true
+        var endpoint = ""
+        var connecting = true
         try {
-            if (baseUrl.isBlank()) {
-                throw LlmException(
-                    errorType = LlmErrorType.CONFIG_INVALID,
-                    userMessage = "请先在右上角「Agent 设置」填写 API Base URL",
-                    suggestion = "例如：https://api.deepseek.com/v1"
-                )
-            }
-            if (apiKey.isBlank()) {
-                throw LlmException(
-                    errorType = LlmErrorType.CONFIG_INVALID,
-                    userMessage = "请先在右上角「Agent 设置」填写 API Key",
-                    suggestion = "请填写对应服务商提供的 Bearer Token / API Key"
-                )
-            }
-            if (model.isBlank()) {
-                throw LlmException(
-                    errorType = LlmErrorType.CONFIG_INVALID,
-                    userMessage = "请先在右上角「Agent 设置」填写模型名称",
-                    suggestion = "例如：deepseek-chat、gpt-4o-mini 等"
-                )
-            }
-
-            currentEndpoint = resolveEndpoint(baseUrl)
-
-            val bodyJson = buildBody(ChatCompletionRequest(model = model, messages = messages, temperature = 0.7, stream = true), images, messageImages)
-            val req = Request.Builder()
-                .url(currentEndpoint)
-                .addHeader("Authorization", "Bearer $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .addHeader("Accept", "text/event-stream")
-                .addHeader("Cache-Control", "no-cache")
-                .addHeader("X-Accel-Buffering", "no")
-                .post(bodyJson.toRequestBody("application/json; charset=utf-8".toMediaType()))
-                .build()
-
-            val resp = try {
-                val r = client.newCall(req).also { activeCall = it }.execute()
-                isConnecting = false
-                r
-            } catch (e: Exception) {
-                throw LlmErrorMapper.map(
-                    throwable = e,
-                    endpoint = currentEndpoint,
-                    isConnectingPhase = isConnecting
-                )
-            }
-
-            resp.use { response ->
-                if (!response.isSuccessful) {
-                    val raw = response.body?.string().orEmpty()
-                    throw LlmErrorMapper.map(
-                        throwable = IllegalStateException("HTTP ${response.code}"),
-                        endpoint = currentEndpoint,
-                        httpCode = response.code,
-                        rawResponseBody = raw
-                    )
-                }
-
-                val source = response.body?.source() ?: throw LlmException(
-                    errorType = LlmErrorType.EMPTY_RESPONSE,
-                    userMessage = "大模型服务返回的响应流为空",
-                    endpoint = currentEndpoint,
-                    httpCode = response.code
-                )
-                val fullContent = StringBuilder()
-                val fullReasoning = StringBuilder()
-
+            validate(baseUrl, apiKey, model)
+            endpoint = resolveEndpoint(baseUrl)
+            val body = buildBody(ChatCompletionRequest(
+                model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null, stream = true, reasoning_effort = reasoningEffort.wireValue
+            ), images, messageImages)
+            val output = executeCall(requestId, request(endpoint, apiKey, body, true)) { response ->
+                connecting = false
+                checkHttp(response, endpoint)
+                val source = response.body?.source()
+                    ?: throw LlmException(LlmErrorType.EMPTY_RESPONSE, "模型响应流为空。", endpoint = endpoint)
+                val content = StringBuilder()
+                val reasoning = StringBuilder()
+                var finished = false
                 while (!source.exhausted()) {
-                    val line = source.readUtf8Line() ?: break
-                    val trimmed = line.trim()
-                    if (!trimmed.startsWith("data:")) continue
-                    val data = trimmed.removePrefix("data:").trim()
-                    if (data == "[DONE]") break
-                    if (data.isBlank()) continue
-
-                    val chunk = runCatching {
-                        gson.fromJson(data, com.comfyui.mobile.network.ChatStreamChunk::class.java)
-                    }.getOrNull() ?: continue
-
-                    val streamErr = chunk.error?.message
-                    if (!streamErr.isNullOrBlank()) {
-                        throw LlmException(
-                            errorType = LlmErrorType.SERVER_ERROR,
-                            userMessage = "大模型服务在流式输出中返回错误：$streamErr",
-                            endpoint = currentEndpoint,
-                            httpCode = response.code,
-                            technicalDetail = data.take(600)
-                        )
+                    currentCoroutineContext().ensureActive()
+                    val line = source.readUtf8Line()?.trim() ?: break
+                    if (!line.startsWith("data:")) continue
+                    val data = line.removePrefix("data:").trim()
+                    if (data == "[DONE]") { finished = true; break }
+                    if (data.isEmpty()) continue
+                    val chunk = try {
+                        gson.fromJson(data, ChatStreamChunk::class.java)
+                    } catch (e: Exception) {
+                        throw incomplete(endpoint)
+                    } ?: throw incomplete(endpoint)
+                    if (chunk.error != null) {
+                        throw LlmException(LlmErrorType.SERVER_ERROR, "模型在流式输出中返回错误。", endpoint = endpoint)
                     }
-
-                    val delta = chunk.choices?.firstOrNull()?.delta
-                    val rChunk = delta?.reasoning_content.orEmpty()
-                    val cChunk = delta?.content.orEmpty()
-
-                    if (rChunk.isNotEmpty()) fullReasoning.append(rChunk)
-                    if (cChunk.isNotEmpty()) fullContent.append(cChunk)
-
-                    if (rChunk.isNotEmpty() || cChunk.isNotEmpty()) {
-                        onProgress(rChunk, cChunk, fullReasoning.toString(), fullContent.toString())
+                    val choice = chunk.choices?.firstOrNull()
+                    val finish = choice?.finish_reason
+                    if (finish != null) {
+                        if (finish != "stop") throw incomplete(endpoint)
+                        finished = true
                     }
+                    val r = choice?.delta?.reasoning_content.orEmpty()
+                    val c = choice?.delta?.content.orEmpty()
+                    reasoning.append(r)
+                    content.append(c)
+                    if (r.isNotEmpty() || c.isNotEmpty()) {
+                        onProgress(r, c, reasoning.toString(), content.toString())
+                    }
+                    if (finish == "stop") break
                 }
-
-                val finalContent = fullContent.toString().trim()
-                val finalReasoning = fullReasoning.toString().trim()
-
+                val finalContent = content.toString().trim()
+                val finalReasoning = reasoning.toString().trim()
                 if (finalContent.isBlank() && finalReasoning.isBlank()) {
-                    return@withContext chatCompletions(baseUrl, apiKey, model, messages, images, messageImages)
+                    // No silent non-stream retry: avoid a second billable request.
+                    throw LlmException(LlmErrorType.EMPTY_RESPONSE, "模型返回了空响应流；未自动重发。", endpoint = endpoint)
                 }
-
-                Result.success(
-                    LlmCompletionOutput(
-                        content = if (finalContent.isNotBlank()) finalContent else finalReasoning,
-                        reasoning = finalReasoning.takeIf { it.isNotBlank() }
-                    )
-                )
+                if (!finished) throw incomplete(endpoint)
+                LlmCompletionOutput(finalContent.ifBlank { finalReasoning }, finalReasoning.ifBlank { null }, requestId)
             }
-        } catch (e: Throwable) {
-            Result.failure(LlmErrorMapper.map(e, endpoint = currentEndpoint, isConnectingPhase = isConnecting))
+            Result.success(output)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            Result.failure(mapFailure(e, endpoint, connecting))
         }
+    }
+
+    private fun mapFailure(e: Exception, endpoint: String, connecting: Boolean): LlmException {
+        if (e is java.io.InterruptedIOException && e !is java.net.SocketTimeoutException &&
+            e.message?.contains("timeout", ignoreCase = true) == true) {
+            return LlmException(LlmErrorType.TIMEOUT_TOTAL, "本轮模型请求超过总时限。", endpoint = endpoint, cause = e)
+        }
+        return LlmErrorMapper.map(e, endpoint = endpoint, isConnectingPhase = connecting)
     }
 }
 

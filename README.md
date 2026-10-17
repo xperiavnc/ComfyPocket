@@ -10,6 +10,7 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/BUILD.md`：重建工程的构建版本与说明。
 - `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
 - `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
+- `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
 - `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
 
 ## Civitai 集市
@@ -48,7 +49,9 @@ cd app-reconstructed
 
 ## 当前验证状态
 
-- 当前 Android 构建成功，178 项 JVM/Android 页面测试通过；Bridge Python、
+- `0.0.2-agent-core`（versionCode 4）落地 Agent 实例级会话、分步执行和工作流工具；
+  思考强度包括极高 `xhigh` 和 `max`，随模型配置保存，详见 `app-reconstructed/AGENT.md`。
+- 当前 Android 构建成功，240 项 JVM/Android 页面测试通过；Bridge Python、
   设置 GUI 与本地浏览器的独立测试说明见插件文档，本批未改动插件。
 - 主 ViewModel 从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、
   参数持久化、日志和缓存管理五个组件。

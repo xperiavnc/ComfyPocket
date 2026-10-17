@@ -12,6 +12,8 @@ enum class LlmErrorType(val title: String) {
     CONFIG_INVALID("配置不完整"),
     TIMEOUT_CONNECT("连接服务超时"),
     TIMEOUT_READ("模型响应超时"),
+    TIMEOUT_TOTAL("模型请求总超时"),
+    INCOMPLETE_RESPONSE("模型输出不完整"),
     DNS_FAILURE("域名无法解析"),
     CONNECTION_REFUSED("连接被目标拒绝"),
     SSL_ERROR("SSL 安全握手失败"),
@@ -70,7 +72,8 @@ object LlmErrorMapper {
     ): LlmException {
         if (throwable is LlmException) return throwable
 
-        val cause = throwable.cause ?: throwable
+        // Okio read timeouts can wrap a SocketException; keep the outer timeout classification.
+        val cause = if (throwable is SocketTimeoutException) throwable else throwable.cause ?: throwable
         val msg = cause.message.orEmpty()
         val lowerMsg = msg.lowercase()
 

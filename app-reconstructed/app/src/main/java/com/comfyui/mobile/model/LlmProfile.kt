@@ -9,7 +9,8 @@ data class LlmProfile(
     val name: String = "",
     val baseUrl: String = "",
     val apiKey: String = "",
-    val model: String = ""
+    val model: String = "",
+    val reasoningEffort: String? = null
     ) {
     val displayName: String
         get() = name.ifBlank { model.ifBlank { "未命名配置" } }

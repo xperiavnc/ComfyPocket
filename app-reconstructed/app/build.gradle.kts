@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 3
-        versionName = "0.0.1-market-return-fix"
+        versionCode = 4
+        versionName = "0.0.2-agent-core"
     }
 
     buildFeatures {

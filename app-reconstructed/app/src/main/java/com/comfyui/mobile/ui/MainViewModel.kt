@@ -1583,6 +1583,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
      * and RH AI-app polling resumes when their profile becomes active again.
      */
     internal fun onServerSwitching(modeChanged: Boolean) {
+        MainViewModelAgent.invalidateContext(this, "服务器已切换，本轮已停止")
         _rhAccountData.value = null
         MainViewModelRhConn.reset(this)
         rhAppPollJobs.values.forEach { it.cancel() }
@@ -1785,6 +1786,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     }
 
     override fun onCleared() {
+        MainViewModelAgent.invalidateContext(this, "会话已关闭")
+        llmClient.cancelActive()
         super.onCleared()
         networkMonitor.stop()
         stopForegroundHeartbeat()
@@ -2740,6 +2743,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         WorkflowGraph.generatePromptSummary(nodes)
     // ===== Agent / LLM State & Delegations =====
     internal val llmClient = LlmClient(gson)
+    internal val agentSession = com.comfyui.mobile.agent.AgentSessionController(llmClient::cancelRequest)
+    internal val agentWorkflowLoadVersion = java.util.concurrent.atomic.AtomicLong()
+    internal val agentRuntime by lazy { MainViewModelAgentRuntime(this) }
+    val agentSessionState = agentSession.state
 
     internal fun loadLlmProfiles(): List<LlmProfile> =
         MainViewModelAgent.loadLlmProfiles(this)
@@ -2770,6 +2777,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     internal val _llmModel = MutableStateFlow(MainViewModelAgent.initialLlmValue(this, "llm_model") { it.model })
     val llmModel = _llmModel.asStateFlow()
 
+    internal val _llmReasoningEffort = MutableStateFlow(
+        com.comfyui.mobile.agent.AgentReasoningEffort.fromStored(
+            _llmProfiles.value.firstOrNull { it.id == _currentLlmProfileId.value }?.reasoningEffort
+        )
+    )
+    val llmReasoningEffort = _llmReasoningEffort.asStateFlow()
+
     internal val _agentSystemPrompt = MutableStateFlow(MainViewModelAgent.loadAgentSystemPrompt(this))
     val agentSystemPrompt = _agentSystemPrompt.asStateFlow()
 
@@ -2790,8 +2804,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     internal val _agentMessages = MutableStateFlow<List<AgentChatMessage>>(emptyList())
     val agentMessages = _agentMessages.asStateFlow()
 
-    internal val _agentBusy = MutableStateFlow(false)
-    val agentBusy = _agentBusy.asStateFlow()
+    internal val _agentBusy = agentSession.busy
+    val agentBusy: StateFlow<Boolean> = _agentBusy
 
     /** chat = LLM only; draw = expand prompt + enqueue workflow. */
     internal val _agentInteractionMode = MutableStateFlow(
@@ -2817,7 +2831,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     }
 
     /** True while the Agent LLM call (chat or draw expand) is in flight. */
-    val agentLlmBusy: StateFlow<Boolean> = _agentBusy.asStateFlow()
+    val agentLlmBusy: StateFlow<Boolean> = _agentBusy
 
     /** True while an Agent image job is queued/running (local Comfy or RH Agent task). */
     val agentImageBusy: StateFlow<Boolean> = combine(_isRunning, taskStore.tasks) { running, tasks ->
@@ -3061,6 +3075,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 val workflow = randomizeSeedsForSend(baseWorkflow)
                 val pid = try {
                     repository.queuePrompt(workflow)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     lastFailDetail = e.message ?: e.toString()
                     addLog("Agent queuePrompt 异常: $lastFailDetail", LogType.ERROR)
@@ -3109,6 +3125,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     )
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             addLog("Agent enqueue 异常: ${e.message}", LogType.ERROR)
             Result.failure(e)

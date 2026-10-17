@@ -24,7 +24,7 @@ Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中�
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前诊断构建版本名为 `0.0.1-return-diagnostic`，版本号为 `2`。
+当前构建版本名为 `0.0.2-agent-core`，版本号为 `4`，Agent 改动说明见 `AGENT.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 
@@ -37,12 +37,11 @@ SDK 需要 API 37.0 平台；Gradle 会按 Android 插件要求使用相应构�
 Miuix 的 Android 类以 Java 21 编译，在 JVM 17 测试进程中加载会报类版本错误。
 `:app:assembleDebug` 的编译目标不变，测试任务单独使用 Java 21 toolchain。
 
-```powershell
-# 在解压后的工程根目录执行：
-.\build.ps1 -JavaHome 'C:\Program Files\Java\jdk-17' -SdkRoot 'C:\Android\Sdk'
-
-# 或直接运行：
-.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plain
+```bat
+rem 在工程根目录使用 cmd.exe：
+set "JAVA_HOME=C:\Program Files\Java\jdk-17"
+set "ANDROID_HOME=C:\Android\Sdk"
+gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plain
 ```
 
 输出：

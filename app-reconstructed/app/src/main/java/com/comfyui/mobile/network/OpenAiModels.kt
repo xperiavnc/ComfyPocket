@@ -9,8 +9,9 @@ data class ChatMessageDto(
 data class ChatCompletionRequest(
     val model: String,
     val messages: List<ChatMessageDto>,
-    val temperature: Double = 0.7,
-    val stream: Boolean? = null
+    val temperature: Double? = 0.7,
+    val stream: Boolean? = null,
+    val reasoning_effort: String? = null
     )
 
 data class ChatCompletionResponse(

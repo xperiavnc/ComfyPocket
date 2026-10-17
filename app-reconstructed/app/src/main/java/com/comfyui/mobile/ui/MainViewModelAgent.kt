@@ -2,6 +2,11 @@ package com.comfyui.mobile.ui
 
 import android.app.Application
 import androidx.lifecycle.viewModelScope
+import com.comfyui.mobile.agent.AgentReply as AgentLlmResult
+import com.comfyui.mobile.agent.AgentMode
+import com.comfyui.mobile.agent.AgentReasoningEffort
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.update
 import com.comfyui.mobile.data.LlmClient
 import com.comfyui.mobile.data.LlmErrorMapper
 import com.comfyui.mobile.data.LlmException
@@ -19,107 +24,30 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.UUID
 
-data class AgentLlmResult(
-    val tip: String,
-    val prompt: String,
-    val thinking: String,
-    val shouldDraw: Boolean = false,
-    /** Set when no usable prompt could be parsed; workflow is left untouched. */
-    val parseError: String? = null
-    )
-
 object MainViewModelAgent {
 
-    private var agentJob: kotlinx.coroutines.Job? = null
-    private var activeAssistantId: String? = null
-    @Volatile private var stopRequested = false
+    fun stopAgentGeneration(vm: MainViewModel) = vm.agentRuntime.stop()
 
-    /** Stop button: abort the in-flight LLM request (and the draw job), keep any partial reply. */
-    fun stopAgentGeneration(vm: MainViewModel) {
-        if (!vm._agentBusy.value) return
-        stopRequested = true
-        vm.llmClient.cancelActive()
-        agentJob?.cancel()
-        activeAssistantId?.let { id ->
-            updateAgentMessage(vm, id, persist = true) {
-                val partial = it.content.takeIf { c -> c.isNotBlank() && c != "✨深度求索中..." }
-                it.copy(content = partial ?: "已停止", isThinking = false, errorMessage = "已停止")
-            }
-        }
-        vm._agentBusy.value = false
+    internal fun invalidateContext(vm: MainViewModel, reason: String = "设置已变化，本轮已停止") {
+        vm.agentRuntime.stop(reason, invalidateContext = true)
     }
 
+    private fun launchWorkflowLoad(vm: MainViewModel, silent: Boolean = true) {
+        val version = vm.agentSession.contextVersion()
+        vm.viewModelScope.launch(Dispatchers.IO) {
+            ensureAgentWorkflowLoaded(vm, silent = silent, expectedVersion = version)
+        }
+    }
 
     fun setAgentInteractionMode(vm: MainViewModel, mode: String) {
         val next = when (mode) {
             MainViewModel.AGENT_MODE_CHAT -> MainViewModel.AGENT_MODE_CHAT
             else -> MainViewModel.AGENT_MODE_DRAW
         }
+        if (vm._agentInteractionMode.value != next) invalidateContext(vm)
         vm._agentInteractionMode.value = next
         vm.prefs.edit().putString("agent_interaction_mode", next).apply()
     }
-
-    /** Upload staged image into the first Agent ImageInput node. Returns false if upload required but failed. */
-    suspend fun uploadAgentPendingImageIfAny(vm: MainViewModel): Boolean {
-        val uriStr = vm._agentPendingAttachments.value.firstOrNull { it.isImage }?.uri ?: return true
-        val uri = runCatching { android.net.Uri.parse(uriStr) }.getOrNull() ?: return false
-        val imageNode = vm._agentEditableNodes.value
-            .filterIsInstance<EditableNode.ImageInput>()
-            .firstOrNull()
-        if (imageNode == null) {
-            vm.addLog("Agent 附图：工作流无 Image 节点，已忽略上传", LogType.WARNING)
-            return true
-        }
-        return try {
-            val context = vm.getApplication<Application>()
-            val mimeType = context.contentResolver.getType(uri)
-            val uploadName = com.comfyui.mobile.ui.UploadPreviewStore.uploadFileName(
-                vm.getFileName(uri), mimeType
-            )
-            val dir = File(context.cacheDir, "agent_upload_${System.currentTimeMillis()}").apply { mkdirs() }
-            val file = File(dir, uploadName)
-            val inputStream = context.contentResolver.openInputStream(uri)
-            if (inputStream == null) {
-                vm.addLog("Agent 附图：无法读取文件", LogType.ERROR)
-                return false
-            }
-            inputStream.use { input -> java.io.FileOutputStream(file).use { output -> input.copyTo(output) } }
-
-            val value: String? = if (vm.currentServerProfile()?.isRunningHub == true) {
-                val backend = vm.currentRunningHubBackend()
-                if (backend == null) {
-                    vm.showToast("请先切换到 RunningHub 服务器")
-                    null
-                } else {
-                    backend.client.uploadInput(file, mimeType, uploadName).getOrElse { e ->
-                        vm.addLog("Agent RH 附图失败: ${com.comfyui.mobile.network.SecretRedactor.redact(e.message)}", LogType.ERROR)
-                        vm.showToast("附图上传失败")
-                        return false
-                    }.also { fileName ->
-                        MainViewModelRhWorkflows.recordUploadSite(vm, fileName, backend.site.id)
-                        runCatching { vm.uploadPreviewStore.put(fileName, file) }
-                    }
-                }
-            } else {
-                val resp = vm.repository.uploadImage(file)
-                if (resp == null) {
-                    vm.showToast("附图上传失败")
-                    null
-                } else if (resp.subfolder.isNullOrBlank()) resp.name else "${resp.subfolder}/${resp.name}"
-            }
-            runCatching { dir.deleteRecursively() }
-            if (value == null) return false
-            withContext(Dispatchers.Main) {
-                updateAgentNodeValue(vm, imageNode.nodeId, imageNode.key, value)
-            }
-            vm.addLog("Agent 附图已写入 ${imageNode.nodeId}:${imageNode.key} -> $value", LogType.SUCCESS)
-            true
-        } catch (e: Exception) {
-            vm.addLog("Agent 附图异常: ${e.message}", LogType.ERROR)
-            false
-        }
-    }
-
 
     /** local | cloud@cn | cloud@ai — Agent session isolation (LLM / 人设 / 分镜共用). */
     fun scope(vm: MainViewModel): String = vm.currentKindNs()
@@ -309,6 +237,7 @@ object MainViewModelAgent {
     }
 
     fun setAgentTargetNodeId(vm: MainViewModel, nodeId: String) {
+        invalidateContext(vm)
         val trimmed = nodeId.trim()
         vm._agentTargetNodeId.value = trimmed
         val key = getAgentTargetNodePrefKey(vm)
@@ -334,6 +263,7 @@ object MainViewModelAgent {
     }
 
     fun setAgentArtistNodeId(vm: MainViewModel, nodeId: String) {
+        invalidateContext(vm)
         val trimmed = nodeId.trim()
         vm._agentArtistNodeId.value = trimmed
         val key = getAgentArtistNodePrefKey(vm)
@@ -371,6 +301,7 @@ object MainViewModelAgent {
     }
 
     fun toggleAgentAuxNode(vm: MainViewModel, compoundKey: String, isChecked: Boolean) {
+        invalidateContext(vm)
         val current = vm._agentAuxNodeKeys.value.toMutableSet()
         if (isChecked) current.add(compoundKey) else current.remove(compoundKey)
         vm._agentAuxNodeKeys.value = current
@@ -397,6 +328,7 @@ object MainViewModelAgent {
     }
 
     fun updateAgentNodeValue(vm: MainViewModel, nodeId: String, key: String, value: Any) {
+        invalidateContext(vm)
         val current = vm.agentWorkflow?.toMutableMap() ?: return
         val node = (current[nodeId] as? Map<String, Any>)?.toMutableMap() ?: return
         val inputs = (node["inputs"] as? Map<String, Any>)?.toMutableMap() ?: return
@@ -471,6 +403,7 @@ object MainViewModelAgent {
      * re-read that file so the aux UI matches what was just saved — not the old file.
      */
     fun resetAgentSavedWorkflow(vm: MainViewModel) {
+        invalidateContext(vm)
         val source = vm._agentWorkflowSource.value
         val id = vm._agentWorkflowId.value
         if (source.isBlank() || id.isBlank()) {
@@ -487,20 +420,21 @@ object MainViewModelAgent {
             return
         }
 
+        val version = vm.agentSession.contextVersion()
+        val paramsCopy = vm.agentWorkflowParamValues.toMutableMap()
         val withJson = if (id.lowercase().endsWith(".json")) id else "$id.json"
+        val dir = MainViewModelWorkflow.savedWorkflowsDir(vm)
+        val existing = vm.getLocalSavedWorkflows().firstOrNull {
+            it.name.equals(id, ignoreCase = true) || it.name.equals(withJson, ignoreCase = true)
+        }
+        val targetFile = existing ?: File(dir, withJson)
 
         vm.viewModelScope.launch(Dispatchers.IO) {
             try {
-                val paramsCopy = vm.agentWorkflowParamValues.toMutableMap()
                 val cleanBase = vm.sanitizeNumbers(workflow) as Map<String, Any>
                 val (toSave, _) = vm.applyParamOverridesToWorkflow(cleanBase, paramsCopy)
 
-                val dir = MainViewModelWorkflow.savedWorkflowsDir(vm)
-                val existing = vm.getLocalSavedWorkflows().firstOrNull {
-                    it.name.equals(id, ignoreCase = true) ||
-                        it.name.equals(withJson, ignoreCase = true)
-                }
-                val targetFile = existing ?: File(dir, withJson)
+                if (version != vm.agentSession.contextVersion()) return@launch
                 targetFile.parentFile?.mkdirs()
                 targetFile.writeText(vm.gson.toJson(toSave))
                 MainViewModelRhWorkflows.markSavedFile(vm, targetFile)
@@ -508,6 +442,7 @@ object MainViewModelAgent {
 
                 // Clear overrides only after a successful write, then reload from that file.
                 withContext(Dispatchers.Main) {
+                    if (version != vm.agentSession.contextVersion()) return@withContext
                     clearAgentWorkflowParams(vm, source, id)
                     if (!withJson.equals(id, ignoreCase = true)) {
                         clearAgentWorkflowParams(vm, source, withJson)
@@ -520,14 +455,18 @@ object MainViewModelAgent {
                 val raw: Map<String, Any> = vm.gson.fromJson(content, type)
                 val cleanWf = vm.sanitizeNumbers(raw) as Map<String, Any>
                 withContext(Dispatchers.Main) {
+                    if (version != vm.agentSession.contextVersion()) return@withContext
                     vm.agentWorkflowParamValues.clear()
                     vm.agentWorkflow = cleanWf
                     parseAgentEditableNodes(vm, cleanWf)
                     vm.showToast("已重置并保存")
                     vm.addLog("Agent 已重置并保存: ${targetFile.absolutePath}", LogType.SUCCESS)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    if (version != vm.agentSession.contextVersion()) return@withContext
                     vm.showToast("重置失败: ${e.message}")
                     vm.addLog("Agent 重置失败: ${e.message}", LogType.ERROR)
                 }
@@ -656,9 +595,7 @@ object MainViewModelAgent {
                 vm._agentWorkflowSource.value.isNotBlank() &&
                 vm._agentWorkflowId.value.isNotBlank()
             ) {
-                vm.viewModelScope.launch(Dispatchers.IO) {
-                    ensureAgentWorkflowLoaded(vm, silent = true)
-                }
+                launchWorkflowLoad(vm)
             }
             return
         }
@@ -666,6 +603,7 @@ object MainViewModelAgent {
     }
 
     fun reloadAgentWorkflowForMode(vm: MainViewModel) {
+        invalidateContext(vm)
         try {
             val s = scope(vm)
             val isLocal = s == "local"
@@ -703,16 +641,9 @@ object MainViewModelAgent {
             vm.agentRunPromptIds.addAll(loadRunPromptIds(vm))
             vm._favoriteArtists.value = loadFavoriteArtists(vm)
             vm._characterLores.value = loadCharacterLores(vm)
-            vm.viewModelScope.launch(Dispatchers.IO) {
-                if (source.isNotBlank() && id.isNotBlank()) {
-                    ensureAgentWorkflowLoaded(vm, silent = true)
-                } else {
-                    withContext(Dispatchers.Main) {
-                        vm.agentWorkflow = null
-                        parseAgentEditableNodes(vm, null)
-                    }
-                }
-            }
+            vm.agentWorkflow = null
+            parseAgentEditableNodes(vm, null)
+            if (source.isNotBlank() && id.isNotBlank()) launchWorkflowLoad(vm)
         } catch (e: Exception) {
             android.util.Log.e("MainViewModelAgent", "reloadAgentWorkflowForMode failed", e)
         }
@@ -736,6 +667,8 @@ object MainViewModelAgent {
 
     fun selectLlmProfile(vm: MainViewModel, id: String) {
         val target = vm._llmProfiles.value.firstOrNull { it.id == id } ?: return
+        invalidateContext(vm)
+        vm._llmReasoningEffort.value = AgentReasoningEffort.fromStored(target.reasoningEffort)
         vm._currentLlmProfileId.value = id
         vm.prefs.edit().putString("current_llm_profile_id", id).apply()
         vm._llmBaseUrl.value = target.baseUrl
@@ -787,24 +720,28 @@ object MainViewModelAgent {
     }
 
     fun setLlmBaseUrl(vm: MainViewModel, value: String) {
+        invalidateContext(vm)
         vm._llmBaseUrl.value = value
         vm.prefs.edit().putString("llm_base_url", value).apply()
         syncCurrentProfileField(vm) { it.copy(baseUrl = value) }
     }
 
     fun setLlmApiKey(vm: MainViewModel, value: String) {
+        invalidateContext(vm)
         vm._llmApiKey.value = value
         vm.prefs.edit().remove("llm_api_key").apply()
         syncCurrentProfileField(vm) { it.copy(apiKey = value) }
     }
 
     fun setLlmModel(vm: MainViewModel, value: String) {
+        invalidateContext(vm)
         vm._llmModel.value = value
         vm.prefs.edit().putString("llm_model", value).apply()
         syncCurrentProfileField(vm) { it.copy(model = value) }
     }
 
     fun setAgentSystemPrompt(vm: MainViewModel, value: String) {
+        invalidateContext(vm)
         val v = value.trim().ifBlank { MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT }
         vm._agentSystemPrompt.value = v
         vm.prefs.edit().putString("agent_system_prompt", v).apply()
@@ -815,6 +752,7 @@ object MainViewModelAgent {
     }
 
     fun setAgentDrawPrompt(vm: MainViewModel, value: String) {
+        invalidateContext(vm)
         val v = value.trim().ifBlank { MainViewModel.DEFAULT_AGENT_DRAW_PROMPT }
         vm._agentDrawPrompt.value = v
         vm.prefs.edit().putString("agent_draw_prompt", v).apply()
@@ -825,6 +763,7 @@ object MainViewModelAgent {
     }
 
     fun setAgentDefaultWorkflow(vm: MainViewModel, source: String, id: String, label: String) {
+        invalidateContext(vm)
         val cleanLabel = label.removeSuffix(".json").removeSuffix(".JSON").ifBlank { label }
         vm._agentWorkflowSource.value = source
         vm._agentWorkflowId.value = id
@@ -838,9 +777,9 @@ object MainViewModelAgent {
             .putString(scopedPref("agent_wf_label", vm), cleanLabel)
             .apply()
         vm.showToast("已设置 Agent 模板: $cleanLabel")
-        vm.viewModelScope.launch(Dispatchers.IO) {
-            ensureAgentWorkflowLoaded(vm)
-        }
+        vm.agentWorkflow = null
+        parseAgentEditableNodes(vm, null)
+        launchWorkflowLoad(vm, silent = false)
     }
 
     fun showUserMessage(vm: MainViewModel, msg: String) {
@@ -848,6 +787,7 @@ object MainViewModelAgent {
     }
 
     fun clearAgentChat(vm: MainViewModel) {
+        invalidateContext(vm)
         vm._agentMessages.value = emptyList()
         vm._agentLastExpandedPrompt.value = ""
         vm.clearAgentAttachments()
@@ -861,7 +801,7 @@ object MainViewModelAgent {
     }
 
     fun appendAgentMessage(vm: MainViewModel, msg: AgentChatMessage) {
-        vm._agentMessages.value = vm._agentMessages.value + msg
+        vm._agentMessages.update { it + msg }
         persistAgentMessages(vm)
     }
 
@@ -872,12 +812,14 @@ object MainViewModelAgent {
         block: (AgentChatMessage) -> AgentChatMessage
     ) {
         var shouldPersist = false
-        vm._agentMessages.value = vm._agentMessages.value.map {
-            if (it.id != id) it
-            else {
-                val next = block(it)
-                shouldPersist = persist ?: !next.isThinking
-                next
+        vm._agentMessages.update { messages ->
+            messages.map {
+                if (it.id != id) it
+                else {
+                    val next = block(it)
+                    shouldPersist = persist ?: !next.isThinking
+                    next
+                }
             }
         }
         if (shouldPersist) persistAgentMessages(vm)
@@ -968,7 +910,14 @@ object MainViewModelAgent {
         return pick.nodeId to pick.key
     }
 
-    suspend fun ensureAgentWorkflowLoaded(vm: MainViewModel, silent: Boolean = false): Boolean {
+    suspend fun ensureAgentWorkflowLoaded(
+        vm: MainViewModel, silent: Boolean = false,
+        expectedVersion: Long = vm.agentSession.contextVersion()
+    ): Boolean {
+        if (vm.agentSession.contextVersion() != expectedVersion) return false
+        val ticket = vm.agentWorkflowLoadVersion.incrementAndGet()
+        fun valid() = vm.agentSession.contextVersion() == expectedVersion &&
+            vm.agentWorkflowLoadVersion.get() == ticket
         val source = vm._agentWorkflowSource.value
         val id = vm._agentWorkflowId.value
         if (source.isBlank() || id.isBlank()) {
@@ -993,6 +942,7 @@ object MainViewModelAgent {
                     val raw: Map<String, Any> = vm.gson.fromJson(content, type)
                     val workflow = vm.sanitizeNumbers(raw) as Map<String, Any>
                     withContext(Dispatchers.Main) {
+                        if (!valid()) return@withContext
                         val paramVals = loadAgentWorkflowParams(vm, source, id, fallbackWorkflowKey = app.workflowKey)
                         vm.agentWorkflowParamValues.clear()
                         vm.agentWorkflowParamValues.putAll(paramVals)
@@ -1003,7 +953,7 @@ object MainViewModelAgent {
                         vm.agentWorkflow = overridden
                         parseAgentEditableNodes(vm, vm.agentWorkflow)
                     }
-                    true
+                    valid()
                 }
                 MainViewModel.AGENT_WF_SAVED -> {
                     val file = vm.getLocalSavedWorkflows().firstOrNull { it.name == id }
@@ -1015,6 +965,7 @@ object MainViewModelAgent {
                     val type = object : TypeToken<Map<String, Any>>() {}.type
                     val raw: Map<String, Any> = vm.gson.fromJson(content, type)
                     withContext(Dispatchers.Main) {
+                        if (!valid()) return@withContext
                         val paramVals = loadAgentWorkflowParams(vm, source, id, fallbackWorkflowKey = file.name)
                         vm.agentWorkflowParamValues.clear()
                         vm.agentWorkflowParamValues.putAll(paramVals)
@@ -1026,14 +977,17 @@ object MainViewModelAgent {
                         vm.agentWorkflow = overridden
                         parseAgentEditableNodes(vm, vm.agentWorkflow)
                     }
-                    true
+                    valid()
                 }
                 else -> {
                     if (!silent) vm.showToast("未知的工作流来源")
                     false
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
+            if (!valid()) return false
             if (!silent) vm.showToast("加载模板失败: ${e.message}")
             vm.addLog("Agent 加载模板失败: ${e.message}", LogType.ERROR)
             false
@@ -1062,15 +1016,17 @@ object MainViewModelAgent {
         return ""
     }
 
-    suspend fun expandPromptWithLlm(
+    internal suspend fun expandPromptWithLlm(
         vm: MainViewModel,
         userText: String,
         priorHistory: List<AgentChatMessage> = emptyList(),
         imageDataUrls: List<String> = emptyList(),
-        onProgress: ((reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null
+        settings: AgentLlmSettings = AgentLlmSettings.capture(vm),
+        requestId: String = UUID.randomUUID().toString(),
+        onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null
     ): Result<AgentLlmResult> {
-        val persona = vm._agentSystemPrompt.value.ifBlank { MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT }
-        val drawRules = vm._agentDrawPrompt.value.ifBlank { MainViewModel.DEFAULT_AGENT_DRAW_PROMPT }
+        val persona = settings.persona.ifBlank { MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT }
+        val drawRules = settings.drawRules.ifBlank { MainViewModel.DEFAULT_AGENT_DRAW_PROMPT }
 
         val validHistory = priorHistory.filter { hist ->
             if (hist.role == "user") {
@@ -1086,7 +1042,7 @@ object MainViewModelAgent {
             }
         }
 
-        val allLores = vm._characterLores.value
+        val allLores = settings.lores
         // 只有处于“已启用”状态的角色才参与匹配；未启用（关闭）的角色彻底不生效，绝不读取
         // 仅当用户当前输入中明确提及了该角色名时才触发注入，不再强制常驻，告别被动绑定
         val matchedLores = allLores.filter { lore ->
@@ -1174,24 +1130,28 @@ object MainViewModelAgent {
 
         val result = if (onProgress != null) {
             vm.llmClient.chatCompletionsStream(
-                baseUrl = vm._llmBaseUrl.value,
-                apiKey = vm._llmApiKey.value,
-                model = vm._llmModel.value,
+                baseUrl = settings.baseUrl,
+                apiKey = settings.apiKey,
+                model = settings.model,
                 messages = messages,
                 images = imageDataUrls,
+                requestId = requestId,
+                reasoningEffort = settings.effort,
                 onProgress = onProgress
             )
         } else {
             vm.llmClient.chatCompletions(
-                baseUrl = vm._llmBaseUrl.value,
-                apiKey = vm._llmApiKey.value,
-                model = vm._llmModel.value,
+                baseUrl = settings.baseUrl,
+                apiKey = settings.apiKey,
+                model = settings.model,
                 messages = messages,
-                images = imageDataUrls
+                images = imageDataUrls,
+                requestId = requestId,
+                reasoningEffort = settings.effort
     )
         }
         return result.map { output ->
-            parseAgentLlmReply(vm, output.content, output.reasoning, userText = userText)
+            parseAgentLlmReply(vm, output.content, output.reasoning, userText = userText, previousPrompt = settings.lastPrompt)
         }
     }
 
@@ -1315,11 +1275,12 @@ object MainViewModelAgent {
         vm: MainViewModel,
         raw: String,
         apiReasoning: String? = null,
-        userText: String = ""
+        userText: String = "",
+        previousPrompt: String? = null
     ): AgentLlmResult {
         val thinking = (apiReasoning?.takeIf { it.isNotBlank() } ?: extractThinkingContent(raw)).trim()
         val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(sanitizeThinkingContent(raw))
-        val lastPrompt = vm._agentLastExpandedPrompt.value.trim().ifBlank {
+        val lastPrompt = previousPrompt ?: vm._agentLastExpandedPrompt.value.trim().ifBlank {
             vm._agentMessages.value.asReversed().firstOrNull {
                 it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()
             }?.expandedPrompt.orEmpty()
@@ -1378,9 +1339,6 @@ object MainViewModelAgent {
 
     private const val MAX_IMAGES = 4
     private const val MAX_TEXT_FILE_BYTES = 100 * 1024
-    /** Cap on images re-sent from history so long chats don't explode the request. */
-    private const val MAX_CONTEXT_IMAGES = 8
-    private const val MAX_CONTEXT_MESSAGES = 20
 
     /** Downscale to max 1024px long edge, JPEG q85. */
     private fun compressImage(vm: MainViewModel, uri: android.net.Uri, maxEdge: Int = 1024): ByteArray? = runCatching {
@@ -1403,7 +1361,7 @@ object MainViewModelAgent {
     }.onFailure { vm.addLog("Agent 附图压缩失败: ${it.message}", LogType.ERROR) }.getOrNull()
 
     /** Image attachments are stored as already-compressed local JPEGs; encode for OpenAI vision. */
-    private fun imageDataUrl(att: com.comfyui.mobile.model.AgentAttachment): String? = runCatching {
+    internal fun imageDataUrl(att: com.comfyui.mobile.model.AgentAttachment): String? = runCatching {
         val path = android.net.Uri.parse(att.uri).path ?: return null
         "data:image/jpeg;base64," + android.util.Base64.encodeToString(File(path).readBytes(), android.util.Base64.NO_WRAP)
     }.getOrNull()
@@ -1462,323 +1420,19 @@ object MainViewModelAgent {
     }
 
     /** User text plus inlined text-file attachments. */
-    private fun chatText(msg: AgentChatMessage): String = buildString {
+    internal fun chatText(msg: AgentChatMessage): String = buildString {
         msg.attachments.orEmpty().filter { !it.isImage && it.textContent != null }.forEach { f ->
             append("【附件：").append(f.name).append("】\n```\n").append(f.textContent).append("\n```\n\n")
         }
         append(msg.content)
     }.trim()
 
-    /** Plain ChatGPT-style chat: no draw rules, no JSON format, no workflow. */
-    fun sendAgentChatMessage(vm: MainViewModel, userText: String) {
-        val text = userText.trim()
-        val attachments = vm._agentPendingAttachments.value
-        if (text.isEmpty() && attachments.isEmpty()) return
-        if (vm._agentBusy.value) return
+    fun sendAgentChatMessage(vm: MainViewModel, userText: String) =
+        vm.agentRuntime.send(userText, AgentMode.CHAT)
 
-        val prior = vm._agentMessages.value.toList()
-        val userMsg = AgentChatMessage(
-            id = "u-${System.currentTimeMillis()}",
-            role = "user",
-            content = text,
-            attachments = attachments.ifEmpty { null }
-    )
-        appendAgentMessage(vm, userMsg)
-        vm.clearAgentAttachments()
-        val assistantMsgId = "a-${System.currentTimeMillis()}"
-        appendAgentMessage(vm, AgentChatMessage(id = assistantMsgId, role = "assistant", content = "", isThinking = true))
-
-        stopRequested = false
-        activeAssistantId = assistantMsgId
-        agentJob = vm.viewModelScope.launch(Dispatchers.IO) {
-            vm._agentBusy.value = true
-            try {
-                if (vm._llmBaseUrl.value.isBlank() || vm._llmApiKey.value.isBlank() || vm._llmModel.value.isBlank()) {
-                    updateAgentMessage(vm, assistantMsgId, persist = true) {
-                        it.copy(content = "请先在右上角 Agent 设置里填写 API Base URL、Key 和模型名。", isThinking = false)
-                    }
-                    return@launch
-                }
-                val history = (prior + userMsg)
-                    .filter { (it.role == "user" || it.role == "assistant") && !it.isThinking && it.errorMessage == null }
-                    .takeLast(MAX_CONTEXT_MESSAGES)
-
-                val persona = vm._agentSystemPrompt.value.ifBlank { MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT }
-                val messages = mutableListOf<com.comfyui.mobile.network.ChatMessageDto>()
-                messages.add(com.comfyui.mobile.network.ChatMessageDto("system", persona.trim()))
-                history.forEach {
-                    messages.add(
-                        com.comfyui.mobile.network.ChatMessageDto(
-                            it.role,
-                            if (it.role == "user") chatText(it) else it.content
-                        )
-                    )
-                }
-                // Newest images first until the budget runs out, so follow-ups about older pictures still work.
-                // +1 because messages[0] is the system persona prompt.
-                val messageImages = mutableMapOf<Int, List<String>>()
-                var budget = MAX_CONTEXT_IMAGES
-                for (i in history.indices.reversed()) {
-                    if (budget <= 0) break
-                    val imgs = history[i].attachments.orEmpty().filter { it.isImage }.take(budget).mapNotNull { imageDataUrl(it) }
-                    if (imgs.isNotEmpty()) {
-                        messageImages[i + 1] = imgs
-                        budget -= imgs.size
-                    }
-                }
-
-                var lastUi = 0L
-                val result = vm.llmClient.chatCompletionsStream(
-                    baseUrl = vm._llmBaseUrl.value,
-                    apiKey = vm._llmApiKey.value,
-                    model = vm._llmModel.value,
-                    messages = messages,
-                    messageImages = messageImages,
-                    onProgress = { _, _, fullReasoning, fullContent ->
-                        val now = System.currentTimeMillis()
-                        if (now - lastUi >= 40L) {
-                            lastUi = now
-                            vm.viewModelScope.launch(Dispatchers.Main) {
-                                updateAgentMessage(vm, assistantMsgId, persist = false) {
-                                    it.copy(
-                                        content = fullContent,
-                                        thinkingContent = fullReasoning.takeIf { r -> r.isNotBlank() },
-                                        isThinking = fullContent.isBlank()
-    )
-                                }
-                            }
-                        }
-                    }
-    )
-                result.fold(
-                    onSuccess = { out ->
-                        updateAgentMessage(vm, assistantMsgId, persist = true) {
-                            it.copy(content = out.content, thinkingContent = out.reasoning, isThinking = false)
-                        }
-                    },
-                    onFailure = { e ->
-                        if (stopRequested) return@launch
-                        val llmException = if (e is LlmException) e else LlmErrorMapper.map(e, endpoint = LlmClient.resolveEndpoint(vm._llmBaseUrl.value))
-                        vm.addLog("Agent Chat 失败 [${llmException.errorType.title}]: ${llmException.userMessage}", LogType.ERROR)
-                        updateAgentMessage(vm, assistantMsgId, persist = true) {
-                            it.copy(content = llmException.toDisplayString(), errorMessage = "请求失败", isThinking = false)
-                        }
-                    }
-    )
-            } finally {
-                vm._agentBusy.value = false
-            }
-        }
-    }
-
-    fun sendAgentMessage(vm: MainViewModel, userText: String) {
-        if (vm._agentInteractionMode.value == MainViewModel.AGENT_MODE_CHAT) {
-            sendAgentChatMessage(vm, userText)
-            return
-        }
-        val text = userText.trim()
-        val pendingAttachments = vm._agentPendingAttachments.value
-        if (text.isEmpty() && pendingAttachments.isEmpty()) return
-        if (vm._agentBusy.value) return
-
-        // New draw turn replaces any previous ready-to-draw prompt.
-
-        val priorHistory = vm._agentMessages.value.toList()
-        appendAgentMessage(
-            vm,
-            AgentChatMessage(
-                id = "u-${System.currentTimeMillis()}",
-                role = "user",
-                content = text,
-                attachments = pendingAttachments.ifEmpty { null }
-    )
+    fun sendAgentMessage(vm: MainViewModel, userText: String) =
+        vm.agentRuntime.send(
+            userText,
+            if (vm._agentInteractionMode.value == MainViewModel.AGENT_MODE_CHAT) AgentMode.CHAT else AgentMode.DRAW
         )
-
-        val assistantMsgId = "a-${System.currentTimeMillis()}"
-        appendAgentMessage(
-            vm,
-            AgentChatMessage(
-                id = assistantMsgId,
-                role = "assistant",
-                content = "✨深度求索中...",
-                isThinking = true
-    )
-        )
-
-        stopRequested = false
-        activeAssistantId = assistantMsgId
-        agentJob = vm.viewModelScope.launch(Dispatchers.IO) {
-            vm._agentBusy.value = true
-            try {
-                vm.addLog("Agent 收到: ${text.take(80)}", LogType.INFO)
-                if (vm._llmBaseUrl.value.isBlank() || vm._llmApiKey.value.isBlank() || vm._llmModel.value.isBlank()) {
-                    updateAgentMessage(vm, assistantMsgId) {
-                        it.copy(
-                            content = "请先在右上角 Agent 设置里填写 API Base URL、Key 和模型名。",
-                            isThinking = false
-                        )
-                    }
-                    return@launch
-                }
-
-                var lastStreamUiUpdate = 0L
-                val imageDataUrls = pendingAttachments.filter { it.isImage }.mapNotNull { imageDataUrl(it) }
-                val llmOut = expandPromptWithLlm(
-                    vm = vm,
-                    userText = text,
-                    priorHistory = priorHistory,
-                    imageDataUrls = imageDataUrls,
-                    onProgress = { _, contentChunk, fullReasoning, fullContent ->
-                        val now = System.currentTimeMillis()
-                        // 节流避免超高频刷新 UI，但有新增内容 chunk 或间隔超过 40ms 时及时刷新
-                        if (now - lastStreamUiUpdate >= 40L || contentChunk.isNotEmpty()) {
-                            lastStreamUiUpdate = now
-                            val partialReply = extractStreamingReply(fullContent)
-                            val hasContent = !partialReply.isNullOrBlank()
-                            vm.viewModelScope.launch(Dispatchers.Main) {
-                                updateAgentMessage(vm, assistantMsgId, persist = false) {
-                                    it.copy(
-                                        content = partialReply?.takeIf { p -> p.isNotBlank() } ?: "✨深度求索中...",
-                                        thinkingContent = fullReasoning.takeIf { it.isNotBlank() },
-                                        isThinking = !hasContent
-    )
-                                }
-                            }
-                        }
-                    }
-                ).getOrElse { e ->
-                    val llmException = if (e is LlmException) e else LlmErrorMapper.map(e, endpoint = LlmClient.resolveEndpoint(vm._llmBaseUrl.value))
-                    vm.addLog("Agent LLM 扩写失败 [${llmException.errorType.title}]: ${llmException.userMessage} (endpoint=${llmException.endpoint ?: "未知"})", LogType.ERROR)
-                    updateAgentMessage(vm, assistantMsgId, persist = true) {
-                        it.copy(
-                            content = "扩写失败\n\n" + llmException.toDisplayString(),
-                            isThinking = false
-                        )
-                    }
-                    return@launch
-                }
-                val tip = llmOut.tip.trim()
-                val expanded = llmOut.prompt.trim()
-                val thinking = llmOut.thinking.trim()
-                val cleanTip = sanitizeAgentReply(tip)
-
-                if (expanded.isBlank()) {
-                    // No tags from model and no recoverable last prompt — cannot queue.
-                    updateAgentMessage(vm, assistantMsgId, persist = true) {
-                        it.copy(
-                            content = cleanTip.ifBlank { "模型没有返回可用提示词" },
-                            thinkingContent = thinking.takeIf { it.isNotBlank() },
-                            errorMessage = "未解析到有效提示词，且没有上一轮可继承的 tags，未出图" +
-                                (llmOut.parseError?.let { e -> "（$e）" } ?: ""),
-                            isThinking = false
-                        )
-                    }
-                    vm.clearAgentAttachments()
-                    return@launch
-                }
-                vm.addLog("Agent 扩写完成 tip=${tip.take(40)} len=${expanded.length} thinkLen=${thinking.length} mode=${vm._agentInteractionMode.value}", LogType.INFO)
-
-                // 固化流式输出结果并落盘持久化
-                updateAgentMessage(vm, assistantMsgId, persist = true) {
-                    it.copy(
-                        content = cleanTip,
-                        thinkingContent = thinking.takeIf { it.isNotBlank() },
-                        expandedPrompt = expanded,
-                        isThinking = false
-                    )
-                }
-
-                if (!ensureAgentWorkflowLoaded(vm, silent = true)) {
-                    updateAgentMessage(vm, assistantMsgId, persist = true) {
-                        it.copy(
-                            content = cleanTip,
-                            errorMessage = "无法加载默认工作流，请到设置里重新选择。",
-                            isThinking = false
-                        )
-                    }
-                    return@launch
-                }
-
-                // Optional pending image -> ImageInput, then auto-draw when should_draw.
-                if (!uploadAgentPendingImageIfAny(vm)) {
-                    updateAgentMessage(vm, assistantMsgId, persist = true) {
-                        it.copy(
-                            content = cleanTip,
-                            errorMessage = "附图上传失败，已取消出图",
-                            isThinking = false
-                        )
-                    }
-                    return@launch
-                }
-                vm.clearAgentAttachments()
-
-                val target = withContext(Dispatchers.Main) {
-                    findPrimaryPositivePromptTarget(vm)
-                }
-                if (target == null) {
-                    vm.addLog("Agent 找不到可写入的提示词节点", LogType.ERROR)
-                    updateAgentMessage(vm, assistantMsgId, persist = true) {
-                        it.copy(
-                            content = cleanTip,
-                            errorMessage = "模板里找不到可写入的提示词节点，请在工作流设置手动选择注入节点。",
-                            isThinking = false
-                        )
-                    }
-                    return@launch
-                }
-                vm.addLog("Agent 写入节点 ${target.first}:${target.second}", LogType.INFO)
-                withContext(Dispatchers.Main) {
-                    updateAgentNodeValue(vm, target.first, target.second, expanded)
-                }
-
-                vm._agentLastExpandedPrompt.value = expanded
-                vm.prefs.edit().putString(scopedPref("agent_last_prompt", vm), expanded).apply()
-
-                if (llmOut.shouldDraw) {
-                    val enqueueResult = withContext(Dispatchers.Main) {
-                        vm.enqueueCurrentWorkflowAwait(1)
-                    }
-                    enqueueResult.fold(
-                        onSuccess = {
-                            updateAgentMessage(vm, assistantMsgId, persist = true) {
-                                it.copy(content = cleanTip, errorMessage = null)
-                            }
-                            vm.addLog("Agent 自动出图 (should_draw=true)", LogType.INFO)
-                        },
-                        onFailure = { e ->
-                            updateAgentMessage(vm, assistantMsgId, persist = true) {
-                                it.copy(
-                                    content = cleanTip,
-                                    errorMessage = "提交出图失败：${e.message ?: e.toString()}"
-    )
-                            }
-                        }
-    )
-                } else {
-                    vm.addLog("Agent 跳过出图 (should_draw=false)，仅写入提示词", LogType.INFO)
-                }
-            } catch (e: Exception) {
-                if (stopRequested) return@launch
-                val llmException = if (e is LlmException) e else LlmErrorMapper.map(e, endpoint = LlmClient.resolveEndpoint(vm._llmBaseUrl.value))
-                val existing = vm._agentMessages.value.firstOrNull { it.id == assistantMsgId }
-                val hasReply = existing != null && existing.content.isNotBlank() && existing.content != "✨深度求索中..."
-                updateAgentMessage(vm, assistantMsgId, persist = true) {
-                    if (hasReply) {
-                        it.copy(
-                            errorMessage = "出错了：" + (e.message ?: e.toString()),
-                            isThinking = false
-                        )
-                    } else {
-                        it.copy(
-                            content = "出错了\n\n" + llmException.toDisplayString(),
-                            isThinking = false
-                        )
-                    }
-                }
-                vm.addLog("Agent 异常 [${llmException.errorType.title}]: ${e.message ?: e.toString()}", LogType.ERROR)
-            } finally {
-                vm._agentBusy.value = false
-            }
-        }
-    }
 }
