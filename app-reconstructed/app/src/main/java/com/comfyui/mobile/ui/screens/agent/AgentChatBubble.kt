@@ -194,10 +194,6 @@ fun AgentBubble(msg: AgentChatMessage) {
                 if (!isUser) {
                     AgentPromptDetails(msg.expandedPrompt, msg.expandedNegativePrompt, msg.negativePromptStatus)
                 }
-                if (!isUser && msg.localTagReport != null) {
-                    LocalTagReportPanel(msg.localTagReport)
-                }
-
                 // 提交出图异常提示（若有），独立渲染在下方，绝不冲掉正文对话
                 if (!msg.errorMessage.isNullOrBlank()) {
                     Row(

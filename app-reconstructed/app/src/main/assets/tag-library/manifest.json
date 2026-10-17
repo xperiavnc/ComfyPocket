@@ -1,48 +1,120 @@
 {
-  "schema": 1,
+  "schema": 2,
   "repository": "https://github.com/star-abyss/ai-tag-toolbox",
-  "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
+  "revision": "bilingual-v2-39c99ead10a54e79",
   "counts": {
-    "tags": 13358,
-    "characters": 34122
+    "tags": 140871,
+    "characters": 99980
   },
-  "bytes": 15630336,
-  "sha256": "9ab0e0b81e7d8a9a77cb4eb6e902d7f55d9139f52697249c06cedda6759b4d20",
+  "translatedEntries": 240851,
+  "categories": {
+    "accessory": 1805,
+    "animal": 404,
+    "artist": 69372,
+    "atmosphere": 72,
+    "body": 1405,
+    "camera": 42,
+    "character": 316,
+    "character_names": 99952,
+    "copyright": 17495,
+    "danbooru_general": 40054,
+    "effects": 193,
+    "expression": 260,
+    "eyes": 323,
+    "features": 300,
+    "food": 645,
+    "footwear": 267,
+    "hair": 557,
+    "metadata": 673,
+    "negative": 80,
+    "nsfw": 500,
+    "other": 2187,
+    "outfit": 2100,
+    "pose": 689,
+    "quality": 37,
+    "rating": 4,
+    "scene": 609,
+    "series": 2,
+    "style": 455,
+    "time_weather": 53
+  },
+  "excludedLegacyWithoutChinese": 2048,
+  "danbooru": {
+    "repository": "https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table",
+    "revision": "fd70c7eee13917d832107c7e3a7b135dc6b2211a",
+    "license": "MIT",
+    "licenseAsset": "ffdkj-LICENSE.txt",
+    "sourceRows": 333437,
+    "merged": 44557,
+    "legacyTranslationsFilled": 27318,
+    "added": 195423,
+    "withoutChineseExcluded": 93457
+  },
+  "bytes": 62169088,
+  "sha256": "cc30b50530d4d9a721e67abad4f1ff0e3cdca3a28086ea1e65bd40cca070ed25",
   "sources": [
     {
+      "repository": "https://github.com/star-abyss/ai-tag-toolbox",
+      "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
       "path": "assets/数据资产/标签/data-tags.js",
       "sha256": "d6490fc20d32e3713ecd92a727413a3e24598a2bb988c8a28b2c58d898fdbbc3",
       "bytes": 284363
     },
     {
+      "repository": "https://github.com/star-abyss/ai-tag-toolbox",
+      "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
       "path": "assets/数据资产/标签/extra-tags.js",
       "sha256": "05fd42098bbea0af15b7d12198582cbc875f63064fd0678f7695556e832f68cd",
       "bytes": 860138
     },
     {
+      "repository": "https://github.com/star-abyss/ai-tag-toolbox",
+      "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
       "path": "assets/数据资产/标签/character-general-tags.json",
       "sha256": "c47a935e8545559455990ffe4d971a5d4fb4765c2645d0b8e1d5f90253fd09d6",
       "bytes": 25909
     },
     {
+      "repository": "https://github.com/star-abyss/ai-tag-toolbox",
+      "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
       "path": "assets/数据资产/标签/synonyms.js",
       "sha256": "38ca8765ce75b77a2c3b6e07c2d443c75387cec6823ea78137582561f8728d28",
       "bytes": 1375855
     },
     {
+      "repository": "https://github.com/star-abyss/ai-tag-toolbox",
+      "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
       "path": "assets/数据资产/标签/search-keywords.js",
       "sha256": "43ef5f655abeecd8752820fe9737d5e1a6a974b442e5bd6feb98f0ec90db0f80",
       "bytes": 1560
     },
     {
+      "repository": "https://github.com/star-abyss/ai-tag-toolbox",
+      "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
       "path": "assets/数据资产/角色/characters.json",
       "sha256": "fb73d688a6cd15c27b71a3c33f317c4fbcd7d680d95c9e4dce3a5a412f2d7e48",
       "bytes": 10763092
     },
     {
+      "repository": "https://github.com/star-abyss/ai-tag-toolbox",
+      "revision": "2186c68862ea12a6a191f44e23bfc1699f8149fa",
       "path": "assets/数据资产/角色/manifest.json",
       "sha256": "e962d9c91ef57c1608f9f8fdbef9e2ace281e3f9b7ec560000f621993cd83b89",
       "bytes": 945
+    },
+    {
+      "repository": "https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table",
+      "revision": "fd70c7eee13917d832107c7e3a7b135dc6b2211a",
+      "path": "tag.sqlite",
+      "sha256": "18859f6b3a9d1ed2a1c924de39c5ecae67f6ab023606f0647584f5900f843825",
+      "bytes": 24715264
+    },
+    {
+      "repository": "https://github.com/ffdkj/ffdkj-Danbooru_Tag-Chinese-English-Translation-Table",
+      "revision": "fd70c7eee13917d832107c7e3a7b135dc6b2211a",
+      "path": "LICENSE",
+      "sha256": "014b110a69780163b0a0a2ed87465d950dc3841694342115aab0db49fc2f3ccc",
+      "bytes": 1082
     }
   ],
   "characterSource": {

@@ -18,6 +18,7 @@ import com.comfyui.mobile.agent.AgentPromptBinding
 import com.comfyui.mobile.agent.AgentPromptOutput
 import com.comfyui.mobile.agent.PromptBindingMode
 import com.comfyui.mobile.model.EditableNode
+import com.comfyui.mobile.model.AgentChatMessage
 import com.comfyui.mobile.taglib.LocalTagEntry
 import com.comfyui.mobile.taglib.LocalTagReport
 import org.junit.Assert.*
@@ -55,16 +56,19 @@ class AgentPromptControlsTest {
             assertTrue(saved!!.useLocalLibrary)
         } finally { controller.pause().stop().destroy() }
     }
-    @Test fun localReportIsExpandableAndDoesNotPretendToBeAModelTool() {
+    @Test fun localReportNoLongerAddsAStatusPanelToChat() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val report = LocalTagReport(listOf(LocalTagEntry("blue hair", "蓝发", "hair", "颜色", "tag", "", "", "蓝发", true)))
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { MiuixTheme { LocalTagReportPanel(report) } }
+                setContent { MiuixTheme {
+                    AgentBubble(AgentChatMessage("fixture", "assistant", "好的，正在整理画面。", localTagReport = report))
+                } }
             })
             compose.waitForIdle()
-            compose.onNodeWithText("本地词库命中 1 项 · 无联网查询  详情").performClick()
-            compose.onNodeWithText("blue hair · 蓝发").assertExists()
+            compose.onNodeWithText("好的，正在整理画面。").assertExists()
+            compose.onNodeWithText("本地词库命中", substring = true).assertDoesNotExist()
+            compose.onNodeWithText("blue hair · 蓝发").assertDoesNotExist()
         } finally { controller.pause().stop().destroy() }
     }
 

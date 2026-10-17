@@ -50,6 +50,10 @@ cd app-reconstructed
 
 ## 当前验证状态
 
+- `0.0.7-agent-bilingual-tags`（versionCode 9）：内置词库扩充为 140,871 个标签与 99,980 个角色，
+  共 240,851 项，均有中文对应。合并 Danbooru 社区中英对照固定快照，支持中文整句 / 别名查英文标签，
+  不把纯英文回显计入中文覆盖。含机器翻译、画师和作品数据，来源、许可与过滤范围见 `app-reconstructed/TAG_LIBRARY.md`。
+  删除聊天里的词库命中展开提示，保留离线检索与设置页查词；正反向流程不变。
 - `0.0.6-agent-local-tags`（versionCode 8）：撤掉 Danbooru 联网查词，内置 13,358 个普通词、
   34,122 个角色条目，支持中英文/别名搜索。绘图前离线取候选，不增加模型修订轮次。
   Agent 主动编写正向和反向；工作流可分别选择精确文本字段；“出图提示词”同时显示、
@@ -61,7 +65,7 @@ cd app-reconstructed
   分享和画廊的原图缓存复用；主页新增 CPU / 内存预览，配套 Bridge 2.1，详见 `app-reconstructed/AGENT.md`。
 - `0.0.2-agent-core`（versionCode 4）落地 Agent 实例级会话、分步执行和工作流工具；
   思考强度包括极高 `xhigh` 和 `max`，随模型配置保存，详见 `app-reconstructed/AGENT.md`。
-- 当前 Android 构建成功，320 项 JVM/Android 页面测试通过（基线 317 项，删除旧联网功能专属测试并增加离线及双向回归）。
+- 当前 Android 构建成功，323 项 JVM/Android 页面测试和 3 项双语词库导入测试通过（本批基线 320 项）。
   上批另有 3 项 Bridge CPU/内存采样测试。Bridge Python、
   设置 GUI 与本地浏览器的独立测试说明见插件文档，本批未改动插件。
 - 主 ViewModel 首轮从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、

@@ -17,10 +17,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.agent.AgentPromptFormat
 import com.comfyui.mobile.agent.AgentPromptSettings
 import com.comfyui.mobile.taglib.LocalTagEntry
+import com.comfyui.mobile.taglib.LocalTagLibrary
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Button
@@ -37,6 +40,8 @@ internal fun AgentLocalTagSettings(
     search: suspend (String, String) -> List<LocalTagEntry>,
     onSave: (AgentPromptSettings) -> Unit
 ) {
+    val app = LocalContext.current.applicationContext
+    val counts = remember(app) { LocalTagLibrary(app).counts }
     var draft by remember(settings) { mutableStateOf(settings) }
     var query by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf("tag") }
@@ -73,7 +78,7 @@ internal fun AgentLocalTagSettings(
                 Text("绘图前查询本地词库", Modifier.weight(1f))
                 Switch(checked = draft.useLocalLibrary, onCheckedChange = { draft = draft.copy(useLocalLibrary = it) })
             }
-            Text("内置 13,358 个普通词、34,122 个角色条目。离线检索候选后由 Agent 编写两组提示词，不访问 Danbooru，不增加模型修订轮次。未命中保留原词。",
+            Text("内置 ${String.format(Locale.ROOT, "%,d", counts.first)} 个标签、${String.format(Locale.ROOT, "%,d", counts.second)} 个角色，均有中文对照。中文、英文和别名均可离线查询，再由 Agent 编写正向和反向；不访问 Danbooru、不增加模型修订轮次。部分翻译可能有误，未命中保留原词。",
                 style = MiuixTheme.textStyles.footnote1)
             Button(onClick = { onSave(draft) }, colors = ButtonDefaults.buttonColorsPrimary()) {
                 Text("保存提示词与词库设置")
@@ -96,7 +101,7 @@ internal fun AgentLocalTagSettings(
             ) {
                 results.forEach { entry -> LocalTagEntryText(entry) }
             }
-            Text("来源：ai-tag-toolbox 固定快照；角色身份与可选外貌分开。数据来源和重建方式见项目词库说明。",
+            Text("来源：ai-tag-toolbox 与 ffdkj Danbooru 中英对照固定快照；角色身份与可选外貌分开。来源、翻译限制和重建方式见项目词库说明。",
                 style = MiuixTheme.textStyles.footnote1)
         }
     }

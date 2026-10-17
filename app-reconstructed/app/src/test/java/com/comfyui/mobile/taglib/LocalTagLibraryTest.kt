@@ -17,8 +17,8 @@ class LocalTagLibraryTest {
     @Before fun setup() { library = LocalTagLibrary(RuntimeEnvironment.getApplication()) }
 
     @Test fun packagedCatalogueContainsThePinnedCounts() {
-        assertEquals(13358 to 34122, library.counts)
-        assertEquals("2186c68862ea12a6a191f44e23bfc1699f8149fa", library.revision)
+        assertEquals(140871 to 99980, library.counts)
+        assertEquals("bilingual-v2-39c99ead10a54e79", library.revision)
     }
     @Test fun chineseEnglishAndUnderscoreAllFindTheExactConcept() = runBlocking {
         for (query in listOf("蓝发", "blue hair", "blue_hair", "BLUE HAIR")) {
@@ -43,6 +43,32 @@ class LocalTagLibraryTest {
         assertEquals("negative", result.category)
         assertTrue(library.forRequest("蓝发，不要模糊，no bad anatomy").entries.any { it.category == "negative" })
     }
+    @Test fun newDanbooruTranslationsAreSearchableInBothLanguagesAndChineseSentences() = runBlocking {
+        for (query in listOf("机械魔法少女", "mechanical_magical_girl", "mechanical magical girl")) {
+            val result = library.search(query).first { it.name == "mechanical_magical_girl" }
+            assertEquals("机械魔法少女", result.translation)
+            assertTrue(result.exact)
+        }
+        val report = library.forRequest("画一位机械魔法少女，留着超长辫子")
+        assertTrue(report.entries.any { it.name == "mechanical_magical_girl" && it.matchedTerm == "机械魔法少女" })
+        assertTrue(report.entries.any { it.name == "very_long_braid" })
+        assertTrue(library.context(report).contains("中文词义"))
+    }
+    @Test fun chineseRoleNameMatchesWithoutItsParenthesizedSeries() = runBlocking {
+        val report = library.forRequest("画初音未来，蓝发，撑伞")
+        assertTrue(report.entries.any { it.name == "hatsune_miku" && it.kind == "character" })
+        assertTrue(report.entries.all { it.translation.any { ch -> ch in '\u3400'..'\u9fff' } })
+        val newer = library.search("阿格莱雅", "character").first { it.name == "aglaea_(honkai:_star_rail)" }
+        assertEquals("aglaea_(honkai:_star_rail)", newer.trigger)
+        assertTrue(newer.exact)
+        assertTrue(newer.detail.isEmpty()) // Identity-only rows must not fabricate appearance tags.
+        assertTrue(library.forRequest("画阿格莱雅，站在花园中").entries.any { it.name == newer.name })
+    }
+    @Test fun singleChineseWeatherConceptsAreUsableWithoutMatchingArtistNames() = runBlocking {
+        val report = library.forRequest("雨")
+        assertTrue(report.entries.any { LocalTagLibrary.normalize(it.name) == "rain" })
+        assertTrue(report.entries.all { it.kind == "tag" && it.category !in setOf("artist", "copyright") })
+    }
     @Test fun requestRetrievesMixedLanguageCandidatesAndPreservesUnknowns() = runBlocking {
         val result = library.forRequest("画蓝发人物，blue_hair, blurry, __my_custom_trigger__, <lora:fixture:0.8>")
         assertTrue(result.entries.any { it.name == "blue hair" })
@@ -57,7 +83,9 @@ class LocalTagLibraryTest {
         assertTrue(result.summary.contains("保留自定义词"))
     }
     @Test fun wildcardAndSqlPunctuationAreLiteralSearchInput() = runBlocking {
-        assertTrue(library.search("%").isEmpty())
+        // The enlarged catalogue contains literal percent-sign tags. They may match, but
+        // "%" must not act as a SQL wildcard and return unrelated vocabulary.
+        assertTrue(library.search("%").all { "%" in it.matchedTerm })
         assertTrue(library.search("' OR 1=1 --").isEmpty())
         assertEquals(4, library.search("hair", limit = 4).size)
         assertTrue(library.search(" ").isEmpty())
