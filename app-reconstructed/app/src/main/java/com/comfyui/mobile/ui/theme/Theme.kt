@@ -19,6 +19,7 @@ import top.yukonga.miuix.kmp.theme.ThemeController
 fun ComfyControllerTheme(
     darkTheme: Boolean,
     paletteId: String = ThemePaletteIds.DEFAULT,
+    manageSystemBars: Boolean = true,
     content: @Composable () -> Unit
     ) {
     val palette = remember(paletteId) { themePaletteById(paletteId) }
@@ -36,7 +37,7 @@ fun ComfyControllerTheme(
 
     MiuixTheme(controller = controller) {
         val view = LocalView.current
-        if (!view.isInEditMode) {
+        if (manageSystemBars && !view.isInEditMode) {
             SideEffect {
                 val window = (view.context as Activity).window
                 window.statusBarColor = android.graphics.Color.TRANSPARENT

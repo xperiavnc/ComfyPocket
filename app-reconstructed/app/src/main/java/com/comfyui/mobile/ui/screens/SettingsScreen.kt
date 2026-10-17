@@ -301,7 +301,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     )
                 ArrowPreference(
                     title = "Material 预览",
-                    summary = "P0 / P1 · 独立样板，原界面保留",
+                    summary = "独立样板 · 正式应用已接入 P2 导航外壳",
                     onClick = {
                         context.startActivity(Intent(context, com.comfyui.mobile.ui.material.MaterialSampleActivity::class.java))
                     }

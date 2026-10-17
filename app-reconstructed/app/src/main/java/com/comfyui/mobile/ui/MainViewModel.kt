@@ -2549,11 +2549,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
     override fun showToast(msg: String) {
         viewModelScope.launch(Dispatchers.Main) {
-            try {
-                android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
-            } catch (_: Exception) {
+            // One foreground shell owns visible feedback, not one collector per page.
+            // Keep the Toast fallback for background operations and standalone legacy screens.
+            if (_userMessage.subscriptionCount.value > 0) {
+                _userMessage.emit(msg)
+            } else {
+                try {
+                    android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
+                } catch (_: Exception) {
+                }
             }
-            _userMessage.emit(msg)
         }
     }
     

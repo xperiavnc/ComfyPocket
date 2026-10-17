@@ -66,6 +66,7 @@ import androidx.navigation.NavController
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.MediaType
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
+import androidx.compose.foundation.layout.imePadding
 import com.comfyui.mobile.ui.MainViewModel
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -156,7 +157,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     var cloudModelInitialType by remember { mutableStateOf("CHECKPOINT") }
     var cloudModelTargetNodeId by remember { mutableStateOf<String?>(null) }
     var cloudModelTargetKey by remember { mutableStateOf<String?>(null) }
-    val listState = rememberLazyListState()
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
+    var observedLastMessageId by rememberSaveable { mutableStateOf(messages.lastOrNull()?.id) }
 
     LaunchedEffect(Unit) {
         viewModel.refreshAiApps()
@@ -170,7 +172,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     }
     val lastMsg = messages.lastOrNull()
     LaunchedEffect(messages.size, lastMsg?.id, lastMsg?.isThinking, lastMsg?.errorMessage) {
-        if (messages.isNotEmpty()) {
+        // Re-entering a saved Tab is not a new message. Do not reset a user's reading position.
+        if (messages.isNotEmpty() && observedLastMessageId != lastMsg?.id) {
+            observedLastMessageId = lastMsg?.id
             listState.animateScrollToItem(messages.lastIndex)
         }
     }
@@ -259,10 +263,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     }
 
 
-    // Edge-to-edge: adjustResize alone does not lift Compose content; pad by IME,
-    // but do not stack it on top of floating-nav clearance (use the larger one).
-    val imeBottom = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
-    val bottomPad = maxOf(imeBottom, floatingNavClearance)
+    // Consuming inset modifier cooperates with the P2 shell's IME padding.
+    // Reading raw asPaddingValues here would lift the input twice.
+    val bottomPad = floatingNavClearance
 
     Scaffold(
         containerColor = scheme.background,
@@ -285,6 +288,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(top = innerPadding.calculateTopPadding())
+                .imePadding()
                 .padding(bottom = bottomPad)
     ) {
             AgentImagePreviewCard(

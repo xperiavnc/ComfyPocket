@@ -1,11 +1,13 @@
 package com.comfyui.mobile.ui.screens
 
 import com.comfyui.mobile.data.AppModule
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTapGestures
 
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Pause
 import top.yukonga.miuix.kmp.icon.extended.AppRecording
 import top.yukonga.miuix.kmp.icon.extended.Delete
@@ -72,6 +74,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,6 +87,7 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -141,13 +145,13 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
         if (isLocalGallery) viewModel.refreshLocalMedia(context)
     }
     var selectedMedia by remember { mutableStateOf<MediaOutput?>(null) }
-    var selectionMode by remember { mutableStateOf(false) }
-    var selectedKeys by remember { mutableStateOf(setOf<String>()) }
+    var selectionMode by rememberSaveable { mutableStateOf(false) }
+    var selectedKeys by rememberSaveable { mutableStateOf(setOf<String>()) }
     var shareBusy by remember { mutableStateOf(false) }
     var saveBusy by remember { mutableStateOf(false) }
     val shareClient = remember { AppModule.provideRepository().hostAwareCallFactory }
     val gridState = rememberLazyGridState()
-    var activeCategoryId by remember { mutableStateOf<String?>(null) }
+    var activeCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(isLocalGallery) {
         if (!isLocalGallery) activeCategoryId = null
     }
@@ -156,14 +160,28 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
             activeCategoryId = null
         }
     }
+    var observedCategoryId by rememberSaveable { mutableStateOf(activeCategoryId) }
     LaunchedEffect(activeCategoryId) {
-        gridState.scrollToItem(0)
+        if (observedCategoryId != activeCategoryId) {
+            observedCategoryId = activeCategoryId
+            gridState.scrollToItem(0)
+        }
     }
     var showOverflowMenu by remember { mutableStateOf(false) }
     var showCategorySheet by remember { mutableStateOf(false) }
     var newCategoryName by remember { mutableStateOf("") }
     var renamingCategory by remember { mutableStateOf<GalleryCategory?>(null) }
     var renameCategoryText by remember { mutableStateOf("") }
+
+    fun exitSelection() {
+        selectionMode = false
+        selectedKeys = emptySet()
+    }
+    PredictiveBackHandler(enabled = selectionMode && selectedMedia == null &&
+        !showOverflowMenu && !showCategorySheet && renamingCategory == null) { progress ->
+        progress.collect { }
+        exitSelection()
+    }
 
     fun keyFor(media: MediaOutput): String {
         return viewModel.mediaKey(media)
@@ -225,6 +243,11 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                 largeTitle = galleryTitle,
                 color = scheme.background,
                 scrollBehavior = scrollBehavior,
+                navigationIcon = {
+                    if (selectionMode) IconButton(onClick = ::exitSelection) {
+                        Icon(MiuixIcons.Back, contentDescription = "退出多选")
+                    }
+                },
                 actions = {
                     if (selectionMode) {
                         val allSelected = displayMediaList.isNotEmpty() &&
@@ -332,10 +355,13 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                     state = gridState,
                     modifier = Modifier
                         .fillMaxSize()
+                        .testTag("legacy-gallery-grid")
                         .padding(top = 4.dp)
                         .overScrollVertical()
                         .nestedScroll(scrollBehavior.nestedScrollConnection),
-                    contentPadding = PaddingValues(bottom = 24.dp + floatingNavClearance),
+                    contentPadding = PaddingValues(
+                        bottom = (if (selectionMode && selectedKeys.isNotEmpty()) 100.dp else 24.dp) + floatingNavClearance
+                    ),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -444,7 +470,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(bottom = 80.dp)
+                    .padding(bottom = 12.dp + floatingNavClearance)
                     .fillMaxWidth(),
                 contentAlignment = Alignment.Center
     ) {
@@ -1184,6 +1210,7 @@ fun MediaGridItem(
     val shape = RoundedCornerShape(corner)
     Card(
         modifier = modifier
+            .testTag("legacy-media-${media.filename}")
             .aspectRatio(1f)
             .clip(shape)
             .border(borderWidth, borderColor, shape)

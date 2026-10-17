@@ -52,7 +52,13 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
             vm.scrollIndex = it.first; vm.scrollOffset = it.second
         }
     }
-    LaunchedEffect(state.revision) { if (state.revision > 0) grid.scrollToItem(0) }
+    var observedRevision by rememberSaveable(vm) { mutableLongStateOf(state.revision) }
+    LaunchedEffect(vm, state.revision) {
+        if (state.revision != observedRevision) {
+            observedRevision = state.revision
+            grid.scrollToItem(0)
+        }
+    }
     var input by rememberSaveable(state.query.text) { mutableStateOf(state.query.text) }
     val keyboard = LocalSoftwareKeyboardController.current
     val clearance = LocalFloatingNavClearance.current

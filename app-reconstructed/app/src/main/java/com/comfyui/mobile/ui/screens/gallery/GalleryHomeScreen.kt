@@ -66,7 +66,7 @@ fun GalleryHomeScreen(navController: NavController, legacy: GalleryUi) {
     val picker: @Composable () -> Unit = {
         GallerySourcePicker(source, ::select)
     }
-    holder.SaveableStateProvider(if (source == GalleryHomeSource.DANBOORU) "online" else "legacy") {
+    holder.SaveableStateProvider(source.name) {
         if (source == GalleryHomeSource.DANBOORU) {
             DanbooruScreen(online, runtime, picker)
         } else {

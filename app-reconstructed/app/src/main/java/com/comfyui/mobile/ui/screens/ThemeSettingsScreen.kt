@@ -77,7 +77,6 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) {
     val themeMode by viewModel.themeMode.collectAsState()
     val themePaletteId by viewModel.themePaletteId.collectAsState()
-    val isLiquidGlassEnabled by viewModel.isLiquidGlassEnabled.collectAsState()
     val liveUpdateShowPercent by viewModel.liveUpdateShowPercent.collectAsState()
     val uiScale by viewModel.uiScale.collectAsState()
     val haptics = rememberAppHaptics()
@@ -235,20 +234,6 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
 
             // 3. Visual effects / notifications
             Card {
-                SwitchPreference(
-                    title = "液态玻璃导航",
-                    summary = "底部毛玻璃效果",
-                    startAction = {
-                        Icon(
-                            MiuixIcons.Layers,
-                            contentDescription = null,
-                            modifier = Modifier.padding(end = 8.dp),
-                            tint = scheme.onBackground
-    )
-                    },
-                    checked = isLiquidGlassEnabled,
-                    onCheckedChange = { haptics.toggle(); viewModel.toggleLiquidGlass(it) }
-    )
                 SwitchPreference(
                     title = "通知显示百分比",
                     summary = "通知栏显示进度百分比",

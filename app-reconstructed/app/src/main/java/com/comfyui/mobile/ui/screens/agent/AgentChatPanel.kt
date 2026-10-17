@@ -41,6 +41,7 @@ import com.comfyui.mobile.ui.rememberAppHaptics
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -102,6 +103,7 @@ fun AgentChatPanel(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
+                    .testTag("agent-chat-list")
                     // Concentric with the card: 28dp corner - 12dp content padding.
                     .clip(RoundedCornerShape(PanelCorner - PanelPadding))
                     .overScrollVertical(),
