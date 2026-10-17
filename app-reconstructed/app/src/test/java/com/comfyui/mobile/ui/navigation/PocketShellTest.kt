@@ -199,6 +199,23 @@ class PocketShellTest {
         } finally { activity.pause().stop().destroy() }
     }
 
+    @Test fun selectedIndicatorMovesThroughIntermediatePositionAndSettlesOnTarget() {
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        try {
+            host(activity.get())
+            val start = compose.onNodeWithTag("pocket-navigation-indicator").fetchSemanticsNode().boundsInRoot
+            compose.mainClock.autoAdvance = false
+            tab(4)
+            compose.mainClock.advanceTimeBy(80)
+            val middle = compose.onNodeWithTag("pocket-navigation-indicator").fetchSemanticsNode().boundsInRoot
+            assertTrue("indicator should move before the transition completes", middle.left > start.left)
+            compose.mainClock.advanceTimeBy(1000)
+            val settled = compose.onNodeWithTag("pocket-navigation-indicator").fetchSemanticsNode().boundsInRoot
+            assertTrue("indicator should settle farther toward the selected tab", settled.left > middle.left)
+            compose.mainClock.autoAdvance = true
+        } finally { activity.pause().stop().destroy() }
+    }
+
     @Test fun globalFeedbackSurvivesNavigationAndLatestMessageReplacesPrevious() {
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         try {

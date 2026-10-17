@@ -4,12 +4,17 @@ package com.comfyui.mobile.ui.navigation
 
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Build
@@ -18,12 +23,17 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -78,6 +88,76 @@ internal fun pocketRouteMotion(from: String?, to: String?, pop: Boolean, rtl: Bo
         }
         pop -> PocketRouteMotion(-sign * 8, sign * 32, 180, false)
         else -> PocketRouteMotion(sign * 32, -sign * 8, 220, false)
+    }
+}
+
+@Composable
+private fun PocketNavigationItems(
+    route: String?,
+    onTabSelected: () -> Unit,
+    focus: FocusManager,
+    keyboard: SoftwareKeyboardController?,
+    navController: NavHostController
+) {
+    val icons = listOf(
+        Icons.Default.Home,
+        Icons.Default.Build,
+        Icons.Default.Person,
+        Icons.AutoMirrored.Filled.List,
+        ImageVector.vectorResource(R.drawable.material_symbol_gallery)
+    )
+    val selectedIndex = pocketTabs.indexOfFirst { it.route == route }.coerceAtLeast(0)
+    val layoutDirection = LocalLayoutDirection.current
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        val itemWidth = maxWidth / pocketTabs.size
+        val indicatorWidth = minOf(64.dp, (itemWidth - 16.dp).coerceAtLeast(0.dp))
+        val physicalIndex = if (layoutDirection == LayoutDirection.Rtl) {
+            pocketTabs.lastIndex - selectedIndex
+        } else {
+            selectedIndex
+        }
+        val targetOffset = itemWidth * physicalIndex + (itemWidth - indicatorWidth) / 2
+        val indicatorOffset by animateDpAsState(
+            targetValue = targetOffset,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "pocket-navigation-indicator"
+        )
+        Box(
+            modifier = Modifier
+                .absoluteOffset(x = indicatorOffset)
+                .width(indicatorWidth)
+                .height(32.dp)
+                .align(Alignment.CenterStart)
+                .clip(RoundedCornerShape(50))
+                .background(MaterialTheme.colorScheme.secondaryContainer)
+                .testTag("pocket-navigation-indicator")
+        )
+        Row(Modifier.fillMaxWidth()) {
+            pocketTabs.forEachIndexed { index, tab ->
+                NavigationBarItem(
+                    selected = route == tab.route,
+                    onClick = {
+                        if (route != tab.route) {
+                            focus.clearFocus()
+                            keyboard?.hide()
+                            onTabSelected()
+                            navController.selectPocketTab(tab.route)
+                        }
+                    },
+                    modifier = Modifier.weight(1f).testTag("pocket-tab-$index"),
+                    colors = NavigationBarItemDefaults.colors(
+                        indicatorColor = Color.Transparent
+                    ),
+                    icon = { Icon(icons[index], null) },
+                    label = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                )
+            }
+        }
     }
 }
 
@@ -142,24 +222,7 @@ internal fun PocketNavigationShell(
                     modifier = Modifier.testTag("pocket-navigation"),
                     windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
                 ) {
-                    val icons = listOf(Icons.Default.Home, Icons.Default.Build, Icons.Default.Person,
-                        Icons.AutoMirrored.Filled.List, ImageVector.vectorResource(R.drawable.material_symbol_gallery))
-                    pocketTabs.forEachIndexed { index, tab ->
-                        NavigationBarItem(
-                            selected = route == tab.route,
-                            onClick = {
-                                if (route != tab.route) {
-                                    focus.clearFocus()
-                                    keyboard?.hide()
-                                    onTabSelected()
-                                    navController.selectPocketTab(tab.route)
-                                }
-                            },
-                            modifier = Modifier.testTag("pocket-tab-$index"),
-                            icon = { Icon(icons[index], null) },
-                            label = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                        )
-                    }
+                    PocketNavigationItems(route, onTabSelected, focus, keyboard, navController)
                 }
             }
         ) { padding ->
