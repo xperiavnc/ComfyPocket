@@ -30,6 +30,7 @@ from aiohttp import web, ClientSession
 from .civitai_client import CivitaiError
 from .civitai_downloads import model_folder_keys
 from .civitai_service import CivitaiService
+from .system_monitor import handle_system_monitor
 
 logger = logging.getLogger("ComfyUI-Mobile-Bridge")
 
@@ -451,9 +452,9 @@ def _list_native_models(
 async def handle_mobile_status(request: web.Request) -> web.Response:
     return web.json_response({
         "code": 0, "msg": "success", "data": {
-            "version": "2.0.1", "name": "ComfyUI-Mobile-Bridge",
+            "version": "2.1.0", "name": "ComfyUI-Mobile-Bridge",
             "loraManagerInstalled": False,
-            "capabilities": ["native-civitai-downloads", "civitai-server-settings"],
+            "capabilities": ["native-civitai-downloads", "civitai-server-settings", "system-monitor"],
             "supportedTypes": ["CHECKPOINT", "LORA", "UNET", "GGUF"]
         }
     })
@@ -1045,6 +1046,7 @@ if PromptServer is not None:
     try:
         app = PromptServer.instance.app
         app.router.add_get("/api/mobile/status", handle_mobile_status)
+        app.router.add_get("/api/mobile/system/monitor", handle_system_monitor)
         app.router.add_get("/api/mobile/preview", handle_mobile_preview)
         app.router.add_get("/api/mobile/resource/list", handle_resource_list)
         app.router.add_post("/api/mobile/resource/list", handle_resource_list)

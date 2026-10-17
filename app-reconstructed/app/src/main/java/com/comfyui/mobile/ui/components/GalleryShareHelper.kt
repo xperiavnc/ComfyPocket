@@ -10,7 +10,8 @@ import com.comfyui.mobile.ui.MediaPreviewHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import okhttp3.Request
+import com.comfyui.mobile.data.MediaFileCache
+import kotlinx.coroutines.CancellationException
 import java.io.File
 
 private val globalShareClient: okhttp3.Call.Factory by lazy { AppModule.provideRepository().hostAwareCallFactory }
@@ -85,23 +86,15 @@ suspend fun prepareShareUri(
             }
         }
 
-        // 远端文件网络下载
-        val url = viewModel.previewUrl(media)
-        val dest = File(shareDir, "share_${System.currentTimeMillis()}_$safeName")
-        val request = Request.Builder().url(url).build()
-        val resp = shareClient.newCall(request).execute()
-        if (!resp.isSuccessful) return@withContext null
-        val body = resp.body ?: return@withContext null
-        body.byteStream().use { input ->
-            dest.outputStream().use { output ->
-                input.copyTo(output)
-            }
-        }
+        // Reuse the exact encoded original already loaded by Agent/gallery.
+        val dest = MediaFileCache.originalForShare(context, viewModel.previewUrl(media), safeName, shareClient)
         FileProvider.getUriForFile(
             context,
             "${context.packageName}.fileprovider",
             dest
         )
+    } catch (e: CancellationException) {
+        throw e
     } catch (e: Exception) {
         null
     }
@@ -172,6 +165,8 @@ fun performShareMedia(
             }
             context.startActivity(chooser)
             onSuccess?.invoke()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             viewModel.showToast("分享失败")
         } finally {

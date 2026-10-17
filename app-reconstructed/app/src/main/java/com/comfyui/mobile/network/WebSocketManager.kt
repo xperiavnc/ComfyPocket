@@ -152,14 +152,22 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
         return if (t > 0L) android.os.SystemClock.elapsedRealtime() - t else Long.MAX_VALUE
     }
 
+    @Volatile
+    private var lastMonitorReceivedAtMs = 0L
+
     fun updateSystemStats(stats: SystemMonitorData) {
         val current = _systemStats.value
         if (current != null && current.isCrystools && !stats.isCrystools) {
-            val age = getLastInboundAgeMs()
+            val age = android.os.SystemClock.elapsedRealtime() - lastMonitorReceivedAtMs
             if (age < 3500L) {
-                if (current.deviceName.isNullOrBlank() && !stats.deviceName.isNullOrBlank()) {
-                    _systemStats.value = current.copy(deviceName = stats.deviceName)
-                }
+                _systemStats.value = current.copy(
+                    deviceName = current.deviceName ?: stats.deviceName,
+                    cpuUtil = if (current.cpuAvailable) current.cpuUtil else stats.cpuUtil,
+                    cpuAvailable = current.cpuAvailable || stats.cpuAvailable,
+                    ramUsed = if (current.ramAvailable) current.ramUsed else stats.ramUsed,
+                    ramTotal = if (current.ramAvailable) current.ramTotal else stats.ramTotal,
+                    ramAvailable = current.ramAvailable || stats.ramAvailable
+                )
                 return
             }
         }
@@ -182,6 +190,7 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
 
     /** Publish monitor stats; skip near-identical samples within 250ms. */
     private fun publishSystemStats(stats: SystemMonitorData) {
+        lastMonitorReceivedAtMs = android.os.SystemClock.elapsedRealtime()
         val prev = _systemStats.value
         if (prev == stats) return
         val now = android.os.SystemClock.elapsedRealtime()
@@ -191,7 +200,8 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
                 kotlin.math.abs(prev.cpuUtil - stats.cpuUtil) < 1.5f &&
                 kotlin.math.abs(prev.vramUsed - stats.vramUsed) < 32f &&
                 kotlin.math.abs(prev.ramUsed - stats.ramUsed) < 32f &&
-                prev.deviceName == stats.deviceName
+                prev.deviceName == stats.deviceName &&
+                prev.cpuAvailable == stats.cpuAvailable && prev.ramAvailable == stats.ramAvailable
             if (similar) return
         }
         lastStatsEmitAtMs = now
@@ -672,15 +682,18 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
             vramUsed = vramUsed ?: 0f,
             vramTotal = vramTotal ?: 0f,
             cpuUtil = cpuUtil ?: 0f,
+            cpuAvailable = cpuUtil != null,
             ramUsed = ramUsed ?: 0f,
             ramTotal = ramTotal ?: 0f,
+            ramAvailable = ramTotal != null && ramTotal > 0f && ramUsed != null,
             gpuTemp = gpuTemp ?: 0f,
             deviceName = existingDeviceName,
             isCrystools = true
     )
 
         val meaningful = parsed.gpuUtil != 0f ||
-            parsed.cpuUtil != 0f ||
+            parsed.cpuAvailable ||
+            parsed.ramAvailable ||
             parsed.gpuTemp != 0f ||
             parsed.vramTotal != 0f ||
             parsed.ramTotal != 0f ||

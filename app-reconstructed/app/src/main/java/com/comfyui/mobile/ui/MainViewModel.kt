@@ -1731,34 +1731,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         }
     }
 
-    fun fetchSystemStats() {
+    private var systemStatsJob: Job? = null
+    private var systemStatsRequestBase: String? = null
+
+    fun fetchSystemStats(refreshAssets: Boolean = true) {
         val server = currentServerProfile()
         if (server?.isRunningHub == true) {
             fetchRunningHubAccountStatus()
             return
         }
-        fetchAssetsSummary()
-        viewModelScope.launch(Dispatchers.IO) {
+        if (refreshAssets) fetchAssetsSummary()
+        val requestBase = repository.baseUrl.value
+        val serverId = currentServerId.value
+        if (systemStatsJob?.isActive == true && systemStatsRequestBase == requestBase) return
+        systemStatsJob?.cancel()
+        systemStatsRequestBase = requestBase
+        systemStatsJob = viewModelScope.launch(Dispatchers.IO) {
             try {
-                val stats = repository.getSystemStats() ?: return@launch
-                val device0 = stats.devices?.firstOrNull()
-                val totalBytes = (device0?.vram_total ?: 0L).toFloat()
-                val freeBytes = (device0?.vram_free ?: 0L).toFloat()
-                val usedBytes = (totalBytes - freeBytes).coerceAtLeast(0f)
-                val deviceName = device0?.name
-
-                val data = com.comfyui.mobile.model.SystemMonitorData(
-                    gpuUtil = 0f,
-                    vramUsed = usedBytes,
-                    vramTotal = if (totalBytes > 0f) totalBytes else 1f,
-                    cpuUtil = 0f,
-                    ramUsed = 0f,
-                    ramTotal = 1f,
-                    gpuTemp = 0f,
-                    deviceName = deviceName,
-                    isCrystools = false
-    )
-                repository.webSocketManager.updateSystemStats(data)
+                val stats = repository.getSystemStats()
+                val mobile = kotlinx.coroutines.withTimeoutOrNull(2_000L) { repository.getMobileSystemMonitor() }
+                val data = com.comfyui.mobile.data.SystemMonitorMapper.fromRest(stats, mobile) ?: return@launch
+                // A slow sample from the previous server must not appear on the newly selected one.
+                if (repository.baseUrl.value == requestBase && currentServerId.value == serverId && !repository.cloudActive) {
+                    repository.webSocketManager.updateSystemStats(data)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
             }
         }

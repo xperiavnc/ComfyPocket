@@ -237,8 +237,10 @@ data class SystemMonitorData(
     val vramUsed: Float = 0f,
     val vramTotal: Float = 1f,
     val cpuUtil: Float = 0f,
+    val cpuAvailable: Boolean = false,
     val ramUsed: Float = 0f,
     val ramTotal: Float = 1f,
+    val ramAvailable: Boolean = false,
     val gpuTemp: Float = 0f,
     val deviceName: String? = null,
     val isCrystools: Boolean = true
@@ -252,8 +254,22 @@ data class SystemStatsResponse(
 data class SystemInfo(
     val os: String? = null,
     val python_version: String? = null,
+    val ram_total: Long? = null,
+    val ram_free: Long? = null,
+    val cpu_percent: Float? = null,
     val embedded_python: Boolean? = null
     )
+
+data class MobileSystemMonitorResponse(
+    val code: Int = 0,
+    val data: MobileSystemMonitor? = null
+)
+
+data class MobileSystemMonitor(
+    val cpu_percent: Float? = null,
+    val ram_total: Long? = null,
+    val ram_used: Long? = null
+)
 
 data class DeviceStats(
     val name: String? = null,

@@ -682,17 +682,24 @@ object MainViewModelAgent {
     }
 
     fun addOrUpdateLlmProfile(vm: MainViewModel, profile: LlmProfile, selectAfterSave: Boolean = true) {
-        val list = vm._llmProfiles.value.toMutableList()
-        val index = list.indexOfFirst { it.id == profile.id }
-        if (index != -1) {
-            list[index] = profile
-        } else {
-            list.add(profile)
-        }
-        persistLlmProfiles(vm, list)
-        vm._llmProfiles.value = list
-        if (selectAfterSave || vm._currentLlmProfileId.value == profile.id) {
-            selectLlmProfile(vm, profile.id)
+        try {
+            val list = vm._llmProfiles.value.toMutableList()
+            val index = list.indexOfFirst { it.id == profile.id }
+            if (index != -1) {
+                list[index] = profile
+            } else {
+                list.add(profile)
+            }
+            persistLlmProfiles(vm, list)
+            vm._llmProfiles.value = list
+            if (selectAfterSave || vm._currentLlmProfileId.value == profile.id) {
+                selectLlmProfile(vm, profile.id)
+            }
+            val applied = selectAfterSave || vm._currentLlmProfileId.value == profile.id
+            vm.showToast(if (applied) "已保存并应用配置：${profile.displayName}" else "已保存配置：${profile.displayName}")
+        } catch (e: Exception) {
+            vm.addLog("Agent 配置保存失败: ${e.javaClass.simpleName}", LogType.ERROR)
+            vm.showToast("配置保存失败，请重试")
         }
     }
 

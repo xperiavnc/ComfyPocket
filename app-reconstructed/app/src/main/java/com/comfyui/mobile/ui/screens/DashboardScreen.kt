@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.repeatOnLifecycle
+import com.comfyui.mobile.ui.screens.dashboard.LocalSystemStatusPreview
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -113,10 +115,16 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
     val statusOk = if (isRh) rhStatus.second else connected
     val statusText = if (isRh) rhStatus.first else if (connected) "已连接" else "未连接"
 
-    LaunchedEffect(isRh, currentServerId, connected) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(isRh, currentServerId, connected, lifecycleOwner) {
         if (!isRh && connected) {
             viewModel.fetchAssetsSummary()
-            viewModel.fetchSystemStats()
+            lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                while (true) {
+                    viewModel.fetchSystemStats(refreshAssets = false)
+                    kotlinx.coroutines.delay(5_000L)
+                }
+            }
         }
     }
     val busy = isRunning || (progress > 0f && progress < 1f) || queueSize > 0
@@ -423,29 +431,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 } else {
                     val s = stats
                     if (connected && s != null) {
-                        val vramPct = if (s.vramTotal > 0f) (s.vramUsed / s.vramTotal) * 100f else 0f
-                        val ramPct = if (s.ramTotal > 0f) (s.ramUsed / s.ramTotal) * 100f else 0f
-                        if (s.isCrystools) {
-                            StatProgressRow("GPU 利用率", s.gpuUtil / 100f, "${s.gpuUtil.toInt()}%", scheme.primary, onCard)
-                            StatProgressRow("显存占用", vramPct / 100f, "${vramPct.toInt()}%", scheme.tertiaryContainer, onCard)
-                            StatProgressRow("CPU 利用率", s.cpuUtil / 100f, "${s.cpuUtil.toInt()}%", scheme.secondary, onCard)
-                            StatProgressRow("内存占用", ramPct / 100f, "${ramPct.toInt()}%", scheme.primary, onCard)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            InfoRow("GPU 温度", "${s.gpuTemp}°C", onCard)
-                        } else {
-                            if (!s.deviceName.isNullOrBlank()) {
-                                InfoRow("GPU 设备", s.deviceName, onCard)
-                                Spacer(modifier = Modifier.height(4.dp))
-                            }
-                            val vramLabel = if (s.vramTotal > 100_000f) {
-                                val usedGb = s.vramUsed / (1024f * 1024f * 1024f)
-                                val totalGb = s.vramTotal / (1024f * 1024f * 1024f)
-                                String.format(java.util.Locale.US, "%.1f%% (%.1f / %.1f GB)", vramPct, usedGb, totalGb)
-                            } else {
-                                "${vramPct.toInt()}%"
-                            }
-                            StatProgressRow("显存占用", vramPct / 100f, vramLabel, scheme.primary, onCard)
-                        }
+                        LocalSystemStatusPreview(s, onCard)
                     } else if (connected) {
                         Text(
                             text = "同步中…",
@@ -490,7 +476,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
 }
 
 @Composable
-private fun StatProgressRow(
+internal fun StatProgressRow(
     label: String,
     progress: Float,
     valueText: String,
@@ -625,7 +611,7 @@ private fun RhMetricTile(
 }
 
 @Composable
-private fun InfoRow(
+internal fun InfoRow(
     label: String,
     value: String,
     contentColor: Color

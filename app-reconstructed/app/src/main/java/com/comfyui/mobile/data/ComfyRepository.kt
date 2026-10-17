@@ -800,6 +800,25 @@ class ComfyRepository private constructor() {
         }
     }
 
+    /** Optional Bridge 2.1 host telemetry; native system_stats remains the fallback. */
+    suspend fun getMobileSystemMonitor(): com.comfyui.mobile.model.MobileSystemMonitor? {
+        if (cloudActive) return null
+        return try {
+            ensureApi()
+            val response = api?.getMobileSystemMonitor()
+            if (response?.isSuccessful == true) {
+                response.body()?.takeIf { it.code == 0 }?.data
+            } else {
+                response?.errorBody()?.close()
+                null
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     suspend fun getLocalResourceList(
         resourceType: String,
         keyword: String,

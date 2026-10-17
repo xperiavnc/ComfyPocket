@@ -41,12 +41,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import coil.Coil
-import coil.ImageLoader
-import coil.decode.ImageDecoderDecoder
-import coil.decode.VideoFrameDecoder
-import coil.disk.DiskCache
-import coil.memory.MemoryCache
 import com.comfyui.mobile.data.AppModule
 import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import androidx.navigation.NavController
@@ -128,29 +122,6 @@ class MainActivity : ComponentActivity() {
 
         try {
             requestNotificationPermissionIfNeeded()
-
-            val imageLoader = ImageLoader.Builder(this)
-                .callFactory { AppModule.provideRepository().hostAwareCallFactory }
-                .components {
-                    // Animated GIF / WebP / HEIF (API 28+ ImageDecoder; minSdk is 33) + video first frames.
-                    add(ImageDecoderDecoder.Factory())
-                    add(VideoFrameDecoder.Factory())
-                }
-                .memoryCache {
-                    MemoryCache.Builder(this)
-                        .maxSizePercent(0.25)
-                        .build()
-                }
-                .diskCache {
-                    DiskCache.Builder()
-                        .directory(cacheDir.resolve("image_cache"))
-                        .maxSizeBytes(256L * 1024 * 1024)
-                        .build()
-                }
-                .crossfade(true)
-                .respectCacheHeaders(false)
-                .build()
-            Coil.setImageLoader(imageLoader)
 
             lifecycle.addObserver(
                 LifecycleEventObserver { _, event ->

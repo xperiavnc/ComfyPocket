@@ -1,4 +1,4 @@
-# ComfyUI-Mobile-Bridge 2.0
+# ComfyUI-Mobile-Bridge 2.1
 
 独立的 ComfyPocket 服务端插件。直接读取 ComfyUI 模型目录，并提供 Civitai
 桥接浏览、原生模型下载和 ComfyUI 设置页。**不需要 Lora Manager。**
@@ -8,7 +8,7 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 
 1. 停止 ComfyUI，备份原 `custom_nodes/ComfyUI-Mobile-Bridge` 目录。
 2. 将此处的**整个目录**放到 `ComfyUI/custom_nodes/ComfyUI-Mobile-Bridge/`。
-   保持 `__init__.py`、四个 Python 模块及 `web/` 的相对位置；不再是只覆盖
+   保持 `__init__.py`、配套 Python 模块及 `web/` 的相对位置；不再是只覆盖
    `__init__.py` 即可。避免双层目录，也不要同时保留启用状态的旧插件副本。
 3. 启动 ComfyUI，刷新网页（必要时强制刷新），打开：
    **设置 → Mobile Bridge → Civitai → Civitai Key（电脑端下载）**。
@@ -17,7 +17,8 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 5. 使用配套的新版 ComfyPocket 下发下载。在集市右上角打开“电脑下载队列”，
    可查看进度、暂停、继续或取消。
 
-运行依赖是 ComfyUI 已有的 `aiohttp`，不新增模型管理器依赖。
+运行依赖是 ComfyUI 已有的 `aiohttp`；CPU/内存采样使用 ComfyUI 已有的 `psutil`，不新增模型管理器依赖。
+缺少 psutil 时监控接口返回缺失值，不妨碍模型管理与下载。
 
 ## 两端 Key 和网络的区别
 
@@ -70,8 +71,9 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 
 ## API 兼容
 
-- `GET /api/mobile/status`：版本 `2.0.0`，提供 `native-civitai-downloads`、
-  `civitai-server-settings` 能力字段。
+- `GET /api/mobile/status`：版本 `2.1.0`，提供 `native-civitai-downloads`、
+  `civitai-server-settings` 和 `system-monitor` 能力字段。
+- `GET /api/mobile/system/monitor`：CPU 利用率（0–100%）、内存总字节数与已用字节数。
 - `GET/POST /api/mobile/civitai/settings`：只由设置 GUI 使用；状态不返回 Key。
 - `POST /api/mobile/civitai/native-download`
 - `GET /api/mobile/civitai/native-tasks`
@@ -104,3 +106,19 @@ node --test tests/settings_panel.test.mjs
 - GGUF 在 Checkpoint/UNet 内使用文件格式数组筛选，同时保留基础模型与不透明分页游标。
 - 不设置 earlyAccess=true，普通列表不会被限制为仅抢先体验。
 - 升级时替换整个插件目录并重启 ComfyUI；已有电脑 Key 存储不变。手机直连分类修正只需要更新 APK。
+
+## 2.1 CPU / 内存预览
+
+配套手机首页“系统状态”可显示 CPU 利用率和内存占用。采样仅在接口被请求时运行，
+100 ms CPU 采样放在工作线程，不阻塞 ComfyUI 的 aiohttp 事件循环。内存已用量使用
+`total - available`，与原生 `/system_stats` 的可用内存口径一致。
+
+更新时替换完整插件目录并重启 ComfyUI；不能只替换 `__init__.py`，新增的
+`system_monitor.py` 必须一并部署。手机内存预览仅更新 APK 即可；没有 Bridge 2.1 或
+Crystools 时 CPU 行显示“暂无数据”。不自动重启或中断现有的生成任务。
+
+只运行本次监控回归：
+
+```sh
+python -m unittest discover -s tests -p test_system_monitor.py -v
+```

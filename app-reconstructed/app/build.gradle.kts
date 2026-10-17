@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.0.2-agent-core"
+        versionCode = 5
+        versionName = "0.0.3-agent-media-monitor"
     }
 
     buildFeatures {
@@ -60,6 +60,8 @@ kotlin {
 // Miuix's Android classes target Java 21. APK desugaring still targets Java 17,
 // but local Android/Compose integration tests must load those classes on a 21 JVM.
 tasks.withType<Test>().configureEach {
+    // Robolectric API 36 FileDescriptor support on the Java 21 test runtime.
+    jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
     javaLauncher.set(javaToolchains.launcherFor {
         languageVersion.set(JavaLanguageVersion.of(21))
     })

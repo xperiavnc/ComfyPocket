@@ -60,6 +60,9 @@ interface ComfyApi {
     @retrofit2.http.GET("system_stats")
     suspend fun getSystemStats(): Response<com.comfyui.mobile.model.SystemStatsResponse>
 
+    @retrofit2.http.GET("api/mobile/system/monitor")
+    suspend fun getMobileSystemMonitor(): Response<com.comfyui.mobile.model.MobileSystemMonitorResponse>
+
     @retrofit2.http.GET("api/mobile/resource/list")
     suspend fun getMobileResourceList(
         @retrofit2.http.Query("resourceType") resourceType: String,

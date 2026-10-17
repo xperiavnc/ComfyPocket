@@ -29,7 +29,8 @@ object GenerationLiveUpdate {
             .getBoolean("live_update_show_percent", true)
     }
 
-    private const val CHANNEL_ID = "comfy_live_update_v2"
+    // A new ID migrates installed HIGH-importance channels; Android does not lower them in place.
+    private const val CHANNEL_ID = "comfy_generation_silent_v3"
     const val NOTIFICATION_ID = 1002
     private const val DONE_NOTIFICATION_ID = 1003
     private const val FAIL_NOTIFICATION_ID = 1004
@@ -67,19 +68,21 @@ object GenerationLiveUpdate {
         try {
             manager.deleteNotificationChannel("comfy_keep_alive")
             manager.deleteNotificationChannel("comfy_live_update")
+            manager.deleteNotificationChannel("comfy_live_update_v2")
         } catch (_: Throwable) {
         }
         if (manager.getNotificationChannel(CHANNEL_ID) != null) return
         manager.createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                "生成进度与流体云",
-                NotificationManager.IMPORTANCE_HIGH
+                "生成进度（静默）",
+                NotificationManager.IMPORTANCE_LOW
     ).apply {
-                description = "工作流运行时的实时进度（流体云 / 焦点通知 / 灵动胶囊）"
+                description = "工作流生成进度与结果；无声音、无振动、无悬浮提醒"
                 setShowBadge(false)
                 setSound(null, null)
                 enableVibration(false)
+                enableLights(false)
             }
     )
     }
@@ -125,18 +128,18 @@ object GenerationLiveUpdate {
     ): Bundle {
         return Bundle().apply {
             // Android 15/16 standard
-            putBoolean("android.requestPromotedOngoing", !isCompleted)
+            putBoolean("android.requestPromotedOngoing", false)
             // ColorOS / Oplus Fluid Cloud (流体云)
-            putBoolean("com.oplus.notification.capsule", true)
-            putBoolean("oplus.capsule", true)
+            putBoolean("com.oplus.notification.capsule", false)
+            putBoolean("oplus.capsule", false)
             putString("oplus.notification.capsule.status", chip)
             // Xiaomi HyperOS / MIUI Focus Notification (焦点通知 / 灵动胶囊)
-            putBoolean("miui.enableFloat", true)
+            putBoolean("miui.enableFloat", false)
             putBoolean("miui.showAction", !isCompleted)
             putBoolean("miui.enableKeyguardNotification", true)
             putString("miui.focus.type", if (isCompleted) "finish" else "progress")
             // Huawei / Honor
-            putBoolean("hw.capsule", true)
+            putBoolean("hw.capsule", false)
         }
     }
 
@@ -206,6 +209,10 @@ object GenerationLiveUpdate {
 
             @Suppress("NewApi")
             val platform = Notification.Builder(app, CHANNEL_ID)
+                .setDefaults(0)
+                .setSound(null)
+                .setVibrate(null)
+                .setPriority(Notification.PRIORITY_LOW)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(text)
@@ -230,7 +237,7 @@ object GenerationLiveUpdate {
                     "setRequestPromotedOngoing",
                     Boolean::class.javaPrimitiveType
     )
-                m.invoke(platform, true)
+                m.invoke(platform, false)
             } catch (_: Throwable) {
             }
 
@@ -251,7 +258,7 @@ object GenerationLiveUpdate {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(contentIntent(app))
             .setProgress(100, if (waitingInQueue) 0 else pct, waitingInQueue)
@@ -259,6 +266,8 @@ object GenerationLiveUpdate {
             .addExtras(capsuleExtras)
             .setDefaults(0)
             .setSound(null)
+            .setVibrate(null)
+            .setSilent(true)
         applyLargeIcon(builder, app)
 
         return builder.build()
@@ -370,6 +379,10 @@ object GenerationLiveUpdate {
         if (Build.VERSION.SDK_INT >= 36) {
             @Suppress("NewApi")
             val platform = Notification.Builder(app, CHANNEL_ID)
+                .setDefaults(0)
+                .setSound(null)
+                .setVibrate(null)
+                .setPriority(Notification.PRIORITY_LOW)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(title)
                 .setContentText(text)
@@ -411,13 +424,15 @@ object GenerationLiveUpdate {
             .setAutoCancel(true)
             .setOnlyAlertOnce(true)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setContentIntent(contentIntent(app))
             .addExtras(capsuleExtras)
             .setTimeoutAfter(6_000L)
             .setDefaults(0)
             .setSound(null)
+            .setVibrate(null)
+            .setSilent(true)
         applyLargeIcon(builder, app)
         notifySafe(app, NOTIFICATION_ID, builder.build())
 
@@ -458,13 +473,15 @@ object GenerationLiveUpdate {
                 .setAutoCancel(true)
                 .setOnlyAlertOnce(true)
                 .setCategory(NotificationCompat.CATEGORY_ERROR)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setPriority(NotificationCompat.PRIORITY_LOW)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setContentIntent(contentIntent(app))
                 .addExtras(capsuleExtras)
                 .setTimeoutAfter(3_000L)
                 .setDefaults(0)
                 .setSound(null)
+                .setVibrate(null)
+                .setSilent(true)
             applyLargeIcon(builder, app)
             notifySafe(app, FAIL_NOTIFICATION_ID, builder.build())
         }
@@ -473,6 +490,10 @@ object GenerationLiveUpdate {
             if (Build.VERSION.SDK_INT >= 36) {
                 @Suppress("NewApi")
                 val platform = Notification.Builder(app, CHANNEL_ID)
+                    .setDefaults(0)
+                    .setSound(null)
+                    .setVibrate(null)
+                    .setPriority(Notification.PRIORITY_LOW)
                     .setSmallIcon(R.mipmap.ic_launcher)
                     .setContentTitle(title)
                     .setContentText(text)

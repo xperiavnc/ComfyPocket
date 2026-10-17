@@ -49,9 +49,11 @@ cd app-reconstructed
 
 ## 当前验证状态
 
+- `0.0.3-agent-media-monitor`（versionCode 5）修复生成通知静默、Agent 设置保存反馈、
+  分享和画廊的原图缓存复用；主页新增 CPU / 内存预览，配套 Bridge 2.1，详见 `app-reconstructed/AGENT.md`。
 - `0.0.2-agent-core`（versionCode 4）落地 Agent 实例级会话、分步执行和工作流工具；
   思考强度包括极高 `xhigh` 和 `max`，随模型配置保存，详见 `app-reconstructed/AGENT.md`。
-- 当前 Android 构建成功，240 项 JVM/Android 页面测试通过；Bridge Python、
+- 当前 Android 构建成功，261 项 JVM/Android 页面测试通过；本批另有 3 项 Bridge CPU/内存采样测试。Bridge Python、
   设置 GUI 与本地浏览器的独立测试说明见插件文档，本批未改动插件。
 - 主 ViewModel 从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、
   参数持久化、日志和缓存管理五个组件。
