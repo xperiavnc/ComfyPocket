@@ -1,4 +1,50 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.comfyui.mobile.ui.screens.danbooru
+
+import androidx.compose.material3.CardColors
+
+import androidx.compose.material3.Slider
+
+import androidx.compose.material3.Switch
+
+import androidx.compose.material3.Icon
+
+import androidx.compose.material3.Text
+
+import com.comfyui.mobile.ui.designsystem.PocketCircularProgressIndicator as CircularProgressIndicator
+
+import com.comfyui.mobile.ui.designsystem.PocketProgressDefaults as ProgressIndicatorDefaults
+
+import com.comfyui.mobile.ui.designsystem.PocketLinearProgressIndicator as LinearProgressIndicator
+
+import com.comfyui.mobile.ui.designsystem.PocketListRow as BasicComponent
+
+import com.comfyui.mobile.ui.designsystem.PocketSmallTitle as SmallTitle
+
+import com.comfyui.mobile.ui.designsystem.PocketFloatingToolbar as FloatingToolbar
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+
+import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
+
+import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
+
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+
+import com.comfyui.mobile.ui.designsystem.PocketIcons
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -18,10 +64,10 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.comfyui.mobile.danbooru.DanbooruPost
 import com.comfyui.mobile.danbooru.DanbooruState
-import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 
 @Composable
 internal fun DanbooruGalleryGrid(
@@ -30,12 +76,7 @@ internal fun DanbooruGalleryGrid(
     onOpen: (DanbooruPost) -> Unit, onPrevious: () -> Unit, onRetry: () -> Unit,
     onLoadMore: () -> Unit, onRefresh: () -> Unit
 ) {
-    PullToRefresh(
-        isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = modifier,
-        color = MiuixTheme.colorScheme.primary,
-        refreshTexts = listOf("下拉刷新", "松开刷新", "正在更新", "刷新结束"),
-        refreshTextStyle = MiuixTheme.textStyles.footnote1.copy(color = MiuixTheme.colorScheme.onSecondaryContainer)
-    ) {
+    PullToRefreshBox(isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = modifier) {
         LazyVerticalStaggeredGrid(
             columns = StaggeredGridCells.Fixed(2), state = grid,
             modifier = Modifier.fillMaxSize().testTag("danbooru-grid"),
@@ -45,16 +86,29 @@ internal fun DanbooruGalleryGrid(
             if ((state.pages.firstOrNull()?.number ?: 1) > 1) item(span = StaggeredGridItemSpan.FullLine, key = "previous") {
                 DanbooruSmallAction("加载前一页", onClick = onPrevious)
             }
+            if (state.posts.isEmpty()) item(span = StaggeredGridItemSpan.FullLine, key = "empty") {
+                Column(Modifier.fillMaxWidth().heightIn(min = 320.dp).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    if (state.loading) {
+                        CircularProgressIndicator()
+                        Text("正在加载图片", Modifier.padding(top = 16.dp))
+                    } else Feedback(state.error ?: "没有找到图片，试试其他标签或日期",
+                        if (state.error != null) "重试" else "重新加载", onRefresh)
+                }
+            }
+            if (state.posts.isNotEmpty() && state.error != null) item(span = StaggeredGridItemSpan.FullLine, key = "refresh-error") {
+                Feedback(state.error + "；当前图片已保留", "重新刷新", onRefresh)
+            }
             items(state.posts, key = { it.id }, contentType = { "image" }) { post ->
                 DanbooruImageTile(post, imageLoader, namespace) { onOpen(post) }
             }
-            item(span = StaggeredGridItemSpan.FullLine, key = "footer") {
+            if (state.posts.isNotEmpty()) item(span = StaggeredGridItemSpan.FullLine, key = "footer") {
                 Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
                     when {
                         state.appending -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
                         state.appendError != null -> Feedback(state.appendError, "重试本页", onRetry)
-                        state.ended -> Text("已经看到最后了", style = MiuixTheme.textStyles.footnote1,
-                            color = MiuixTheme.colorScheme.onSecondaryContainer)
+                        state.ended -> Text("已经看到最后了", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer)
                         else -> DanbooruSmallAction("加载更多", onClick = onLoadMore)
                     }
                 }
@@ -75,7 +129,7 @@ internal fun DanbooruImageTile(post: DanbooruPost, imageLoader: ImageLoader, nam
     var failure by remember(post.id, url, namespace) { mutableStateOf<String?>(null) }
     Box(
         Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(14.dp))
-            .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick).testTag("danbooru-image-${post.id}"),
         contentAlignment = Alignment.Center
     ) {
@@ -89,10 +143,10 @@ internal fun DanbooruImageTile(post: DanbooruPost, imageLoader: ImageLoader, nam
             )
         } else {
             Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(MiuixIcons.Image, contentDescription = null, modifier = Modifier.size(28.dp),
-                    tint = MiuixTheme.colorScheme.onSecondaryContainer)
+                Icon(PocketIcons.Image, contentDescription = null, modifier = Modifier.size(28.dp),
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer)
                 Text(if (failure == null) "点按查看标签" else "图片加载失败\n点按查看详情",
-                    style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer)
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
             }
         }
     }

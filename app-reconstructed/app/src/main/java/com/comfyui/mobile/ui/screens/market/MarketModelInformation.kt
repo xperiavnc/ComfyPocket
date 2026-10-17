@@ -29,9 +29,9 @@ import coil.ImageLoader
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.CivitaiModelItem
 import com.comfyui.mobile.model.CivitaiVersionItem
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun MarketModelInformation(
@@ -41,7 +41,7 @@ fun MarketModelInformation(
     imageRequest: (String) -> Any
 ) {
     val context = LocalContext.current
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     fun copy(label: String, value: String) {
         (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
             .setPrimaryClip(ClipData.newPlainText(label, value))
@@ -49,16 +49,16 @@ fun MarketModelInformation(
     }
     val intro = remember(model.description) { descriptionText(model.description) }
     val versionIntro = remember(version?.description) { descriptionText(version?.description.orEmpty()) }
-    Text("模型简介", style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold))
+    Text("模型简介", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
     SelectionContainer {
-        Text(intro.ifBlank { "作者未填写模型简介" }, style = MiuixTheme.textStyles.body2,
+        Text(intro.ifBlank { "作者未填写模型简介" }, style = MaterialTheme.typography.bodyMedium,
             color = scheme.onSurface, modifier = Modifier.padding(top = 6.dp))
     }
     if (versionIntro.isNotBlank() && versionIntro != intro) {
         Spacer(Modifier.height(10.dp))
-        Text("版本说明", style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold))
+        Text("版本说明", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
         SelectionContainer {
-            Text(versionIntro, style = MiuixTheme.textStyles.body2, modifier = Modifier.padding(top = 6.dp))
+            Text(versionIntro, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -70,9 +70,9 @@ fun MarketModelInformation(
     var exampleIndex by remember(model.id, version?.id) { mutableIntStateOf(0) }
     val example = examples.getOrNull(exampleIndex) ?: examples.firstOrNull()
     Spacer(Modifier.height(12.dp))
-    Text("示例图与提示词", style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold))
+    Text("示例图与提示词", style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold))
     if (example == null) {
-        Text("本版本暂无公开示例图与提示词。", style = MiuixTheme.textStyles.footnote1,
+        Text("本版本暂无公开示例图与提示词。", style = MaterialTheme.typography.bodySmall,
             color = scheme.onSecondaryContainer, modifier = Modifier.padding(top = 6.dp))
     } else {
         if (examples.size > 1) {
@@ -85,7 +85,7 @@ fun MarketModelInformation(
             }
         }
         Text(if (example.communityExample) "社区示例（不一定由模型作者生成）" else "作者预览",
-            style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
+            style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer)
         AsyncImage(model = imageRequest(example.url), imageLoader = imageLoader,
             contentDescription = "当前提示词对应的示例图", contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxWidth().height(180.dp).padding(vertical = 6.dp))
@@ -100,7 +100,7 @@ fun MarketModelInformation(
         ).filter { it.second.isNotBlank() }.joinToString(" · ") { "${it.first}: ${it.second}" }
         if (parameters.isNotBlank()) {
             SelectionContainer {
-                Text(parameters, style = MiuixTheme.textStyles.footnote1,
+                Text(parameters, style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSecondaryContainer, modifier = Modifier.padding(top = 8.dp))
             }
         }
@@ -111,11 +111,11 @@ fun MarketModelInformation(
 private fun CopyableText(title: String, value: String, onCopy: (() -> Unit)?) {
     Column(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(title, style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
+            Text(title, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f).padding(top = 8.dp))
             if (onCopy != null) TextButton(text = "复制", onClick = onCopy)
         }
-        SelectionContainer { Text(value, style = MiuixTheme.textStyles.body2) }
+        SelectionContainer { Text(value, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 

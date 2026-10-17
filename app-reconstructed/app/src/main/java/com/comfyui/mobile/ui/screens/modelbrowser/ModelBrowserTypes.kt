@@ -11,8 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 
 /** Pinned entry text of cloud model pickers (dropdown top entry / row under a text field). */
 const val CLOUD_MODEL_BROWSE_TEXT = "浏览云端模型库"
@@ -64,7 +64,7 @@ fun CloudModelBrowseRow(
     modifier: Modifier = Modifier,
     isCloud: Boolean = true
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -76,7 +76,7 @@ fun CloudModelBrowseRow(
     ) {
         Text(
             text = if (isCloud) CLOUD_MODEL_BROWSE_TEXT else LOCAL_MODEL_BROWSE_TEXT,
-            style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
             color = scheme.primary
         )
     }

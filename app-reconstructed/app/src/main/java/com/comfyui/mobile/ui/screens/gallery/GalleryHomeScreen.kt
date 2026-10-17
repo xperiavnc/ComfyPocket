@@ -17,6 +17,10 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.Text
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
@@ -80,7 +84,11 @@ fun GalleryHomeScreen(navController: NavController, legacy: GalleryUi) {
 
 @Composable
 fun GallerySourcePicker(selected: GalleryHomeSource, onSelect: (GalleryHomeSource) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GalleryHomeSource.entries.forEach { source -> CategoryChip(source.title, selected == source) { onSelect(source) } }
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        GalleryHomeSource.entries.forEachIndexed { index, source ->
+            SegmentedButton(selected == source, onClick = { onSelect(source) },
+                shape = SegmentedButtonDefaults.itemShape(index, GalleryHomeSource.entries.size),
+                icon = {}) { Text(source.title) }
+        }
     }
 }

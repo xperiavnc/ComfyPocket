@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 16
-        versionName = "0.0.14-bottom-nav-alignment"
+        versionCode = 17
+        versionName = "0.0.15-material-p3"
     }
 
     buildFeatures {

@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
@@ -80,29 +82,21 @@ import com.comfyui.mobile.ui.screens.market.MarketDownloadQueueDialog
 import com.comfyui.mobile.ui.screens.market.MarketSettingsDialog
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.icon.extended.Folder
-import top.yukonga.miuix.kmp.icon.extended.Ok
-import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.icon.extended.Search
-import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+
+import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
+
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun ModelHubScreen(
@@ -110,9 +104,8 @@ fun ModelHubScreen(
     viewModel: MainViewModel
 ) {
     val context = LocalContext.current
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
-    val scrollBehavior = MiuixScrollBehavior()
 
     val servers by viewModel.servers.collectAsState()
     val currentServerId by viewModel.currentServerId.collectAsState()
@@ -244,26 +237,24 @@ fun ModelHubScreen(
         topBar = {
             TopAppBar(
                 title = "集市",
-                largeTitle = "集市",
                 color = scheme.background,
-                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { returnFromMarket(NavigationDiagnostics.Event.MARKET_BACK_TOOLBAR) }) {
-                        Icon(MiuixIcons.Back, contentDescription = "返回")
+                        Icon(PocketIcons.Back, contentDescription = "返回")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showDownloadQueue = true }) {
-                        Icon(MiuixIcons.Download, contentDescription = "电脑下载队列")
+                        Icon(PocketIcons.Download, contentDescription = "电脑下载队列")
                     }
                     IconButton(onClick = { showMarketSettings = true }) {
-                        Icon(MiuixIcons.Settings, contentDescription = "集市连接、代理与 Key 设置")
+                        Icon(PocketIcons.Settings, contentDescription = "集市连接、代理与 Key 设置")
                     }
                     IconButton(onClick = {
                         if (remoteReady) viewModel.fetchAssetsSummary()
                         if (selectedTabIndex == 0) loadCivitai(reset = true, forceRefresh = true)
                     }) {
-                        Icon(MiuixIcons.Refresh, contentDescription = "刷新")
+                        Icon(PocketIcons.Refresh, contentDescription = "刷新")
                     }
                 }
             )
@@ -272,7 +263,7 @@ fun ModelHubScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+
                 .padding(top = innerPadding.calculateTopPadding())
         ) {
             // 顶部分类 Tab
@@ -298,7 +289,7 @@ fun ModelHubScreen(
                     ) {
                         Text(
                             text = title,
-                            style = MiuixTheme.textStyles.body2.copy(
+                            style = MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
                             ),
                             color = if (isSelected) scheme.onPrimary else scheme.onSurface
@@ -336,7 +327,6 @@ fun ModelHubScreen(
                                 value = searchKeyword,
                                 onValueChange = market.catalog::keyword,
                                 label = "搜索模型",
-                                useLabelAsPlaceholder = true,
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                                 keyboardActions = KeyboardActions(onSearch = { loadCivitai(reset = true) }),
@@ -350,7 +340,7 @@ fun ModelHubScreen(
                                 onClick = { loadCivitai(reset = true) }
                             ) {
                                 Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Icon(MiuixIcons.Search, contentDescription = "搜索", tint = scheme.onPrimary)
+                                    Icon(PocketIcons.Search, contentDescription = "搜索", tint = scheme.onPrimary)
                                 }
                             }
                         }
@@ -370,7 +360,7 @@ fun ModelHubScreen(
                         Spacer(modifier = Modifier.height(8.dp))
                         (catalog.notice ?: searchError?.takeIf { civitaiModels.isNotEmpty() })?.let { message ->
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(message, style = MiuixTheme.textStyles.footnote1,
+                                Text(message, style = MaterialTheme.typography.bodySmall,
                                     color = scheme.onSecondaryContainer, modifier = Modifier.weight(1f))
                                 if (searchError != null) TextButton(text = "重试",
                                     onClick = market.catalog::retry)
@@ -381,12 +371,12 @@ fun ModelHubScreen(
                         Box(modifier = Modifier.fillMaxSize()) {
                             if (isSearching && civitaiModels.isEmpty()) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("正在搜索...", style = MiuixTheme.textStyles.body2, color = scheme.onSecondaryContainer)
+                                    Text("正在搜索...", style = MaterialTheme.typography.bodyMedium, color = scheme.onSecondaryContainer)
                                 }
                             } else if (searchError != null && civitaiModels.isEmpty()) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(searchError, style = MiuixTheme.textStyles.body2, color = scheme.error)
+                                        Text(searchError, style = MaterialTheme.typography.bodyMedium, color = scheme.error)
                                         Spacer(modifier = Modifier.height(8.dp))
                                         TextButton(text = "重试", onClick = { loadCivitai(reset = true) })
                                     }
@@ -405,8 +395,6 @@ fun ModelHubScreen(
                                             modifier = Modifier.fillMaxWidth(),
                                             cornerRadius = 12.dp,
                                             colors = CardDefaults.defaultColors(color = scheme.surfaceContainer),
-                                            pressFeedbackType = PressFeedbackType.Tilt,
-                                            showIndication = true,
                                             onClick = {
                                                 selectedModelDetail = item
                                                 selectedVersion = item.versions.firstOrNull()
@@ -455,13 +443,13 @@ fun ModelHubScreen(
                                                 Spacer(modifier = Modifier.height(6.dp))
                                                 Text(
                                                     text = item.name,
-                                                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
                                                     text = "${item.creator} · ⬇${item.downloadCount}",
-                                                    style = MiuixTheme.textStyles.body2,
+                                                    style = MaterialTheme.typography.bodyMedium,
                                                     fontSize = 10.sp,
                                                     color = scheme.onSecondaryContainer,
                                                     maxLines = 1,
@@ -490,7 +478,7 @@ fun ModelHubScreen(
                                         item(span = { GridItemSpan(2) }) {
                                             Text(
                                                 "已显示 ${civitaiModels.size} 个模型，当前筛选已到底",
-                                                style = MiuixTheme.textStyles.footnote1,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = scheme.onSecondaryContainer,
                                                 modifier = Modifier.padding(vertical = 12.dp)
                                             )
@@ -513,7 +501,7 @@ fun ModelHubScreen(
                         if (plugins.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Text(if (remoteReady) "未检测到插件" else "连接 ComfyUI 电脑后查看已装插件",
-                                    style = MiuixTheme.textStyles.body2, color = scheme.onSecondaryContainer)
+                                    style = MaterialTheme.typography.bodyMedium, color = scheme.onSecondaryContainer)
                             }
                         } else {
                             LazyColumn(
@@ -537,14 +525,14 @@ fun ModelHubScreen(
                                             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                                                 Text(
                                                     text = plugin.name,
-                                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                                 if (plugin.id.isNotBlank() && plugin.id != plugin.name) {
                                                     Text(
                                                         text = plugin.id,
-                                                        style = MiuixTheme.textStyles.footnote1,
+                                                        style = MaterialTheme.typography.bodySmall,
                                                         fontSize = 11.sp,
                                                         color = scheme.onSecondaryContainer,
                                                         maxLines = 1,
@@ -554,7 +542,7 @@ fun ModelHubScreen(
                                             }
                                             Text(
                                                 text = if (plugin.enabled) "已启用" else "已禁用",
-                                                style = MiuixTheme.textStyles.footnote1,
+                                                style = MaterialTheme.typography.bodySmall,
                                                 color = if (plugin.enabled) scheme.primary else scheme.onSecondaryContainer.copy(alpha = 0.5f)
                                             )
                                         }
@@ -677,30 +665,30 @@ fun ModelHubScreen(
 
                 Text(
                     text = model.name,
-                    style = MiuixTheme.textStyles.title4.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = scheme.onSurface,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (detailLoading) Text("正在加载完整详情…", style = MiuixTheme.textStyles.footnote1)
+                if (detailLoading) Text("正在加载完整详情…", style = MaterialTheme.typography.bodySmall)
                 detailError?.let { message ->
-                    Text(message, style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
+                    Text(message, style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer)
                     TextButton(text = "重试详情与提示词", onClick = { detailAttempt++ })
                 }
                 if (!version?.availability.isNullOrBlank()) {
                     Text("基础模型：${version.baseModel} · 访问状态：${version.availability}",
-                        style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
+                        style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer)
                 }
                 Text(
                     text = "作者: ${model.creator} · 类型: ${model.type}",
-                    style = MiuixTheme.textStyles.footnote1,
+                    style = MaterialTheme.typography.bodySmall,
                     color = scheme.onSecondaryContainer
                 )
 
                 // 版本选择胶囊
                 if (model.versions.size > 1) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = "版本选择：", style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold))
+                    Text(text = "版本选择：", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier
@@ -720,7 +708,7 @@ fun ModelHubScreen(
                             ) {
                                 Text(
                                     text = ver.name,
-                                    style = MiuixTheme.textStyles.footnote1.copy(fontWeight = if (isVerSel) FontWeight.Bold else FontWeight.Normal),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (isVerSel) FontWeight.Bold else FontWeight.Normal),
                                     color = if (isVerSel) scheme.primary else scheme.onSurface
                                 )
                             }
@@ -732,7 +720,7 @@ fun ModelHubScreen(
                 val authorFiles = version?.authorFiles.orEmpty()
                 if (authorFiles.size > 1) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = "文件选择：", style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold))
+                    Text(text = "文件选择：", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold))
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(
                         modifier = Modifier
@@ -752,7 +740,7 @@ fun ModelHubScreen(
                             ) {
                                 Text(
                                     text = f.displayLabel,
-                                    style = MiuixTheme.textStyles.footnote1.copy(fontWeight = if (isFileSel) FontWeight.Bold else FontWeight.Normal),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = if (isFileSel) FontWeight.Bold else FontWeight.Normal),
                                     color = if (isFileSel) scheme.primary else scheme.onSurface,
                                     maxLines = 1
                                 )
@@ -766,11 +754,11 @@ fun ModelHubScreen(
                     val sizeMB = effectiveSizeKB / 1024.0
                     val sizeStr = if (sizeMB >= 1024.0) String.format(java.util.Locale.US, "%.2f GB", sizeMB / 1024.0)
                     else String.format(java.util.Locale.US, "%.1f MB", sizeMB)
-                    Text(text = "文件大小: $sizeStr", style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
+                    Text(text = "文件大小: $sizeStr", style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer)
                 }
                 file?.let {
                     val metadata = listOf(it.format, it.precision).filter(String::isNotBlank).joinToString(" · ")
-                    if (metadata.isNotBlank()) Text(metadata, style = MiuixTheme.textStyles.footnote1)
+                    if (metadata.isNotBlank()) Text(metadata, style = MaterialTheme.typography.bodySmall)
                 }
 
                 // 保存目录
@@ -784,32 +772,32 @@ fun ModelHubScreen(
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(MiuixIcons.Folder, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
+                    Icon(PocketIcons.Folder, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "保存目录：",
-                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                         color = scheme.onSurface
                     )
                     Text(
                         text = selectedFolder?.name ?: if (remoteReady) folderError ?: "获取中…" else "连接电脑后可选",
-                        style = MiuixTheme.textStyles.footnote1,
+                        style = MaterialTheme.typography.bodySmall,
                         color = scheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    Icon(MiuixIcons.ExpandMore, contentDescription = null, tint = scheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
+                    Icon(PocketIcons.ExpandMore, contentDescription = null, tint = scheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 MarketModelInformation(model, version, marketImageLoader) { imageRequest(it) }
                 Text("本机 Key 不发送到电脑。受限模型下载，请在 ComfyUI 设置 → Mobile Bridge → Civitai 配置电脑 Key。",
-                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer,
+                    style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer,
                     modifier = Modifier.padding(top = 12.dp))
                 Text("手机与电脑账号权限可能不同，下载资格由电脑 Key 验证；手机未列出文件时由电脑选择主文件。",
-                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
+                    style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer)
                 }
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -818,8 +806,6 @@ fun ModelHubScreen(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 12.dp,
                     colors = CardDefaults.defaultColors(color = if (downloadReady) scheme.primary else scheme.surfaceContainerHigh),
-                    pressFeedbackType = PressFeedbackType.Tilt,
-                    showIndication = true,
                     onClick = {
                         if (!remoteReady) {
                             Toast.makeText(context, "请先连接 ComfyUI 电脑", Toast.LENGTH_SHORT).show()
@@ -857,7 +843,7 @@ fun ModelHubScreen(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(MiuixIcons.Download, contentDescription = null,
+                        Icon(PocketIcons.Download, contentDescription = null,
                             tint = if (downloadReady) scheme.onPrimary else scheme.onSecondaryContainer,
                             modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -871,7 +857,7 @@ fun ModelHubScreen(
                                 version.canDownload == false -> "验证电脑账号权限并下载"
                                 else -> "远程下载到电脑"
                             },
-                            style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                             color = if (downloadReady) scheme.onPrimary else scheme.onSecondaryContainer
                         )
                     }
@@ -896,7 +882,7 @@ fun ModelHubScreen(
                 ) {
                     Text(
                         text = "选择要保存到的文件夹：",
-                        style = MiuixTheme.textStyles.footnote1,
+                        style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSecondaryContainer
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -924,7 +910,7 @@ fun ModelHubScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Icon(
-                                    MiuixIcons.Folder,
+                                    PocketIcons.Folder,
                                     contentDescription = null,
                                     tint = if (isSelected) scheme.primary else scheme.onSecondaryContainer,
                                     modifier = Modifier.size(16.dp)
@@ -932,13 +918,13 @@ fun ModelHubScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
                                     text = fItem.name,
-                                    style = MiuixTheme.textStyles.body2.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal),
                                     color = if (isSelected) scheme.primary else scheme.onSurface,
                                     modifier = Modifier.weight(1f)
                                 )
                                 if (isSelected) {
                                     Icon(
-                                        MiuixIcons.Ok,
+                                        PocketIcons.Ok,
                                         contentDescription = null,
                                         tint = scheme.primary,
                                         modifier = Modifier.size(16.dp)
@@ -959,7 +945,6 @@ fun ModelHubScreen(
                                 value = newFolderNameInput,
                                 onValueChange = { newFolderNameInput = it },
                                 label = "子目录名称，如: style",
-                                useLabelAsPlaceholder = true,
                                 singleLine = true,
                                 modifier = Modifier.weight(1f)
                             )
@@ -1017,7 +1002,7 @@ fun ModelHubScreen(
                 ) {
                     Text(
                         text = errMsg,
-                        style = MiuixTheme.textStyles.body2,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(16.dp))

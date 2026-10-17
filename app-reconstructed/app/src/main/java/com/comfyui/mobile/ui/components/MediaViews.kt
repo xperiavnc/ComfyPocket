@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.components
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -46,17 +48,17 @@ import com.comfyui.mobile.model.MediaType
 import com.comfyui.mobile.ui.MainViewModelGallery
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.File
-import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.icon.extended.Music
-import top.yukonga.miuix.kmp.icon.extended.Play
-import top.yukonga.miuix.kmp.icon.extended.Share
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+
+
+
+
+
+
+import androidx.compose.material3.MaterialTheme
 
 /** Video by name / Uri (mp4 / webm / mov / mkv / m4v). */
 fun isVideoName(name: String?): Boolean {
@@ -117,7 +119,7 @@ fun MediaThumbnail(
     )
         if (isVideo) {
             Icon(
-                MiuixIcons.Play,
+                PocketIcons.Play,
                 contentDescription = null,
                 tint = Color.White.copy(alpha = 0.88f),
                 modifier = Modifier.size(playIconSize)
@@ -217,7 +219,7 @@ fun formatFileSize(bytes: Long): String = when {
 fun FileOutputCard(
     media: MediaOutput,
     modifier: Modifier = Modifier,
-    textColor: Color = MiuixTheme.colorScheme.onSecondaryContainer
+    textColor: Color = MaterialTheme.colorScheme.onSecondaryContainer
     ) {
     val context = LocalContext.current
     val size by produceState<Long?>(null, media.localUri) {
@@ -235,17 +237,17 @@ fun FileOutputCard(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
     ) {
-            Icon(MiuixIcons.File, contentDescription = null, tint = textColor, modifier = Modifier.size(34.dp))
+            Icon(PocketIcons.File, contentDescription = null, tint = textColor, modifier = Modifier.size(34.dp))
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = media.filename.substringAfterLast('.', "").uppercase().take(10).ifBlank { "FILE" },
-                style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
-                color = MiuixTheme.colorScheme.primary,
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1
     )
             Text(
                 text = media.filename,
-                style = MiuixTheme.textStyles.footnote2,
+                style = MaterialTheme.typography.labelSmall,
                 color = textColor,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -257,7 +259,7 @@ fun FileOutputCard(
                     s != null -> formatFileSize(s)
                     else -> ""
                 },
-                style = MiuixTheme.textStyles.footnote2,
+                style = MaterialTheme.typography.labelSmall,
                 color = textColor.copy(alpha = 0.7f),
                 maxLines = 1
     )
@@ -273,12 +275,12 @@ fun FileOutputPage(media: MediaOutput) {
         value = withContext(Dispatchers.IO) { readSize(context, media.localUri) }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-        Icon(MiuixIcons.File, contentDescription = null, tint = Color.White, modifier = Modifier.size(96.dp))
+        Icon(PocketIcons.File, contentDescription = null, tint = Color.White, modifier = Modifier.size(96.dp))
         Spacer(modifier = Modifier.height(16.dp))
-        Text(media.filename, color = Color.White, style = MiuixTheme.textStyles.body1, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        Text(media.filename, color = Color.White, style = MaterialTheme.typography.bodyLarge, maxLines = 3, overflow = TextOverflow.Ellipsis)
         size?.let {
             Spacer(modifier = Modifier.height(6.dp))
-            Text(formatFileSize(it), color = Color.White.copy(alpha = 0.72f), style = MiuixTheme.textStyles.footnote1)
+            Text(formatFileSize(it), color = Color.White.copy(alpha = 0.72f), style = MaterialTheme.typography.bodySmall)
         }
         Spacer(modifier = Modifier.height(24.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -286,7 +288,7 @@ fun FileOutputPage(media: MediaOutput) {
                 Text("打开")
             }
             Button(onClick = { shareOutputFile(context, media) }) {
-                Icon(MiuixIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(PocketIcons.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text("分享")
             }
@@ -300,7 +302,7 @@ fun ResultMediaTile(
     media: MediaOutput,
     url: String,
     modifier: Modifier = Modifier,
-    textColor: Color = MiuixTheme.colorScheme.onSecondaryContainer,
+    textColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
     onClick: () -> Unit
     ) {
     when (media.mediaType) {
@@ -316,13 +318,13 @@ fun ResultMediaTile(
         }
         MediaType.AUDIO -> Box(modifier = modifier.combinedClickableCompat(onClick), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(8.dp)) {
-                Icon(MiuixIcons.Music, contentDescription = null, tint = textColor, modifier = Modifier.size(28.dp))
+                Icon(PocketIcons.Music, contentDescription = null, tint = textColor, modifier = Modifier.size(28.dp))
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(media.filename, style = MiuixTheme.textStyles.footnote2, color = textColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(media.filename, style = MaterialTheme.typography.labelSmall, color = textColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         MediaType.TEXT -> Box(modifier = modifier.combinedClickableCompat(onClick), contentAlignment = Alignment.Center) {
-            Text(media.filename, style = MiuixTheme.textStyles.footnote1, color = textColor, maxLines = 2, modifier = Modifier.padding(8.dp))
+            Text(media.filename, style = MaterialTheme.typography.bodySmall, color = textColor, maxLines = 2, modifier = Modifier.padding(8.dp))
         }
     }
 }
@@ -355,7 +357,7 @@ fun MediaInputRow(
             modifier = Modifier
                 .size(64.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)),
+                .background(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)),
             contentAlignment = Alignment.Center
     ) {
             if (canPreview) {
@@ -368,9 +370,9 @@ fun MediaInputRow(
     )
             } else {
                 Icon(
-                    imageVector = if (kind == MediaInputKind.AUDIO) MiuixIcons.Music else MiuixIcons.Image,
+                    imageVector = if (kind == MediaInputKind.AUDIO) PocketIcons.Music else PocketIcons.Image,
                     contentDescription = null,
-                    tint = MiuixTheme.colorScheme.onSecondaryContainer
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
     )
             }
         }
@@ -378,8 +380,8 @@ fun MediaInputRow(
             Text(
                 text = node.filename.ifBlank { "未选择文件" },
                 modifier = Modifier.weight(1f),
-                style = MiuixTheme.textStyles.footnote1,
-                color = if (node.filename.isBlank()) Color.Gray else MiuixTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (node.filename.isBlank()) Color.Gray else MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
     )

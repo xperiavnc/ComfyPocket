@@ -27,12 +27,7 @@ internal fun PocketApp(viewModel: MainViewModel) {
     val haptics = rememberAppHaptics()
     PocketAppTheme(dark, palette) {
         PocketNavigationShell(nav, viewModel.userMessage, haptics::tick) { entry ->
-            // A deliberate migration boundary: old screens get only their original theme.
-            // Material navigation and feedback are siblings, never children of MiuixTheme.
-            ComfyControllerTheme(dark, palette, manageSystemBars = false) {
-              // Legacy OverlayDialog siblings rely on an enclosing Miuix root scaffold.
-              // Keep that overlay/back owner inside this destination, not above Material.
-              LegacyScaffold(containerColor = MiuixTheme.colorScheme.background) { _ ->
+            val page: @Composable () -> Unit = {
                 when (entry.destination.route) {
                     Screen.Dashboard.route -> DashboardScreen(nav, viewModel)
                     Screen.Control.route -> ControlScreen(viewModel)
@@ -49,7 +44,19 @@ internal fun PocketApp(viewModel: MainViewModel) {
                     "cloud_tasks" -> RhTaskRecordsScreen(nav, viewModel)
                     "model_hub" -> ModelHubScreen(nav, viewModel)
                 }
+            }
+            if (entry.destination.route == Screen.Gallery.route || entry.destination.route == "model_hub") {
+                page()
+            } else {
+            // A deliberate migration boundary: old screens get only their original theme.
+            // Material navigation and feedback are siblings, never children of MiuixTheme.
+            ComfyControllerTheme(dark, palette, manageSystemBars = false) {
+              // Legacy OverlayDialog siblings rely on an enclosing Miuix root scaffold.
+              // Keep that overlay/back owner inside this destination, not above Material.
+              LegacyScaffold(containerColor = MiuixTheme.colorScheme.background) { _ ->
+                page()
               }
+            }
             }
         }
     }

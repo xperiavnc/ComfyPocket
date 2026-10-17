@@ -1,5 +1,47 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
+import androidx.compose.material3.CardColors
+
+import androidx.compose.material3.Slider
+
+import androidx.compose.material3.Switch
+
+import androidx.compose.material3.Icon
+
+import androidx.compose.material3.Text
+
+import com.comfyui.mobile.ui.designsystem.PocketCircularProgressIndicator as CircularProgressIndicator
+
+import com.comfyui.mobile.ui.designsystem.PocketProgressDefaults as ProgressIndicatorDefaults
+
+import com.comfyui.mobile.ui.designsystem.PocketLinearProgressIndicator as LinearProgressIndicator
+
+import com.comfyui.mobile.ui.designsystem.PocketListRow as BasicComponent
+
+import com.comfyui.mobile.ui.designsystem.PocketSmallTitle as SmallTitle
+
+import com.comfyui.mobile.ui.designsystem.PocketFloatingToolbar as FloatingToolbar
+
+import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
+
+import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
+
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -20,12 +62,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.danbooru.*
-import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Search
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilterChip
 
 @Composable
 internal fun DanbooruBrowseControls(
@@ -34,18 +75,17 @@ internal fun DanbooruBrowseControls(
     onFilter: (ContentFilter) -> Unit, onPeriod: (RankingPeriod) -> Unit,
     onDate: (java.time.LocalDate) -> Unit
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     var filtersOpen by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
-            input, onInput, label = "搜索标签 / Danbooru 语法", useLabelAsPlaceholder = true,
-            singleLine = true, textStyle = MiuixTheme.textStyles.body2,
-            insideMargin = DpSize(14.dp, 10.dp), cornerRadius = 16.dp,
+            input, onInput, label = "搜索标签 / Danbooru 语法",
+            singleLine = true, textStyle = MaterialTheme.typography.bodyMedium, cornerRadius = 16.dp,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
             trailingIcon = {
                 IconButton(onClick = onSearch) {
-                    Icon(MiuixIcons.Search, contentDescription = "搜索", modifier = Modifier.size(20.dp), tint = scheme.primary)
+                    Icon(PocketIcons.Search, contentDescription = "搜索", modifier = Modifier.size(20.dp), tint = scheme.primary)
                 }
             },
             modifier = Modifier.fillMaxWidth()
@@ -66,20 +106,20 @@ internal fun DanbooruBrowseControls(
                 }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = { onDate(query.rankingPeriod.shift(query.rankingDate, -1)) }) {
-                    Icon(MiuixIcons.Back, contentDescription = "上一期", modifier = Modifier.size(16.dp))
+                    Icon(PocketIcons.Back, contentDescription = "上一期", modifier = Modifier.size(16.dp))
                 }
                 val canAdvance = query.rankingPeriod.start(query.rankingDate) < query.rankingPeriod.start(danbooruToday())
                 IconButton(
                     enabled = canAdvance,
                     onClick = { onDate(query.rankingPeriod.shift(query.rankingDate, 1)) }
                 ) {
-                    Icon(MiuixIcons.Back, contentDescription = "下一期", modifier = Modifier.size(16.dp).rotate(180f),
+                    Icon(PocketIcons.Back, contentDescription = "下一期", modifier = Modifier.size(16.dp).rotate(180f),
                         tint = scheme.onSurface.copy(alpha = if (canAdvance) 1f else 0.25f))
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(query.rankingPeriod.label(query.rankingDate) + " · 站点日期",
-                    style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceSecondary, modifier = Modifier.weight(1f))
+                    style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant, modifier = Modifier.weight(1f))
                 if (query.rankingPeriod.start(query.rankingDate) != query.rankingPeriod.start(danbooruToday()))
                     DanbooruInlineAction("回到本期") { onDate(danbooruToday()) }
             }
@@ -96,19 +136,8 @@ internal fun DanbooruBrowseControls(
 
 @Composable
 internal fun DanbooruPill(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
-    Box(
-        modifier.clip(RoundedCornerShape(12.dp))
-            .background(if (selected) scheme.primary.copy(alpha = 0.14f) else scheme.surfaceContainerHigh)
-            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
-            .defaultMinSize(minHeight = 40.dp)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text, style = MiuixTheme.textStyles.footnote1,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (selected) scheme.primary else scheme.onSurface, maxLines = 1)
-    }
+    FilterChip(selected = selected, onClick = onClick, modifier = modifier.heightIn(min = 48.dp),
+        label = { Text(text) })
 }
 
 @Composable
@@ -118,7 +147,7 @@ internal fun DanbooruSmallAction(
 ) {
     TextButton(text, onClick, modifier = modifier, enabled = enabled, minHeight = 40.dp, minWidth = 0.dp,
         cornerRadius = 12.dp, insideMargin = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
-        textStyle = MiuixTheme.textStyles.footnote1,
+        textStyle = MaterialTheme.typography.bodySmall,
         colors = if (primary) ButtonDefaults.textButtonColorsPrimary() else ButtonDefaults.textButtonColors())
 }
 
@@ -126,7 +155,7 @@ internal fun DanbooruSmallAction(
 internal fun DanbooruInlineAction(text: String, enabled: Boolean = true, onClick: () -> Unit) {
     Box(Modifier.clip(RoundedCornerShape(10.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
         .heightIn(min = 40.dp).padding(horizontal = 10.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
-        Text(text, style = MiuixTheme.textStyles.footnote1,
-            color = MiuixTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.4f))
+        Text(text, style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.4f))
     }
 }

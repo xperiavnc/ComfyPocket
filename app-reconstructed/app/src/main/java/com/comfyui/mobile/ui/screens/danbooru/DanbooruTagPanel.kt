@@ -15,10 +15,11 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.danbooru.*
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 
 /** Original names remain the selection/clipboard keys; display decoration never enters prompts. */
 @Composable
@@ -34,14 +35,14 @@ internal fun DanbooruTagPanel(
     var copyright by rememberSaveable(post.id) { mutableStateOf(false) }
     var meta by rememberSaveable(post.id) { mutableStateOf(false) }
     var optionsOpen by rememberSaveable(post.id) { mutableStateOf(false) }
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val options = TagCopyOptions(mode, spaces, escape)
     val promptGroups = setOf(TagGroup.GENERAL, TagGroup.CHARACTER) +
         listOfNotNull(TagGroup.ARTIST.takeIf { artists }, TagGroup.COPYRIGHT.takeIf { copyright }, TagGroup.META.takeIf { meta })
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("标签与提示词", style = MiuixTheme.textStyles.title4, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            Text("点按复制 · 长按多选", style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceSecondary)
+            Text("标签与提示词", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("点按复制 · 长按多选", style = MaterialTheme.typography.labelSmall, color = scheme.onSurfaceVariant)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
             TagCopyMode.entries.forEach { value -> DanbooruPill(value.title, mode == value) { mode = value } }
@@ -52,7 +53,7 @@ internal fun DanbooruTagPanel(
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 DanbooruSettingSwitch("下划线转空格", spaces) { spaces = it }
                 DanbooruSettingSwitch("括号转义", escape) { escape = it }
-                Text("快捷提示词默认包含通用与角色，可附加：", style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceSecondary)
+                Text("快捷提示词默认包含通用与角色，可附加：", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     DanbooruPill("画师", artists) { artists = !artists }
                     DanbooruPill("作品", copyright) { copyright = !copyright }
@@ -81,8 +82,8 @@ internal fun DanbooruTagPanel(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { expanded = !expanded }
                             .padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${if (expanded) "▾" else "▸"}  ${group.title}", style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.Medium)
-                            Text("  ${tags.size}", style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceSecondary)
+                            Text("${if (expanded) "▾" else "▸"}  ${group.title}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                            Text("  ${tags.size}", style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant)
                         }
                         DanbooruInlineAction("全选${group.title}") { onGroup(group) }
                     }
@@ -98,7 +99,7 @@ internal fun DanbooruTagPanel(
                                         else onCopy(TagCopyFormatter.format(post, options, selected = setOf(tag)))
                                     }, onLongClick = { onSelect(tag) })
                                 .padding(horizontal = 10.dp, vertical = 8.dp)) {
-                                Text((if (checked) "✓ " else "") + tag, style = MiuixTheme.textStyles.footnote1,
+                                Text((if (checked) "✓ " else "") + tag, style = MaterialTheme.typography.bodySmall,
                                     color = if (checked) scheme.primary else scheme.onSurface)
                             }
                         }
@@ -106,5 +107,15 @@ internal fun DanbooruTagPanel(
                 }
             }
         }
+    }
+}
+
+@Composable
+internal fun DanbooruSettingSwitch(
+    title: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit
+) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, Modifier.weight(1f).padding(end = 12.dp), style = MaterialTheme.typography.bodyMedium)
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }

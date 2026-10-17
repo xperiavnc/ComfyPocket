@@ -102,16 +102,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     private val workflowEditor = WorkflowEditorState(workflowPreferences) { _objectInfo.value }
     private val consoleLog = ConsoleLogStore()
     private val cacheManager = AppCacheManager(application, uploadPreviewStore)
-    
+
     val connectionState = repository.webSocketManager.connectionState
         .stateIn(viewModelScope, SharingStarted.Eagerly, ConnectionState.DISCONNECTED)
-        
+
     val systemStats = repository.webSocketManager.systemStats
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-        
+
     override val progress = repository.webSocketManager.progress
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0f)
-        
+
     override val queueSize = repository.webSocketManager.queueSize
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
@@ -136,16 +136,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     val agentExecutingNodeName = combine(executingNodeId, _agentNodeTitles) { nodeId, titles ->
         if (nodeId.isNullOrBlank()) "" else (titles[nodeId] ?: nodeId)
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
-        
+
     val latestMedia = repository.webSocketManager.latestMedia
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
-        
+
     private val _latestGenerationList = MutableStateFlow<List<MediaOutput>>(emptyList())
     override val latestGenerationList = _latestGenerationList.asStateFlow()
 
     val lastMessageType = repository.webSocketManager.lastMessageType
         .stateIn(viewModelScope, SharingStarted.Eagerly, "")
-        
+
     private val _sessionMediaList = MutableStateFlow<List<MediaOutput>>(emptyList())
     override val sessionMediaList = _sessionMediaList.asStateFlow()
 
@@ -377,10 +377,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
     internal val currentWorkflowParamVisibility: Map<String, Boolean>
         get() = workflowEditor.paramVisibility
-    
+
     internal fun sanitizeNumbers(value: Any?, keyHint: String? = null): Any? =
         WorkflowGraph.sanitizeNumbers(value, keyHint)
-    
+
     internal val _currentWorkflowName = MutableStateFlow<String?>(null)
     override val currentWorkflowName = _currentWorkflowName.asStateFlow()
 
@@ -505,7 +505,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 }
                 if (pid != null) {
                     // activeRunPromptIds.add(pid) // Optional: Track external runs too?
-                    // For now, we rely on runWorkflow to add IDs we initiated. 
+                    // For now, we rely on runWorkflow to add IDs we initiated.
                     // If we want to track external, we can add them, but we might never know when to "finish" a batch of external tasks.
                     // So let's just update UI status.
                 }
@@ -619,7 +619,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 }
             }
         }
-        
+
         // Queue Status Listener for Auto Refresh
         viewModelScope.launch {
             repository.webSocketManager.queueSize.collect { size ->
@@ -640,7 +640,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 }
             }
         }
-        
+
         // Log Collector
         viewModelScope.launch {
             repository.webSocketManager.logEvents.collect { msg ->
@@ -657,7 +657,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 }
             }
         }
-        
+
         // Connection State Listener for History Sync & System Stats
         viewModelScope.launch {
             connectionState.collect { state ->
@@ -1778,7 +1778,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     val rawMap: Map<String, Any> = gson.fromJson(content, type)
                     val workflowMap = sanitizeNumbers(rawMap) as Map<String, Any>
                     val name = getFileName(uri) ?: uri.lastPathSegment ?: "导入的工作流"
-                    
+
                     // Check if it is API format or Standard Workflow format
                     if (workflowMap.containsKey("nodes") && workflowMap.containsKey("links")) {
                         showToast("警告：检测到标准工作流格式")
@@ -1821,9 +1821,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 val history = repository.getHistoryOrNull()
                 if (history == null) {
                     addLog("同步历史记录失败（网络或服务器错误），保留现有数据", LogType.WARNING)
+                    showUserMessage("历史记录刷新失败，已有图片已保留")
                     return@launch
                 }
-                
+
                 // Populate activePrompts from history and update promptMap with new format
                 val newPromptMap = _promptMap.value.toMutableMap()
                 var mapChanged = false
@@ -1839,16 +1840,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                             if (outputs != null) {
                                 for (nodeOutput in outputs.values) {
                                     if (nodeOutput is Map<*, *>) {
-                                        val images = nodeOutput["images"] as? List<*> 
-                                            ?: nodeOutput["gifs"] as? List<*> 
+                                        val images = nodeOutput["images"] as? List<*>
+                                            ?: nodeOutput["gifs"] as? List<*>
                                             ?: emptyList<Any>()
-                                        
+
                                         for (imgObj in images) {
                                             if (imgObj is Map<*, *>) {
                                                 val filename = imgObj["filename"] as? String
                                                 val subfolder = imgObj["subfolder"] as? String ?: ""
                                                 val type = imgObj["type"] as? String ?: "output"
-                                                
+
                                                 if (!filename.isNullOrBlank()) {
                                                     val key = "$subfolder|$filename|$type"
                                                     if (newPromptMap[key] != summary) {
@@ -1887,7 +1888,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 // We will re-assign timestamps based on history order (assuming history is Oldest->Newest or Newest->Oldest).
                 // If user says "Latest is at back", it implies we are putting them in reverse order.
                 // We'll collect all, then verify order.
-                
+
                 for (historyItem in history) {
                     val outputs = historyItem.outputs
                     if (outputs != null) {
@@ -1901,7 +1902,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                                                  val filename = item["filename"] as? String
                                                  val subfolder = item["subfolder"] as? String ?: ""
                                                 val type = item["type"] as? String ?: "output"
-                                                
+
                                                 if (!filename.isNullOrBlank()) {
                                                     val lower = filename.lowercase()
                                                     val mediaType = when {
@@ -1930,12 +1931,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                         }
                     }
                 }
-                
+
                 // If history is Oldest -> Newest (typical append log), we need to reverse it to get Newest -> Oldest.
                 // We will assign timestamps such that the first item (Newest) has the highest timestamp.
                 val reversedMedia = foundMedia.reversed()
                 val now = System.currentTimeMillis()
-                
+
                 // Deduplicate (Keep first occurrence which is latest)
                 val distinctMedia = reversedMedia
                     .distinctBy { "${it.subfolder}|${it.filename}|${it.type}" }
@@ -1944,7 +1945,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     }
                     .sortedByDescending { it.timestamp }
                     .filterNot { isDeletedKey(mediaKey(it)) }
-                
+
                 if (distinctMedia.isNotEmpty()) {
                     _sessionMediaList.value = distinctMedia
 
@@ -1965,6 +1966,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
             } catch (e: Exception) {
                 e.printStackTrace()
                 addLog("同步历史记录失败: ${e.message}", LogType.ERROR)
+                showUserMessage("历史记录刷新失败，已有图片已保留")
             }
         }
     }
@@ -2012,7 +2014,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
             _queueList.value = list
         }
     }
-    
+
     override fun stopAllWorkflows() {
         GenerationLiveUpdate.beginUserStop()
         repository.setIsGenerating(false)
@@ -2107,7 +2109,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     val now = System.currentTimeMillis()
                     val summary = generatePromptSummary(summaryNodes)
                     activeRunStartedAt = now
-                    
+
                     var successCount = 0
                     repeat(batchCount) { i ->
                         currentCoroutineContext().ensureActive()
@@ -2170,7 +2172,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
             addLog("尝试运行，但未加载工作流", LogType.WARNING)
         }
     }
-    
+
     fun addLog(text: String, type: LogType = LogType.INFO) = consoleLog.add(text, type)
 
     fun getConsoleLogText(): String = consoleLog.render(listOf(
@@ -2187,7 +2189,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         consoleLog.export(getApplication<Application>().cacheDir, getConsoleLogText())
 
     fun clearConsoleLog() = consoleLog.clear()
-    
+
     fun simulateTestImage() {
         val testMedia = MediaOutput(
             filename = "example.png", // This file likely doesn't exist, but we can see the loading error or use a placeholder
@@ -2199,11 +2201,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
             repository.webSocketManager.injectTestMedia(testMedia)
         }
     }
-    
+
     // --- Local Saved Workflows (Simple implementation using SharedPreferences or File) ---
     // For simplicity, we can save ONE "favorite" or use a local file list.
     // Let's implement a simple "Save Current" which saves to App's private storage with a timestamp name.
-    
+
     override fun overwriteCurrentWorkflowToLocal() = MainViewModelWorkflow.overwriteCurrentWorkflowToLocal(this)
     fun saveCurrentWorkflowToLocal() = MainViewModelWorkflow.saveCurrentWorkflowToLocal(this)
     override fun refreshSavedWorkflows() = MainViewModelWorkflow.refreshSavedWorkflows(this)
@@ -2236,7 +2238,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
              showToast("已有任务正在发送中，请稍候")
              return
         }
-        
+
         sendJob?.cancel()
         val token = Any()
         sendJobToken = token
@@ -2246,16 +2248,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 isSending = true
                 var successCount = 0
                 val total = files.size
-                
+
                 showToast("开始批量发送 $total 个工作流...")
-                
+
                 files.forEachIndexed { index, file ->
                     currentCoroutineContext().ensureActive()
                     try {
                         val content = withContext(Dispatchers.IO) { file.readText() }
                         val type = object : TypeToken<Map<String, Any>>() {}.type
                         val raw: Map<String, Any> = gson.fromJson(content, type)
-                        
+
                         val sanitized = sanitizeNumbers(raw) as Map<String, Any>
                         val pid = repository.queuePrompt(sanitized)
                         if (!pid.isNullOrBlank()) {
@@ -2273,7 +2275,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     }
                     kotlinx.coroutines.delay(200)
                 }
-                
+
                 if (successCount > 0) {
                      GenerationLiveUpdate.noteUserStartedRun()
                      _isRunning.value = true
@@ -2561,7 +2563,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
             }
         }
     }
-    
+
     fun interrupt() {
         viewModelScope.launch {
             GenerationLiveUpdate.beginUserStop()
@@ -2585,7 +2587,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
             fetchQueue()
         }
     }
-    
+
     fun getImageUrl(data: String): String {
         val parts = data.split("|")
         if (parts.size >= 3) {
@@ -2615,7 +2617,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         if (filename.startsWith("api/")) rhUploadPreviews[filename]?.let { return it }
         return repository.getImageUrl(filename, subfolder, type)
     }
-    
+
     override suspend fun fetchTextContent(media: MediaOutput): String {
         return withContext(Dispatchers.IO) {
             repository.getTextContent(media.filename, media.subfolder, media.type) ?: "无法获取文本内容"

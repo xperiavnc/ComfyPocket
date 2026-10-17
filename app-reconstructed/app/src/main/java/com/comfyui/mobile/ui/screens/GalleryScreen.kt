@@ -1,25 +1,29 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.comfyui.mobile.ui.screens
+
+import com.comfyui.mobile.ui.designsystem.PocketIcons
 
 import com.comfyui.mobile.data.AppModule
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTapGestures
 
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Close
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Pause
-import top.yukonga.miuix.kmp.icon.extended.AppRecording
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.Rename
-import top.yukonga.miuix.kmp.icon.extended.Folder
-import top.yukonga.miuix.kmp.icon.extended.More
-import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.icon.extended.Music
-import top.yukonga.miuix.kmp.icon.extended.Play
-import top.yukonga.miuix.kmp.icon.extended.Remove
-import top.yukonga.miuix.kmp.icon.extended.Share
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -95,6 +99,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
+import kotlinx.coroutines.launch
 import com.comfyui.mobile.model.MediaOutput
 import com.comfyui.mobile.model.MediaType
 import com.comfyui.mobile.ui.GalleryCategory
@@ -103,32 +108,29 @@ import com.comfyui.mobile.ui.components.ensureFilenameForMedia
 import com.comfyui.mobile.ui.components.mimeTypeForMedia
 import com.comfyui.mobile.ui.components.performShareMedia
 import com.comfyui.mobile.ui.MediaPreviewHost
-import top.yukonga.miuix.kmp.basic.BasicComponent
-import top.yukonga.miuix.kmp.basic.SmallTitle
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.FloatingToolbar
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.basic.PopupPositionProvider
-import top.yukonga.miuix.kmp.basic.ListPopupDefaults
-import top.yukonga.miuix.kmp.basic.ListPopupColumn
-import top.yukonga.miuix.kmp.basic.DropdownImpl
-import top.yukonga.miuix.kmp.overlay.OverlayListPopup
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketListRow as BasicComponent
+import com.comfyui.mobile.ui.designsystem.PocketSmallTitle as SmallTitle
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketFloatingToolbar as FloatingToolbar
+import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
+import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCircularProgressIndicator as CircularProgressIndicator
+import androidx.compose.material3.Icon
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.utils.overScrollVertical
+
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 @Composable
 fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePicker: @Composable () -> Unit = {}) {
@@ -136,6 +138,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     val localMediaList by viewModel.localMediaList.collectAsState()
     val gallerySource by viewModel.gallerySource.collectAsState()
     val isLocalGallery = gallerySource == GalleryUi.GALLERY_LOCAL
+    var galleryRefreshing by remember { mutableStateOf(false) }
     val baseUrl by viewModel.baseUrl.collectAsState()
     val categories by viewModel.galleryCategories.collectAsState()
     val categoryAssignments by viewModel.galleryCategoryAssignments.collectAsState()
@@ -223,7 +226,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
         )
     }
 
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val cardColor = scheme.secondaryContainer
 
     val galleryTitle = when {
@@ -231,8 +234,6 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
         isLocalGallery -> "画廊·本地"
         else -> "画廊·服务器"
     }
-
-    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
 
     Scaffold(
@@ -240,12 +241,10 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
         topBar = {
             TopAppBar(
                 title = galleryTitle,
-                largeTitle = galleryTitle,
                 color = scheme.background,
-                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     if (selectionMode) IconButton(onClick = ::exitSelection) {
-                        Icon(MiuixIcons.Back, contentDescription = "退出多选")
+                        Icon(PocketIcons.Back, contentDescription = "退出多选")
                     }
                 },
                 actions = {
@@ -266,43 +265,15 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                     } else {
                         Box {
                             IconButton(onClick = { showOverflowMenu = true }) {
-                                Icon(MiuixIcons.More, contentDescription = "更多")
+                                Icon(PocketIcons.More, contentDescription = "更多")
                             }
-                            OverlayListPopup(
-                                show = showOverflowMenu,
-                                popupPositionProvider = ListPopupDefaults.dropdownPositionProvider(),
-                                alignment = PopupPositionProvider.Align.TopEnd,
-                                enableWindowDim = false,
-                                renderInRootScaffold = false,
-                                minWidth = 120.dp,
-                                onDismissRequest = { showOverflowMenu = false }
-    ) {
-                                val menuItems = buildList {
-                                    if (isLocalGallery) add("分类管理")
-                                    add("刷新")
-                                }
-                                ListPopupColumn {
-                                    menuItems.forEachIndexed { index, label ->
-                                        DropdownImpl(
-                                            text = label,
-                                            optionSize = menuItems.size,
-                                            isSelected = false,
-                                            index = index,
-                                            onSelectedIndexChange = {
-                                                showOverflowMenu = false
-                                                when (label) {
-                                                    "切换到服务器" -> viewModel.setGallerySource(GalleryUi.GALLERY_SERVER)
-                                                    "切换到本地" -> viewModel.setGallerySource(GalleryUi.GALLERY_LOCAL)
-                                                    "分类管理" -> showCategorySheet = true
-                                                    "刷新" -> {
-                                                        if (isLocalGallery) viewModel.refreshLocalMedia(context)
-                                                        else viewModel.checkLatestHistory()
-                                                    }
-                                                }
-                                            }
-    )
-                                    }
-                                }
+                            DropdownMenu(expanded = showOverflowMenu, onDismissRequest = { showOverflowMenu = false }) {
+                                if (isLocalGallery) DropdownMenuItem(text = { Text("分类管理") },
+                                    onClick = { showOverflowMenu = false; showCategorySheet = true })
+                                DropdownMenuItem(text = { Text("刷新") }, onClick = {
+                                    showOverflowMenu = false
+                                    if (isLocalGallery) viewModel.refreshLocalMedia(context) else viewModel.checkLatestHistory()
+                                })
                             }
                         }
                     }
@@ -349,6 +320,14 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                 }
             }
 
+            PullToRefreshBox(isRefreshing = galleryRefreshing, onRefresh = {
+                galleryRefreshing = true
+                if (isLocalGallery) viewModel.refreshLocalMedia(context) else viewModel.checkLatestHistory()
+                scope.launch {
+                    kotlinx.coroutines.delay(650)
+                    galleryRefreshing = false
+                }
+            }, modifier = Modifier.weight(1f)) {
             if (displayMediaList.isNotEmpty()) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -357,8 +336,8 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                         .fillMaxSize()
                         .testTag("legacy-gallery-grid")
                         .padding(top = 4.dp)
-                        .overScrollVertical()
-                        .nestedScroll(scrollBehavior.nestedScrollConnection),
+
+                        ,
                     contentPadding = PaddingValues(
                         bottom = (if (selectionMode && selectedKeys.isNotEmpty()) 100.dp else 24.dp) + floatingNavClearance
                     ),
@@ -411,7 +390,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 24.dp),
+                        .fillMaxSize().verticalScroll(rememberScrollState()).padding(top = 24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
     ) {
                     Card(
@@ -421,10 +400,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             color = cardColor,
                             contentColor = scheme.onSecondaryContainer
     ),
-                        onClick = null,
-                        pressFeedbackType = PressFeedbackType.Tilt,
-                        showIndication = false
-    ) {
+                        onClick = null) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -433,19 +409,19 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
                             Icon(
-                                MiuixIcons.Image,
+                                PocketIcons.Image,
                                 contentDescription = null,
                                 modifier = Modifier.size(44.dp),
                                 tint = scheme.onSecondaryContainer.copy(alpha = 0.5f)
     )
                             Text(
                                 emptyTitle,
-                                style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                                 color = scheme.onSecondaryContainer
     )
                             Text(
                                 emptySubtitle,
-                                style = MiuixTheme.textStyles.body2,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = scheme.onSecondaryContainer.copy(alpha = 0.7f)
     )
                             if (!isLocalGallery) {
@@ -459,6 +435,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                         }
                     }
                 }
+            }
             }
         }
 
@@ -489,7 +466,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     ) {
                         if (isLocalGallery) {
                             PreviewActionButton(
-                                icon = MiuixIcons.Remove,
+                                icon = PocketIcons.Remove,
                                 label = "解散",
                                 tint = scheme.primary,
                                 enabled = !shareBusy && !saveBusy,
@@ -506,7 +483,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                                 }
     )
                             PreviewActionButton(
-                                icon = MiuixIcons.Folder,
+                                icon = PocketIcons.Folder,
                                 label = "分类",
                                 tint = scheme.primary,
                                 enabled = !shareBusy && !saveBusy,
@@ -514,7 +491,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     )
                         } else {
                             PreviewActionButton(
-                                icon = MiuixIcons.Download,
+                                icon = PocketIcons.Download,
                                 label = if (saveBusy) "保存中" else "保存",
                                 tint = scheme.primary,
                                 enabled = !shareBusy && !saveBusy,
@@ -530,7 +507,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     )
                         }
                         PreviewActionButton(
-                            icon = MiuixIcons.Share,
+                            icon = PocketIcons.Share,
                             label = "分享",
                             tint = scheme.primary,
                             enabled = !shareBusy && !saveBusy,
@@ -538,7 +515,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             onClick = { performShare(selectedMediaList) }
     )
                         PreviewActionButton(
-                            icon = MiuixIcons.Delete,
+                            icon = PocketIcons.Delete,
                             label = "删除",
                             tint = scheme.error,
                             enabled = !shareBusy && !saveBusy,
@@ -556,7 +533,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             }
     )
                         PreviewActionButton(
-                            icon = MiuixIcons.Close,
+                            icon = PocketIcons.Close,
                             label = "取消",
                             tint = scheme.primary,
                             enabled = !saveBusy && !shareBusy,
@@ -589,8 +566,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 16.dp,
-                    colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
-                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh)
     ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -602,9 +578,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             onValueChange = { newCategoryName = it },
                             modifier = Modifier.weight(1f),
                             singleLine = true,
-                            label = "新建分类",
-                            useLabelAsPlaceholder = true
-    )
+                            label = "新建分类")
                         TextButton(
                             text = "添加",
                             onClick = {
@@ -623,8 +597,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             "选择目标分类"
                         } else {
                             "全部分类"
-                        },
-                        insideMargin = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                        }
     )
                 }
 
@@ -639,9 +612,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             cornerRadius = 14.dp,
-                            colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
-                            pressFeedbackType = PressFeedbackType.Tilt
-    ) {
+                            colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh)) {
                             BasicComponent(
                                 title = cat.name,
                                 summary = if (selectionMode && selectedKeys.isNotEmpty()) {
@@ -672,9 +643,9 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                                 endActions = {
                                     IconButton(onClick = { renamingCategory = cat }) {
                                         Icon(
-                                            MiuixIcons.Rename,
+                                            PocketIcons.Rename,
                                             contentDescription = "重命名",
-                                            tint = scheme.onSurfaceVariantActions,
+                                            tint = scheme.onSurfaceVariant,
                                             modifier = Modifier.size(20.dp)
     )
                                     }
@@ -687,7 +658,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                                         }
     ) {
                                         Icon(
-                                            MiuixIcons.Delete,
+                                            PocketIcons.Delete,
                                             contentDescription = "删除",
                                             tint = scheme.error,
                                             modifier = Modifier.size(20.dp)
@@ -720,15 +691,13 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     ) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
-                    insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                    colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh)
     ) {
                     TextField(
                         value = renameCategoryText,
                         onValueChange = { renameCategoryText = it },
                         singleLine = true,
                         label = "分类名称",
-                        useLabelAsPlaceholder = true,
                         modifier = Modifier.fillMaxWidth()
     )
                 }
@@ -757,7 +726,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                 }
             }
         }
-        
+
         // Fullscreen Preview Dialog
         if (selectedMedia != null && displayMediaList.isNotEmpty()) {
             val selectedKey = keyFor(selectedMedia!!)
@@ -792,7 +761,7 @@ fun FullScreenPreview(
     var isSavingMedia by remember { mutableStateOf(false) }
     var chromeVisible by remember { mutableStateOf(true) }
     val currentMedia = mediaList.getOrNull(pagerState.currentPage)
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -860,7 +829,7 @@ fun FullScreenPreview(
                             MediaType.AUDIO -> {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(
-                                        MiuixIcons.Music,
+                                        PocketIcons.Music,
                                         contentDescription = null,
                                         tint = Color.White,
                                         modifier = Modifier.size(100.dp)
@@ -869,7 +838,7 @@ fun FullScreenPreview(
                                     Text(
                                         media.filename,
                                         color = Color.White,
-                                        style = MiuixTheme.textStyles.body2
+                                        style = MaterialTheme.typography.bodyMedium
     )
                                     Spacer(modifier = Modifier.height(32.dp))
                                     AudioPlayerView(
@@ -930,7 +899,7 @@ fun FullScreenPreview(
                             minHeight = 40.dp
     ) {
                             Icon(
-                                MiuixIcons.Close,
+                                PocketIcons.Close,
                                 contentDescription = "关闭",
                                 tint = Color.White,
                                 modifier = Modifier.size(22.dp)
@@ -944,7 +913,7 @@ fun FullScreenPreview(
                             Text(
                                 text = currentMedia?.filename.orEmpty(),
                                 color = Color.White,
-                                style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
     )
@@ -962,7 +931,7 @@ fun FullScreenPreview(
                                     if (typeLabel.isNotEmpty()) append(" · $typeLabel")
                                 },
                                 color = Color.White.copy(alpha = 0.72f),
-                                style = MiuixTheme.textStyles.footnote1,
+                                style = MaterialTheme.typography.bodySmall,
                                 maxLines = 1
     )
                         }
@@ -1007,7 +976,7 @@ fun FullScreenPreview(
     ) {
                             if (!isLocalGallery) {
                                 PreviewActionButton(
-                                    icon = MiuixIcons.Download,
+                                    icon = PocketIcons.Download,
                                     label = if (isSavingMedia) "保存中" else "保存",
                                     tint = scheme.primary,
                                     enabled = !isSavingMedia && !isSharing,
@@ -1023,7 +992,7 @@ fun FullScreenPreview(
     )
                             }
                             PreviewActionButton(
-                                icon = MiuixIcons.Share,
+                                icon = PocketIcons.Share,
                                 label = "分享",
                                 tint = scheme.primary,
                                 enabled = !isSharing && !isSavingMedia,
@@ -1045,7 +1014,7 @@ fun FullScreenPreview(
                                 }
     )
                             PreviewActionButton(
-                                icon = MiuixIcons.Delete,
+                                icon = PocketIcons.Delete,
                                 label = "删除",
                                 tint = scheme.error,
                                 enabled = !isSharing && !isSavingMedia,
@@ -1082,7 +1051,7 @@ private fun PreviewActionButton(
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .widthIn(min = 44.dp)
+            .widthIn(min = 48.dp).heightIn(min = 48.dp)
             .clip(RoundedCornerShape(12.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 4.dp)
@@ -1100,11 +1069,11 @@ private fun PreviewActionButton(
         Spacer(modifier = Modifier.height(1.dp))
         Text(
             text = label,
-            style = MiuixTheme.textStyles.footnote1.copy(fontSize = 10.sp),
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
             color = if (enabled) {
-                MiuixTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
             } else {
-                MiuixTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
             },
             maxLines = 1
     )
@@ -1202,7 +1171,7 @@ fun MediaGridItem(
     onLongClick: () -> Unit
     ) {
     val url = previewUrl
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val corner = 22.dp
     val borderColor = if (isSelected) scheme.primary else scheme.outline.copy(alpha = 0.18f)
     val borderWidth = if (isSelected) 2.5.dp else 1.dp
@@ -1219,8 +1188,6 @@ fun MediaGridItem(
                 onLongClick = onLongClick
     ),
         cornerRadius = corner,
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = false,
         onClick = null,
         colors = CardDefaults.defaultColors(
             color = scheme.secondaryContainer,
@@ -1251,7 +1218,7 @@ fun MediaGridItem(
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
-                            error = rememberVectorPainter(MiuixIcons.AppRecording)
+                            error = rememberVectorPainter(PocketIcons.AppRecording)
     )
                         Box(
                             modifier = Modifier
@@ -1259,7 +1226,7 @@ fun MediaGridItem(
                                 .background(Color.Black.copy(alpha = 0.18f))
     )
                         Icon(
-                            MiuixIcons.Play,
+                            PocketIcons.Play,
                             contentDescription = null,
                             tint = Color.White.copy(alpha = 0.92f),
                             modifier = Modifier.size(40.dp)
@@ -1268,20 +1235,20 @@ fun MediaGridItem(
                 }
                 MediaType.AUDIO -> {
                      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(MiuixIcons.Music, contentDescription = null, tint = scheme.onSecondaryContainer)
-                        Text("AUDIO", modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp), style = MiuixTheme.textStyles.footnote1)
+                        Icon(PocketIcons.Music, contentDescription = null, tint = scheme.onSecondaryContainer)
+                        Text("AUDIO", modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp), style = MaterialTheme.typography.bodySmall)
                     }
                 }
                 MediaType.TEXT -> {
                      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("TXT", style = MiuixTheme.textStyles.title2, color = scheme.onSecondaryContainer)
-                        Text(media.filename, modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp), style = MiuixTheme.textStyles.footnote1, maxLines = 1)
+                        Text("TXT", style = MaterialTheme.typography.headlineSmall, color = scheme.onSecondaryContainer)
+                        Text(media.filename, modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
                     }
                 }
                 MediaType.FILE -> {
                      Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(media.filename.substringAfterLast('.', "FILE").uppercase().take(6), style = MiuixTheme.textStyles.title2, color = scheme.onSecondaryContainer)
-                        Text(media.filename, modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp), style = MiuixTheme.textStyles.footnote1, maxLines = 1)
+                        Text(media.filename.substringAfterLast('.', "FILE").uppercase().take(6), style = MaterialTheme.typography.headlineSmall, color = scheme.onSecondaryContainer)
+                        Text(media.filename, modifier = Modifier.align(Alignment.BottomCenter).padding(4.dp), style = MaterialTheme.typography.bodySmall, maxLines = 1)
                     }
                 }
             }
@@ -1302,7 +1269,7 @@ fun AudioPlayerView(url: String, isCurrentPage: Boolean = true) {
     val context = LocalContext.current
     var isPlaying by remember { mutableStateOf(false) }
     var mediaPlayer by remember { mutableStateOf<android.media.MediaPlayer?>(null) }
-    
+
     DisposableEffect(url) {
         val mp = android.media.MediaPlayer().apply {
             setDataSource(context, android.net.Uri.parse(url))
@@ -1321,7 +1288,7 @@ fun AudioPlayerView(url: String, isCurrentPage: Boolean = true) {
             isPlaying = false
         }
     }
-    
+
     IconButton(
         onClick = {
             mediaPlayer?.let { mp ->
@@ -1337,7 +1304,7 @@ fun AudioPlayerView(url: String, isCurrentPage: Boolean = true) {
         modifier = Modifier.size(64.dp)
     ) {
         Icon(
-            if (isPlaying) MiuixIcons.Pause else MiuixIcons.Play, 
+            if (isPlaying) PocketIcons.Pause else PocketIcons.Play,
             contentDescription = if (isPlaying) "Pause" else "Play",
             tint = Color.White,
             modifier = Modifier.size(64.dp)
@@ -1352,7 +1319,7 @@ fun TextViewer(media: MediaOutput, viewModel: MediaPreviewHost) {
         text = viewModel.fetchTextContent(media)
     }
     Box(modifier = Modifier.fillMaxSize().padding(32.dp).verticalScroll(rememberScrollState())) {
-        Text(text, color = Color.White, style = MiuixTheme.textStyles.body2)
+        Text(text, color = Color.White, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
@@ -1362,41 +1329,7 @@ fun CategoryChip(
     isSelected: Boolean,
     onClick: () -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
-    val shape = RoundedCornerShape(50)
-    val bgColor = if (isSelected) {
-        scheme.primary
-    } else {
-        scheme.surfaceContainerHigh
-    }
-    val textColor = if (isSelected) {
-        scheme.onPrimary
-    } else {
-        scheme.onSurface.copy(alpha = 0.88f)
-    }
-    val borderColor = if (isSelected) {
-        Color.Transparent
-    } else {
-        scheme.outline.copy(alpha = 0.55f)
-    }
-    Box(
-        modifier = Modifier
-            .clip(shape)
-            .background(bgColor, shape)
-            .border(width = 1.dp, color = borderColor, shape = shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            style = MiuixTheme.textStyles.footnote1.copy(
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                fontSize = 13.sp
-    ),
-            color = textColor,
-            maxLines = 1
-    )
-    }
+    FilterChip(selected = isSelected, onClick = onClick,
+        modifier = Modifier.heightIn(min = 48.dp), label = { Text(label) })
 }
 
