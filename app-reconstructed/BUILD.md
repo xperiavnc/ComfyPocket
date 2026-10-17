@@ -2,7 +2,7 @@
 
 本目录由用户提供的 `app.7z` 模块源码重建，不是原作者的完整构建配置。
 原始 `src/` 放在 `app/src/`，Python 插件保持为独立目录。
-Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中的问题没有在本轮修复。
+初始重建保留 Kotlin、Python、Manifest 和资源内容；后续版本的功能改动与验证记录见根目录 README 及本目录功能说明。
 
 ## 选用的构建版本
 
@@ -24,7 +24,7 @@ Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中�
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.7-agent-bilingual-tags`，版本号为 `9`，Agent 改动说明见 `AGENT.md`。
+当前构建版本名为 `0.0.8`，版本号为 `10`。显示名 **ComfyPocket**，Agent 改动说明见 `AGENT.md`，在线画廊见 `DANBOORU_GALLERY_PLAN.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 
@@ -46,7 +46,8 @@ gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plai
 
 输出：
 
-- 调试 APK：`app/build/outputs/apk/debug/app-debug.apk`
+- 品牌命名调试 APK：`app/build/outputs/ComfyPocket/ComfyPocket.apk`（assembleDebug 自动导出）
+- AGP 内部产物：`app/build/outputs/apk/debug/app-debug.apk`（不修改其元数据）
 - 单元测试 HTML：`app/build/reports/tests/testDebugUnitTest/index.html`
 - 单元测试 XML：`app/build/test-results/testDebugUnitTest/`
 
@@ -58,4 +59,4 @@ gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plai
 - Python 桥接插件不打入 APK；需作为服务端插件单独部署。
 - `local.properties`、构建缓存、测试产物和 Python 缓存不纳入源码分发包。
 
-内置离线词库为必要应用资源，随 APK 打包；重建与来源范围见 `TAG_LIBRARY.md`。不再依赖 Danbooru 联网查词。
+内置离线词库为必要应用资源，随 APK 打包；重建与来源范围见 `TAG_LIBRARY.md`。Agent 不依赖 Danbooru 联网查词；新增在线画廊为完全独立、用户主动访问的模块。

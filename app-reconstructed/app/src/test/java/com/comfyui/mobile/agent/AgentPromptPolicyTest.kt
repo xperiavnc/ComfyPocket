@@ -9,12 +9,12 @@ class AgentPromptPolicyTest {
     @Test fun personaAndVisualRulesDoNotCompeteWithTransportContract() {
         assertFalse(AgentPromptPolicy.defaultPersona.contains("should_draw"))
         assertFalse(AgentPromptPolicy.defaultDrawRules.contains("只输出最终"))
-        val prompt = AgentPromptPolicy.system("自定义人设", "自定义分镜", AgentPromptFormat.ANIMA, emptyList())
+        val prompt = AgentPromptPolicy.system("自定义人设", "自定义分镜", emptyList())
         assertTrue(prompt.contains("人设仅作用于 reply"))
         assertTrue(prompt.contains("只输出一个 JSON"))
         assertTrue(prompt.contains("自定义人设"))
         assertTrue(prompt.contains("自定义分镜"))
-        assertTrue(prompt.contains("本轮提示词格式：Anima 混合"))
+        assertFalse(prompt.contains("【本轮提示词格式"))
     }
     @Test fun animaPreservesBindingSentencesPunctuationAndQuotedText() {
         val raw = """{"reply":"好","prompt":"2girls, from front\nOn the left, Mira with blue hair is smiling. On the right, Lina holds a sign reading \"你好\".","should_draw":true}"""
@@ -35,7 +35,7 @@ class AgentPromptPolicyTest {
     }
 
     @Test fun outputContractRequiresSeparateNegativeEvenWithCustomRules() {
-        val system = AgentPromptPolicy.system("自定义", "只输出正向 tags", AgentPromptFormat.ANIMA, emptyList())
+        val system = AgentPromptPolicy.system("自定义", "只输出正向 tags", emptyList())
         assertTrue(system.contains("negative_prompt（最终反向提示词字符串）"))
         assertTrue(system.contains("每次同时输出正向与反向"))
         assertTrue(system.contains("不要把反向写进 prompt"))

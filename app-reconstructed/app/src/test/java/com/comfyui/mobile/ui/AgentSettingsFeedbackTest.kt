@@ -67,12 +67,12 @@ class AgentSettingsFeedbackTest {
     }
 
     @Test fun localLibrarySettingsPersistAndShowConfirmation() {
-        val settings = com.comfyui.mobile.agent.AgentPromptSettings(false, com.comfyui.mobile.agent.AgentPromptFormat.ANIMA)
+        val settings = com.comfyui.mobile.agent.AgentPromptSettings(false)
         vm.setAgentPromptSettings(settings)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(settings, vm.agentPromptSettings.value)
         assertEquals(settings, com.comfyui.mobile.agent.AgentPromptSettingsStore(vm.prefs).load())
-        assertEquals("已保存提示词格式与本地词库设置", ShadowToast.getTextOfLatestToast())
+        assertEquals("已保存本地词库设置", ShadowToast.getTextOfLatestToast())
     }
 
     @Test fun customPersonaAndDrawRulesSurviveTheOfflineMigration() {

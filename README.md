@@ -10,6 +10,7 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/BUILD.md`：重建工程的构建版本与说明。
 - `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
 - `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
+- `app-reconstructed/DANBOORU_GALLERY_PLAN.md`：Danbooru 原生画廊的实施记录、账号/代理操作与验证边界。
 - `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
 - `app-reconstructed/TAG_LIBRARY.md`：内置词库来源、查询边界与可复现构建方式。
 - `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
@@ -44,11 +45,16 @@ cd app-reconstructed
 ./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plain
 ```
 
-调试 APK 输出到 `app-reconstructed/app/build/outputs/apk/debug/app-debug.apk`。
+调试 APK 自动导出到 `app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket.apk`。
+应用安装后的显示名也是 **ComfyPocket**；AGP 内部 `app-debug.apk` 仍保留以兼容构建元数据。
 安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
 
 ## 当前验证状态
+
+- `0.0.8`（versionCode 10）：应用显示名及交付 APK 统一为 ComfyPocket；删除 Agent 的三种格式选项及对应偏好，保留自定义分镜、离线双语词库与正反向流程。
+  画廊新增手机直连 Danbooru：独立代理和账号 Key、搜索/评级、游标与数字分页、原生详情、五类 Tag、多选复制、单图保存分享及独立缓存。
+  原服务器/本地来源、包名、签名、底栏动画和 Bridge 保留。实施与实测边界详见画廊计划第 13 节。
 
 - `0.0.7-agent-bilingual-tags`（versionCode 9）：内置词库扩充为 140,871 个标签与 99,980 个角色，
   共 240,851 项，均有中文对应。合并 Danbooru 社区中英对照固定快照，支持中文整句 / 别名查英文标签，
@@ -58,14 +64,14 @@ cd app-reconstructed
   34,122 个角色条目，支持中英文/别名搜索。绘图前离线取候选，不增加模型修订轮次。
   Agent 主动编写正向和反向；工作流可分别选择精确文本字段；“出图提示词”同时显示、
   分别复制和成对保存两组词，明确实际写入状态。用户自定义人设与分镜规则保留。
-- 保留此前的 CPU 进度条同色、提示词职责分离、Tags / Anima 混合 / 自然语言格式、
+- 保留此前的 CPU 进度条同色、提示词职责分离、
   反向缺失保留原值和显式空字符串清空行为；更新本版仅需 APK，不必更新 Bridge。
 
 - `0.0.3-agent-media-monitor`（versionCode 5）修复生成通知静默、Agent 设置保存反馈、
   分享和画廊的原图缓存复用；主页新增 CPU / 内存预览，配套 Bridge 2.1，详见 `app-reconstructed/AGENT.md`。
 - `0.0.2-agent-core`（versionCode 4）落地 Agent 实例级会话、分步执行和工作流工具；
   思考强度包括极高 `xhigh` 和 `max`，随模型配置保存，详见 `app-reconstructed/AGENT.md`。
-- 当前 Android 构建成功，323 项 JVM/Android 页面测试和 3 项双语词库导入测试通过（本批基线 320 项）。
+- 0.0.7 Android 基线构建成功，323 项 JVM/Android 页面测试和 3 项双语词库导入测试通过；0.0.8 的 377 项 JVM/Android/Compose 回归全部通过（基线 323 项），真实账号/代理/真机尚待验证，详见画廊实施记录。
   上批另有 3 项 Bridge CPU/内存采样测试。Bridge Python、
   设置 GUI 与本地浏览器的独立测试说明见插件文档，本批未改动插件。
 - 主 ViewModel 首轮从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、

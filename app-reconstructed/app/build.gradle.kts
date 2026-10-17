@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.0.7-agent-bilingual-tags"
+        versionCode = 10
+        versionName = "0.0.8"
     }
 
     buildFeatures {
@@ -105,4 +105,14 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.compose.ui:ui-test-junit4:1.11.2")
+}
+
+// Branded deliverable; keep AGP's internal artifact/metadata untouched.
+val exportComfyPocketDebugApk by tasks.registering(Copy::class) {
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(layout.buildDirectory.dir("outputs/ComfyPocket"))
+    rename { "ComfyPocket.apk" }
+}
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy(exportComfyPocketDebugApk)
 }

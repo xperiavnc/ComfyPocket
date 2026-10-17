@@ -46,6 +46,10 @@ class SecretStore private constructor(context: Context) {
 
     fun getCivitaiProxyPassword(): String = get("market:proxy-password").orEmpty()
 
+    fun putDanbooruConfig(plaintext: String) = put("gallery:danbooru:config", plaintext, trim = false)
+
+    fun getDanbooruConfig(): String = get("gallery:danbooru:config").orEmpty()
+
     private fun put(alias: String, plaintext: String, trim: Boolean = true) {
         val value = if (trim) plaintext.trim() else plaintext
         synchronized(lock) {
@@ -74,9 +78,9 @@ class SecretStore private constructor(context: Context) {
     }
 
     private fun readMap(): MutableMap<String, String> {
-        if (!file.exists()) return mutableMapOf()
+        if (!file.exists() && !File(file.path + ".bak").exists()) return mutableMapOf()
         return try {
-            val obj = JSONObject(file.readText())
+            val obj = JSONObject(android.util.AtomicFile(file).openRead().bufferedReader().use { it.readText() })
             val out = mutableMapOf<String, String>()
             val keys = obj.keys()
             while (keys.hasNext()) {
@@ -95,11 +99,14 @@ class SecretStore private constructor(context: Context) {
         file.parentFile?.mkdirs()
         val obj = JSONObject()
         for ((k, v) in map) obj.put(k, v)
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(obj.toString())
-        if (!tmp.renameTo(file)) {
-            file.writeText(obj.toString())
-            tmp.delete()
+        val atomic = android.util.AtomicFile(file)
+        val stream = atomic.startWrite()
+        try {
+            stream.write(obj.toString().toByteArray(Charsets.UTF_8))
+            atomic.finishWrite(stream)
+        } catch (error: Exception) {
+            atomic.failWrite(stream)
+            throw error
         }
     }
 

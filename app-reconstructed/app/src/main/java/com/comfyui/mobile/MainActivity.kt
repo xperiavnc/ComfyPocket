@@ -57,7 +57,7 @@ import com.comfyui.mobile.ui.screens.AiAppsScreen
 import com.comfyui.mobile.ui.screens.ConsoleScreen
 import com.comfyui.mobile.ui.screens.ControlScreen
 import com.comfyui.mobile.ui.screens.DashboardScreen
-import com.comfyui.mobile.ui.screens.GalleryScreen
+import com.comfyui.mobile.ui.screens.gallery.GalleryHomeScreen
 import com.comfyui.mobile.ui.screens.RhTaskRecordsScreen
 import com.comfyui.mobile.ui.screens.SettingsScreen
 import com.comfyui.mobile.ui.screens.ThemeSettingsScreen
@@ -319,7 +319,7 @@ fun MainScreen(viewModel: MainViewModel) {
                 composable(Screen.Control.route) { ControlScreen(viewModel) }
                 composable(Screen.Agent.route) { AgentScreen(navController, viewModel) }
                 composable(Screen.AiApps.route) { AiAppsScreen(navController, viewModel) }
-                composable(Screen.Gallery.route) { GalleryScreen(navController, viewModel) }
+                composable(Screen.Gallery.route) { GalleryHomeScreen(navController, viewModel) }
                 composable("ai_app/{id}") { backStack ->
                     val id = backStack.arguments?.getString("id").orEmpty()
                     AiAppDetailScreen(navController, viewModel, id)

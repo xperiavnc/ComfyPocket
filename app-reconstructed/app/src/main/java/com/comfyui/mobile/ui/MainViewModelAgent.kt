@@ -845,7 +845,7 @@ object MainViewModelAgent {
         invalidateContext(vm)
         com.comfyui.mobile.agent.AgentPromptSettingsStore(vm.prefs).save(value)
         vm._agentPromptSettings.value = value
-        vm.showUserMessage("已保存提示词格式与本地词库设置")
+        vm.showUserMessage("已保存本地词库设置")
     }
 
     fun resetAgentSystemPrompt(vm: MainViewModel) {
@@ -1135,7 +1135,7 @@ object MainViewModelAgent {
         }
 
         val systemPrompt = com.comfyui.mobile.agent.AgentPromptPolicy.system(
-            persona, drawRules, settings.tagSettings.promptFormat, matchedLores)
+            persona, drawRules, matchedLores)
 
         val messages = mutableListOf<com.comfyui.mobile.network.ChatMessageDto>()
         messages.add(com.comfyui.mobile.network.ChatMessageDto("system", systemPrompt))
@@ -1204,8 +1204,7 @@ object MainViewModelAgent {
             }
             checkCurrent()
             Result.success(parseAgentLlmReply(vm, output.content, output.reasoning,
-                userText = userText, previousPrompt = settings.lastPrompt,
-                promptFormat = settings.tagSettings.promptFormat))
+                userText = userText, previousPrompt = settings.lastPrompt))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1334,11 +1333,10 @@ object MainViewModelAgent {
         raw: String,
         apiReasoning: String? = null,
         userText: String = "",
-        previousPrompt: String? = null,
-        promptFormat: com.comfyui.mobile.agent.AgentPromptFormat = com.comfyui.mobile.agent.AgentPromptFormat.TAGS
+        previousPrompt: String? = null
     ): AgentLlmResult {
         val thinking = (apiReasoning?.takeIf { it.isNotBlank() } ?: extractThinkingContent(raw)).trim()
-        val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(sanitizeThinkingContent(raw), preserveNaturalLanguage = promptFormat != com.comfyui.mobile.agent.AgentPromptFormat.TAGS)
+        val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(sanitizeThinkingContent(raw), preserveNaturalLanguage = true)
         val lastPrompt = previousPrompt ?: vm._agentLastExpandedPrompt.value.trim().ifBlank {
             vm._agentMessages.value.asReversed().firstOrNull {
                 it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()

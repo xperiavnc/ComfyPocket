@@ -19,7 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.comfyui.mobile.agent.AgentPromptFormat
 import com.comfyui.mobile.agent.AgentPromptSettings
 import com.comfyui.mobile.taglib.LocalTagEntry
 import com.comfyui.mobile.taglib.LocalTagLibrary
@@ -63,17 +62,9 @@ internal fun AgentLocalTagSettings(
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("提示词格式与本地词库", style = MiuixTheme.textStyles.title4)
+            Text("本地词库", style = MiuixTheme.textStyles.title4)
             Text("人设只管对话，分镜负责编写正向和反向；JSON 格式由 App 统一。",
                 style = MiuixTheme.textStyles.footnote1)
-            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                AgentPromptFormat.entries.forEach { format ->
-                    Button(onClick = { draft = draft.copy(promptFormat = format) },
-                        colors = if (draft.promptFormat == format) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors()) {
-                        Text(format.title)
-                    }
-                }
-            }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("绘图前查询本地词库", Modifier.weight(1f))
                 Switch(checked = draft.useLocalLibrary, onCheckedChange = { draft = draft.copy(useLocalLibrary = it) })
@@ -81,7 +72,7 @@ internal fun AgentLocalTagSettings(
             Text("内置 ${String.format(Locale.ROOT, "%,d", counts.first)} 个标签、${String.format(Locale.ROOT, "%,d", counts.second)} 个角色，均有中文对照。中文、英文和别名均可离线查询，再由 Agent 编写正向和反向；不访问 Danbooru、不增加模型修订轮次。部分翻译可能有误，未命中保留原词。",
                 style = MiuixTheme.textStyles.footnote1)
             Button(onClick = { onSave(draft) }, colors = ButtonDefaults.buttonColorsPrimary()) {
-                Text("保存提示词与词库设置")
+                Text("保存词库设置")
             }
             Text("本地查词（不调用 AI、不出图）", style = MiuixTheme.textStyles.body2)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

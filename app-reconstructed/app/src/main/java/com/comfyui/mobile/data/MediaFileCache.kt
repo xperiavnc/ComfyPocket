@@ -2,6 +2,7 @@ package com.comfyui.mobile.data
 
 import android.content.Context
 import coil.Coil
+import coil.ImageLoader
 import coil.annotation.ExperimentalCoilApi
 import coil.disk.DiskCache
 import java.io.File
@@ -13,8 +14,13 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import okhttp3.Call
+import okhttp3.Callback
 import okhttp3.Request
+import okhttp3.Response
 import okio.buffer
 import okio.sink
 import okio.source
@@ -26,13 +32,17 @@ import okio.source
 internal object MediaFileCache {
     private val locks = List(32) { Mutex() }
 
-    suspend fun originalForShare(context: Context, url: String, filename: String, calls: Call.Factory): File =
+    suspend fun originalForShare(
+        context: Context, url: String, filename: String, calls: Call.Factory,
+        imageLoader: ImageLoader? = null, cacheKey: String = url, cacheFolder: String = "share_cache",
+        httpError: (Int) -> IOException = { IOException("Image download HTTP $it") }
+    ): File =
         withContext(Dispatchers.IO) {
             // Use the same full URL key as Coil, including server, folder and query.
-            val digest = MessageDigest.getInstance("SHA-256").digest(url.toByteArray())
+            val digest = MessageDigest.getInstance("SHA-256").digest(cacheKey.toByteArray())
                 .joinToString("") { "%02x".format(it) }
-            locks[(url.hashCode() and Int.MAX_VALUE) % locks.size].withLock {
-                val directory = File(context.cacheDir, "share_cache").apply { mkdirs() }
+            locks[(cacheKey.hashCode() and Int.MAX_VALUE) % locks.size].withLock {
+                val directory = File(context.cacheDir, cacheFolder).apply { mkdirs() }
                 val dest = File(directory, "remote_${digest}_${filename.takeLast(120)}")
                 if (dest.isFile && dest.length() > 0L) {
                     dest.setLastModified(System.currentTimeMillis())
@@ -40,16 +50,12 @@ internal object MediaFileCache {
                 }
                 val temp = File.createTempFile("share_", ".part", directory)
                 try {
-                    val cache = Coil.imageLoader(context).diskCache
-                    if (!copyCachedOriginal(cache, url, temp)) {
-                        calls.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                            if (!response.isSuccessful) throw IOException("Image download HTTP ${response.code}")
-                            val body = response.body ?: throw IOException("Empty image response")
-                            body.byteStream().use { input -> temp.outputStream().use { input.copyTo(it) } }
-                        }
+                    val cache = (imageLoader ?: Coil.imageLoader(context)).diskCache
+                    if (!copyCachedOriginal(cache, cacheKey, temp)) {
+                        download(calls, url, temp, httpError)
                         currentCoroutineContext().ensureActive()
                         if (temp.length() <= 0L) throw IOException("Empty image file")
-                        storeOriginal(cache, url, temp)
+                        storeOriginal(cache, cacheKey, temp)
                     }
                     currentCoroutineContext().ensureActive()
                     if (!temp.renameTo(dest)) throw IOException("Share file rename failed")
@@ -58,6 +64,31 @@ internal object MediaFileCache {
                     temp.delete()
                 }
             }
+        }
+
+    private suspend fun download(calls: Call.Factory, url: String, dest: File, httpError: (Int) -> IOException): Unit =
+        suspendCancellableCoroutine { continuation ->
+            val call = calls.newCall(Request.Builder().url(url).build())
+            continuation.invokeOnCancellation { call.cancel() }
+            call.enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) continuation.resumeWithException(e)
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    response.use {
+                        try {
+                            if (!response.isSuccessful) throw httpError(response.code)
+                            val body = response.body ?: throw IOException("Empty image response")
+                            body.byteStream().use { input -> dest.outputStream().use { input.copyTo(it) } }
+                            if (continuation.isActive) continuation.resume(Unit)
+                        } catch (e: Exception) {
+                            if (continuation.isActive) continuation.resumeWithException(e)
+                        } finally {
+                            if (continuation.isCancelled) dest.delete()
+                        }
+                    }
+                }
+            })
         }
 
     @OptIn(ExperimentalCoilApi::class)

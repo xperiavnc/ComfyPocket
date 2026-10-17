@@ -127,7 +127,7 @@ import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 @Composable
-fun GalleryScreen(navController: NavController, viewModel: GalleryUi) {
+fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePicker: @Composable () -> Unit = {}) {
     val mediaList by viewModel.sessionMediaList.collectAsState()
     val localMediaList by viewModel.localMediaList.collectAsState()
     val gallerySource by viewModel.gallerySource.collectAsState()
@@ -255,7 +255,6 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi) {
                                 onDismissRequest = { showOverflowMenu = false }
     ) {
                                 val menuItems = buildList {
-                                    add(if (isLocalGallery) "切换到服务器" else "切换到本地")
                                     if (isLocalGallery) add("分类管理")
                                     add("刷新")
                                 }
@@ -295,6 +294,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi) {
                 .padding(horizontal = 20.dp)
                 .padding(top = innerPadding.calculateTopPadding() + 12.dp)
     ) {
+            sourcePicker()
             if (isLocalGallery) {
                 val uncategorizedCount = remember(localMediaList, categoryAssignments) {
                     localMediaList.count { categoryAssignments[keyFor(it)] == null }

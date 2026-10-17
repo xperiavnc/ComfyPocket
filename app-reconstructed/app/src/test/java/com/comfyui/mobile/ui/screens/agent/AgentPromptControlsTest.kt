@@ -12,7 +12,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
-import com.comfyui.mobile.agent.AgentPromptFormat
 import com.comfyui.mobile.agent.AgentPromptSettings
 import com.comfyui.mobile.agent.AgentPromptBinding
 import com.comfyui.mobile.agent.AgentPromptOutput
@@ -38,7 +37,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @LooperMode(LooperMode.Mode.PAUSED)
 class AgentPromptControlsTest {
     @get:Rule val compose = createEmptyComposeRule()
-    @Test fun selectsPromptFormatAndSavesTheActualDraft() {
+    @Test fun removedFormatOptionsStayAbsentAndLibrarySettingSaves() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         var saved: AgentPromptSettings? = null
         try {
@@ -50,9 +49,10 @@ class AgentPromptControlsTest {
                 } }
             })
             compose.waitForIdle()
-            compose.onNodeWithText("Anima 混合").performClick()
-            compose.onNodeWithText("保存提示词与词库设置").performScrollTo().performClick()
-            assertEquals(AgentPromptFormat.ANIMA, saved!!.promptFormat)
+            compose.onNodeWithText("Anima 混合").assertDoesNotExist()
+            compose.onNodeWithText("通用 Tags").assertDoesNotExist()
+            compose.onNodeWithText("自然语言 / 反推").assertDoesNotExist()
+            compose.onNodeWithText("保存词库设置").performScrollTo().performClick()
             assertTrue(saved!!.useLocalLibrary)
         } finally { controller.pause().stop().destroy() }
     }
