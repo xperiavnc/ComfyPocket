@@ -4,6 +4,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CivitaiJsonTest {
+    @Test fun normalBrowsingDoesNotForceEarlyAccessOnly() {
+        val url = CivitaiJson.searchUrl(MarketQuery(), 1, null, CivitaiSettings())
+        assertNull(url.queryParameter("earlyAccess"))
+        assertEquals("20", url.queryParameter("limit"))
+    }
+
+    @Test fun checkpointAndUnetUseDifferentOfficialTypes() {
+        fun types(type: String) = CivitaiJson.searchUrl(
+            MarketQuery(type = type), 1, null, CivitaiSettings()
+        ).queryParameterValues("types")
+        assertEquals(listOf("Checkpoint"), types("CHECKPOINT"))
+        assertEquals(listOf("UNet"), types("UNET"))
+        assertEquals(listOf("LORA"), types("LORA"))
+    }
+
+    @Test fun ggufUsesFormatArrayAcrossCheckpointAndUnet() {
+        val url = CivitaiJson.searchUrl(MarketQuery(type = "GGUF"), 1, null, CivitaiSettings())
+        assertEquals(listOf("Checkpoint", "UNet"), url.queryParameterValues("types"))
+        assertEquals(listOf("GGUF", "GGUF"), url.queryParameterValues("fileFormats"))
+        assertNull(url.queryParameter("earlyAccess"))
+    }
+
     @Test fun keywordSearchUsesOpaqueCursorAndNeverPageOrSort() {
         val url = CivitaiJson.searchUrl(MarketQuery("cat & dog"), 7, "a|b+c/=", CivitaiSettings())
         assertEquals("cat & dog", url.queryParameter("query"))

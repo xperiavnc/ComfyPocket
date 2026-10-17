@@ -19,6 +19,42 @@ class MarketCatalogControllerTest {
             nextCursor = cursor, totalPages = totalPages
         ))
 
+    @Test fun emptyPageWithCursorStillAllowsBrowsingTheNextPage() = runTest {
+        val catalog = MarketCatalogController(this) { _, page, _, _ ->
+            if (page == 1) result(cursor = "next") else result(2)
+        }
+        catalog.load(); advanceUntilIdle()
+        assertTrue(catalog.state.value.items.isEmpty())
+        assertNull(catalog.state.value.error)
+        assertTrue(catalog.state.value.hasNextPage)
+        catalog.load(reset = false); advanceUntilIdle()
+        assertEquals(listOf(2L), catalog.state.value.items.map { it.id })
+        assertEquals(2, catalog.state.value.loadedPage)
+    }
+
+    @Test fun cursorCycleStopsBrowsingEvenWithLegacyTotalPages() = runTest {
+        var calls = 0
+        val catalog = MarketCatalogController(this) { _, _, _, _ ->
+            calls++
+            result(calls.toLong(), cursor = if (calls == 2) "B" else "A", totalPages = 100)
+        }
+        repeat(3) {
+            catalog.load(reset = it == 0); advanceUntilIdle()
+        }
+        assertFalse(catalog.state.value.hasNextPage)
+        catalog.load(reset = false); advanceUntilIdle()
+        assertEquals(3, calls)
+    }
+
+    @Test fun refreshResetsCursorHistoryAndCanBrowseAgain() = runTest {
+        val catalog = MarketCatalogController(this) { _, _, _, _ -> result(1, cursor = "same") }
+        catalog.load(); advanceUntilIdle()
+        catalog.load(reset = false); advanceUntilIdle()
+        assertFalse(catalog.state.value.hasNextPage)
+        catalog.load(forceRefresh = true); advanceUntilIdle()
+        assertTrue(catalog.state.value.hasNextPage)
+    }
+
     @Test fun firstLoadDoesNotRequireAnyComfyServerAndEnsureLoadedDoesNotReload() = runTest {
         var calls = 0
         val catalog = MarketCatalogController(this) { _, _, _, _ -> calls++; result(1) }

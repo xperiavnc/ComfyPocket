@@ -561,6 +561,38 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("sort", upstream["query"])
         self.assertFalse(any("/api/lm/" in item["path"] for item in self.requests))
 
+    async def test_search_categories_use_canonical_types_and_gguf_array(self):
+        _, app = self.load_plugin()
+        captured = []
+        async def fake_catalog(endpoint, params):
+            captured.append(list(params))
+            return {"items": [], "metadata": {}}
+        with patch.object(self.client, "json", new=fake_catalog):
+            async with TestClient(TestServer(app)) as client:
+                for kind in ("CHECKPOINT", "UNET", "GGUF"):
+                    response = await client.get("/api/mobile/civitai/search", params={"type": kind})
+                    self.assertEqual(response.status, 200)
+        self.assertEqual([v for k, v in captured[0] if k == "types"], ["Checkpoint"])
+        self.assertEqual([v for k, v in captured[1] if k == "types"], ["UNet"])
+        self.assertEqual([v for k, v in captured[2] if k == "types"], ["Checkpoint", "UNet"])
+        self.assertEqual([v for k, v in captured[2] if k == "fileFormats"], ["GGUF", "GGUF"])
+        self.assertTrue(all(k != "earlyAccess" for params in captured for k, _ in params))
+
+    async def test_gguf_search_keeps_base_filter_and_cursor(self):
+        _, app = self.load_plugin()
+        captured = []
+        async def fake_catalog(endpoint, params):
+            captured.extend(params)
+            return {"items": [], "metadata": {}}
+        with patch.object(self.client, "json", new=fake_catalog):
+            async with TestClient(TestServer(app)) as client:
+                response = await client.get("/api/mobile/civitai/search", params={
+                    "type": "GGUF", "baseModel": "Krea 2", "cursor": "opaque|next"})
+                self.assertEqual(response.status, 200)
+        self.assertIn(("baseModels", "Krea 2"), captured)
+        self.assertIn(("cursor", "opaque|next"), captured)
+        self.assertFalse(any(k == "page" for k, _ in captured))
+
     async def test_bridge_search_invalid_pagination_does_not_contact_upstream(self):
         _, app = self.load_plugin()
         async with TestClient(TestServer(app)) as client:

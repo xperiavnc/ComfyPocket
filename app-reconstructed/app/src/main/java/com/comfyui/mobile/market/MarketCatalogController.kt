@@ -23,6 +23,7 @@ data class MarketCatalogState(
     val loading: Boolean = false,
     val error: String? = null,
     val notice: String? = null,
+    val loadedPage: Int = 0,
     val hasNextPage: Boolean = false
 )
 
@@ -40,6 +41,7 @@ class MarketCatalogController(
     private var page = 0
     private var nextPage: Int? = null
     private var cursor: String? = null
+    private val seenCursors = mutableSetOf<String>()
     private var lastAttemptReset = true
     private var lastForceRefresh = false
 
@@ -65,8 +67,10 @@ class MarketCatalogController(
         page = 0
         cursor = null
         nextPage = null
+        seenCursors.clear()
         mutableState.value = state.value.copy(
-            items = emptyList(), loading = false, error = null, notice = null, hasNextPage = false
+            items = emptyList(), loading = false, error = null, notice = null,
+            loadedPage = 0, hasNextPage = false
         )
     }
 
@@ -76,6 +80,7 @@ class MarketCatalogController(
         lastForceRefresh = forceRefresh
         if (reset) {
             job?.cancel()
+            seenCursors.clear()
             activeQuery = MarketQuery(state.value.keyword.trim(), state.value.type, state.value.baseModel)
         }
         val requestGeneration = ++generation
@@ -94,17 +99,19 @@ class MarketCatalogController(
                 if (requestGeneration != generation) return@launch
                 val data = result.page
                 val items = ((if (reset) emptyList() else state.value.items) + data.items).distinctBy { it.id }
-                page = targetPage
+                page = data.currentPage.coerceAtLeast(targetPage)
                 nextPage = data.nextPage
-                // Stop a looping cursor, even if the upstream accidentally repeats it.
-                cursor = data.nextCursor?.takeIf { it.isNotBlank() && (reset || it != targetCursor) }
+                // Detect both immediate repetition and longer A -> B -> A cursor loops.
+                val candidate = data.nextCursor?.takeIf { it.isNotBlank() }
+                val looping = candidate != null && !seenCursors.add(candidate)
+                cursor = candidate.takeUnless { looping }
                 loaded = true
                 lastSuccessfulQuery = targetQuery
-                val more = cursor != null || (targetQuery.keyword.isEmpty() &&
-                    (nextPage != null || targetPage < data.totalPages))
+                val more = !looping && (cursor != null || (targetQuery.keyword.isEmpty() &&
+                    (nextPage != null || page < data.totalPages)))
                 mutableState.value = state.value.copy(
-                    items = items, loading = false, hasNextPage = more,
-                    error = if (items.isEmpty()) "未找到相关模型，请尝试更换关键词" else null,
+                    items = items, loading = false, hasNextPage = more, loadedPage = page,
+                    error = if (items.isEmpty() && !more) "未找到相关模型，请尝试更换关键词或筛选" else null,
                     notice = result.warning ?: if (result.fromCache) "正在显示本地缓存，刷新可获取最新内容" else null
                 )
             } catch (cancelled: CancellationException) {

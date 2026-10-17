@@ -64,7 +64,8 @@ class CivitaiRepository(
     ): MarketSearchResult = withContext(Dispatchers.IO) {
         val config = settings
         val identity = bridgeIdentity
-        val key = "${config.cacheNamespace(identity)}|search|${gson.toJson(query)}|$page|$cursor"
+        // v2 invalidates old early-access-only pages and the former Checkpoint-only type mapping.
+        val key = "${config.cacheNamespace(identity)}|search-v2|${gson.toJson(query)}|$page|$cursor"
         if (config.mode == MarketConnectionMode.BRIDGE) {
             check(bridgeAvailable) { "请先连接 ComfyUI 电脑，或在集市设置中切换为手机直连" }
             val result = cached(key, CivitaiSearchPageData::class.java, forceRefresh) {
@@ -75,14 +76,16 @@ class CivitaiRepository(
                 currentCoroutineContext().ensureActive()
                 value.getOrThrow()
             }
-            return@withContext MarketSearchResult(result.value, result.fromCache, result.warning)
+            return@withContext MarketSearchResult(
+                MarketModelFilters.page(result.value, query), result.fromCache, result.warning
+            )
         }
         val http = client
         val result = cached(key, CivitaiSearchPageData::class.java, forceRefresh) {
             CivitaiJson.page(CivitaiHttp.text(http,
                 CivitaiHttp.request(CivitaiJson.searchUrl(query, page, cursor, config))), page)
         }
-        MarketSearchResult(result.value, result.fromCache, result.warning)
+        MarketSearchResult(MarketModelFilters.page(result.value, query), result.fromCache, result.warning)
     }
 
     suspend fun details(

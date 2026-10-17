@@ -97,3 +97,10 @@ node --test tests/settings_panel.test.mjs
 插件回退：停止 ComfyUI，换回第 1 步备份的完整插件目录，再启动并强制刷新网页。
 保留服务端 `user/mobile_bridge` 配置以便升级后恢复；删除 Key 应使用设置页的清除按钮。
 旧手机/插件的下载行为与新版不同，回退时保持版本配套。
+
+## 2.0.1 分类筛选修正
+
+- Checkpoint 与 UNet 使用各自官方类型，不再把 UNet 请求转换为 Checkpoint。
+- GGUF 在 Checkpoint/UNet 内使用文件格式数组筛选，同时保留基础模型与不透明分页游标。
+- 不设置 earlyAccess=true，普通列表不会被限制为仅抢先体验。
+- 升级时替换整个插件目录并重启 ComfyUI；已有电脑 Key 存储不变。手机直连分类修正只需要更新 APK。

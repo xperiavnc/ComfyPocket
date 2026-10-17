@@ -451,7 +451,7 @@ def _list_native_models(
 async def handle_mobile_status(request: web.Request) -> web.Response:
     return web.json_response({
         "code": 0, "msg": "success", "data": {
-            "version": "2.0.0", "name": "ComfyUI-Mobile-Bridge",
+            "version": "2.0.1", "name": "ComfyUI-Mobile-Bridge",
             "loraManagerInstalled": False,
             "capabilities": ["native-civitai-downloads", "civitai-server-settings"],
             "supportedTypes": ["CHECKPOINT", "LORA", "UNET", "GGUF"]
@@ -801,8 +801,14 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
     type_upper = m_type.upper()
     if type_upper in ("LORA", "LORAS"):
         params.append(("types", "LORA"))
-    elif type_upper in ("CHECKPOINT", "CHECKPOINTS", "UNET", "GGUF"):
+    elif type_upper in ("CHECKPOINT", "CHECKPOINTS"):
         params.append(("types", "Checkpoint"))
+    elif type_upper == "UNET":
+        params.append(("types", "UNet"))
+    elif type_upper == "GGUF":
+        params.extend([("types", "Checkpoint"), ("types", "UNet")])
+        # REST requires an array; a single query value is parsed as a string.
+        params.extend([("fileFormats", "GGUF"), ("fileFormats", "GGUF")])
     elif m_type and type_upper not in ("ALL", "全部"):
         params.append(("types", m_type))
 

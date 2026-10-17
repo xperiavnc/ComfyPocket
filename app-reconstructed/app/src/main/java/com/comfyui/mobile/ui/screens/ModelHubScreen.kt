@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,12 +59,16 @@ import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.Coil
 import com.comfyui.mobile.market.MarketConnectionMode
+import com.comfyui.mobile.market.MarketModelFilters
+import com.comfyui.mobile.market.MarketQuery
 import com.comfyui.mobile.market.MarketViewModel
 import com.comfyui.mobile.network.ConnectionState
 import com.comfyui.mobile.model.CivitaiModelItem
 import com.comfyui.mobile.model.CivitaiFileItem
 import com.comfyui.mobile.model.CivitaiVersionItem
 import com.comfyui.mobile.ui.MainViewModel
+import com.comfyui.mobile.Screen
+import com.comfyui.mobile.ui.navigation.MarketBackNavigationGate
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserFilterChipBar
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserManageFilterDialog
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserTypeTabs
@@ -71,6 +77,7 @@ import com.comfyui.mobile.ui.screens.market.MarketModelInformation
 import com.comfyui.mobile.ui.screens.market.MarketDownloadQueueDialog
 import com.comfyui.mobile.ui.screens.market.MarketSettingsDialog
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
@@ -145,6 +152,25 @@ fun ModelHubScreen(
     var detailLoading by remember { mutableStateOf(false) }
     var detailError by remember { mutableStateOf<String?>(null) }
     var detailAttempt by remember { mutableIntStateOf(0) }
+    val backNavigation = remember { MarketBackNavigationGate() }
+    fun returnFromMarket() {
+        backNavigation.leave(
+            isCurrentMarket = navController.currentDestination?.route == "model_hub",
+            pop = { navController.popBackStack() },
+            openDashboard = {
+                navController.navigate(Screen.Dashboard.route) {
+                    popUpTo("model_hub") { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        )
+    }
+    // Leaf-level handler overrides NavHost's predictive pop only on this page.
+    // Miuix keeps ownership while a dialog is open, so one back dismisses only that dialog.
+    BackHandler(enabled = !showManageFilterDialog && !showMarketSettings &&
+        !showDownloadQueue && selectedModelDetail == null) {
+        returnFromMarket()
+    }
 
     fun resolveImageUrl(rawUrl: String?): String? {
         if (rawUrl.isNullOrBlank()) return null
@@ -169,15 +195,29 @@ fun ModelHubScreen(
         if (selectedTabIndex == 0) market.catalog.ensureLoaded()
         if (selectedTabIndex == 1 && remoteReady) viewModel.fetchAssetsSummary()
     }
+    LaunchedEffect(selectedTabIndex, selectedType, selectedFilterTag,
+        hasNextPage, isSearching, searchError, catalog.loadedPage) {
+        if (selectedTabIndex != 0 || !hasNextPage || isSearching || searchError != null) return@LaunchedEffect
+        snapshotFlow {
+            val layout = gridState.layoutInfo
+            layout.totalItemsCount > 0 &&
+                (layout.visibleItemsInfo.lastOrNull()?.index ?: -1) >= layout.totalItemsCount - 5
+        }.distinctUntilChanged().collect { nearEnd ->
+            if (nearEnd) market.catalog.load(reset = false)
+        }
+    }
     LaunchedEffect(selectedModelDetail?.id, selectedVersion?.id, detailAttempt) {
         val model = selectedModelDetail ?: return@LaunchedEffect
         detailLoading = true
         detailError = null
         try {
             val result = market.details(model, selectedVersion?.id, detailAttempt > 0)
-            selectedModelDetail = result.model
-            val version = result.model.versions.firstOrNull { it.id == selectedVersion?.id }
-                ?: result.model.versions.firstOrNull()
+            val filtered = MarketModelFilters.model(
+                result.model, MarketQuery(type = selectedType, baseModel = selectedFilterTag)
+            ) ?: error("详情中没有符合当前分类与标签的版本，请返回更换筛选")
+            selectedModelDetail = filtered
+            val version = filtered.versions.firstOrNull { it.id == selectedVersion?.id }
+                ?: filtered.versions.firstOrNull()
             selectedVersion = version
             selectedFile = version?.files?.firstOrNull { it.id == selectedFile?.id }
                 ?: version?.preferredFile()
@@ -200,7 +240,7 @@ fun ModelHubScreen(
                 color = scheme.background,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = { returnFromMarket() }) {
                         Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 },
@@ -426,9 +466,25 @@ fun ModelHubScreen(
                                     if (hasNextPage) {
                                         item(span = { GridItemSpan(2) }) {
                                             TextButton(
-                                                text = if (isSearching) "正在加载..." else "加载更多",
-                                                onClick = { loadCivitai(reset = false) },
+                                                text = when {
+                                                    isSearching -> "正在加载更多..."
+                                                    searchError != null -> "加载失败，点击重试"
+                                                    else -> "已加载 ${civitaiModels.size} 个 · 加载更多"
+                                                },
+                                                onClick = {
+                                                    if (searchError != null) market.catalog.retry()
+                                                    else loadCivitai(reset = false)
+                                                },
                                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                                            )
+                                        }
+                                    } else if (civitaiModels.isNotEmpty()) {
+                                        item(span = { GridItemSpan(2) }) {
+                                            Text(
+                                                "已显示 ${civitaiModels.size} 个模型，当前筛选已到底",
+                                                style = MiuixTheme.textStyles.footnote1,
+                                                color = scheme.onSecondaryContainer,
+                                                modifier = Modifier.padding(vertical = 12.dp)
                                             )
                                         }
                                     }

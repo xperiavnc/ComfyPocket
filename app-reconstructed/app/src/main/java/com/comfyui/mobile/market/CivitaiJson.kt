@@ -29,24 +29,30 @@ internal object CivitaiJson {
     ): HttpUrl = endpoint("models").newBuilder().apply {
         addQueryParameter("limit", "20")
         addQueryParameter("nsfw", settings.includeMatureContent.toString())
-        addQueryParameter("earlyAccess", "true")
         val keyword = query.keyword.trim()
         if (keyword.isNotEmpty()) addQueryParameter("query", keyword)
         // Query search forbids page. Cursors are opaque; do not split or increment them.
         if (!cursor.isNullOrBlank()) addQueryParameter("cursor", cursor)
         else if (keyword.isEmpty() && page > 1) addQueryParameter("page", page.toString())
         if (keyword.isEmpty()) addQueryParameter("sort", "Highest Rated")
-        val type = when (query.type.uppercase()) {
-            "LORA", "LORAS" -> "LORA"
-            "CHECKPOINT", "CHECKPOINTS", "UNET", "GGUF" -> "Checkpoint"
-            "ALL", "全部", "" -> null
-            else -> query.type
+        val types = when (query.type.uppercase()) {
+            "LORA", "LORAS" -> listOf("LORA")
+            "CHECKPOINT", "CHECKPOINTS" -> listOf("Checkpoint")
+            "UNET" -> listOf("UNet")
+            "GGUF" -> listOf("Checkpoint", "UNet")
+            "ALL", "全部", "" -> emptyList()
+            else -> listOf(query.type)
         }
-        type?.let { addQueryParameter("types", it) }
+        types.forEach { addQueryParameter("types", it) }
+        if (query.type.equals("GGUF", true)) {
+            // The REST schema requires an array; one query value is parsed as a string.
+            // Repeating the same value encodes a one-format array without widening it.
+            repeat(2) { addQueryParameter("fileFormats", "GGUF") }
+        }
         baseModels(query.baseModel).forEach { addQueryParameter("baseModels", it) }
     }.build()
 
-    private fun baseModels(tag: String): List<String> = when (tag) {
+    internal fun baseModels(tag: String): List<String> = when (tag) {
         "全部", "All", "" -> emptyList()
         "SDXL" -> listOf("SDXL 1.0", "SDXL Turbo", "SDXL Lightning", "SDXL 1.0 LCM")
         "Illustrious" -> listOf("Illustrious", "NoobAI")
