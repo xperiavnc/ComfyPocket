@@ -9,20 +9,22 @@ import android.net.Uri
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import android.widget.Toast
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.comfyui.mobile.danbooru.*
-import com.comfyui.mobile.ui.screens.CategoryChip
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -97,7 +99,8 @@ internal fun DanbooruDetailScreen(
                 val cacheKey = post.mediaKey(runtime.settings.namespace(), representation, url)
                 AsyncImage(ImageRequest.Builder(context).data(url).diskCacheKey(cacheKey).memoryCacheKey(cacheKey).build(),
                     contentDescription = "帖子预览", imageLoader = runtime.imageLoader,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 440.dp),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 440.dp)
+                        .clip(RoundedCornerShape(18.dp)).background(MiuixTheme.colorScheme.surfaceContainerHigh),
                     contentScale = ContentScale.Fit, onError = { failure = danbooruMediaError(it.result.throwable) })
             } else Text((failure ?: "图片暂不可用") + "；仍可查看和复制下方 Tag")
             if (post.isVideo) Text("视频 / 动态资源（${post.extension}）：首版提供封面与 Tag，播放请打开原帖")
@@ -105,19 +108,26 @@ internal fun DanbooruDetailScreen(
             if (state.detailLoading) Text("正在更新帖子信息…", style = MiuixTheme.textStyles.footnote1)
         }
         item {
-            Text("#${post.id} · 评级 ${post.rating.uppercase()} · ${post.width ?: "?"} × ${post.height ?: "?"} · ${post.extension}")
-            Text("画师：${post.tags[TagGroup.ARTIST].orEmpty().joinToString(" / ").ifBlank { "未标注" }}")
-            if (post.source.isNotBlank()) Text("来源：${post.source}", style = MiuixTheme.textStyles.footnote1)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(text = "打开原帖", onClick = { openWeb(context, post.postUrl) })
-                if (post.source.startsWith("https://") || post.source.startsWith("http://"))
-                    TextButton(text = "外部来源", onClick = { openWeb(context, post.source) })
+            Card(colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainerHigh), cornerRadius = 14.dp) {
+                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("画师  ${post.tags[TagGroup.ARTIST].orEmpty().joinToString(" / ").ifBlank { "未标注" }}",
+                        style = MiuixTheme.textStyles.body2)
+                    Text("#${post.id} · ${post.width ?: "?"} × ${post.height ?: "?"} · ${post.extension.uppercase()} · ${post.rating.uppercase()}",
+                        style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer)
+                    if (post.source.isNotBlank()) Text(post.source, style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (post.fileUrl != null && !post.isVideo) {
+                            DanbooruSmallAction(if (busy) "读取中…" else "保存原图", enabled = !busy) { download(false) }
+                            DanbooruSmallAction("分享原图", enabled = !busy) { download(true) }
+                            DanbooruSmallAction(if (original) "显示预览" else "查看原图") { original = !original }
+                        }
+                        DanbooruSmallAction("原帖") { openWeb(context, post.postUrl) }
+                        if (post.source.startsWith("https://") || post.source.startsWith("http://"))
+                            DanbooruSmallAction("来源") { openWeb(context, post.source) }
+                    }
+                }
             }
-            if (post.fileUrl != null && !post.isVideo) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                TextButton(text = if (original) "显示预览" else "查看原图", onClick = { original = !original })
-                TextButton(text = if (busy) "读取原图中…" else "保存原图", onClick = { download(false) })
-                TextButton(text = "分享原图", onClick = { download(true) })
-            } else Text("原图不可用；不会猜测下载地址", style = MiuixTheme.textStyles.footnote1)
         }
         item {
             DanbooruTagPanel(post, runtime.settings.copyOptions, state.selected,
@@ -127,68 +137,6 @@ internal fun DanbooruDetailScreen(
                         .setPrimaryClip(ClipData.newPlainText("Danbooru Tag", copied.text))
                     toast("已复制 ${copied.count} 个 Tag")
                 } else toast("尚未选中 Tag，剪贴板保持不变")
-            }
-        }
-    }
-}
-
-/** Display names are never fed back into formatting; selection always contains original names. */
-@Composable
-internal fun DanbooruTagPanel(
-    post: DanbooruPost, initialOptions: TagCopyOptions, selected: Set<String>,
-    onSelect: (String) -> Unit, onGroup: (TagGroup) -> Unit, onClear: () -> Unit,
-    onCopy: (CopiedTags) -> Unit
-) {
-    var mode by rememberSaveable(post.id) { mutableStateOf(initialOptions.mode) }
-    var spaces by rememberSaveable(post.id) { mutableStateOf(initialOptions.underscoresToSpaces) }
-    var escape by rememberSaveable(post.id) { mutableStateOf(initialOptions.escapeParentheses) }
-    var artists by rememberSaveable(post.id) { mutableStateOf(false) }
-    var copyright by rememberSaveable(post.id) { mutableStateOf(false) }
-    var meta by rememberSaveable(post.id) { mutableStateOf(false) }
-    val options = TagCopyOptions(mode, spaces, escape)
-    val promptGroups = setOf(TagGroup.GENERAL, TagGroup.CHARACTER) +
-        listOfNotNull(TagGroup.ARTIST.takeIf { artists }, TagGroup.COPYRIGHT.takeIf { copyright }, TagGroup.META.takeIf { meta })
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Tag · 单击复制，长按多选", style = MiuixTheme.textStyles.title4)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            TagCopyMode.entries.forEach { value -> CategoryChip(value.title, mode == value) { mode = value } }
-        }
-        if (mode == TagCopyMode.PROMPT) {
-            DanbooruSettingSwitch("下划线转空格", spaces) { spaces = it }
-            DanbooruSettingSwitch("括号转义（默认关闭）", escape) { escape = it }
-        }
-        Text("快捷提示词默认：通用＋角色；可附加以下分组", style = MiuixTheme.textStyles.footnote1)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            CategoryChip("画师", artists) { artists = !artists }
-            CategoryChip("作品", copyright) { copyright = !copyright }
-            CategoryChip("元信息", meta) { meta = !meta }
-        }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(text = "复制提示词", onClick = { onCopy(TagCopyFormatter.format(post, options.copy(mode = TagCopyMode.PROMPT), promptGroups)) })
-            TextButton(text = "复制全部", onClick = { onCopy(TagCopyFormatter.format(post, options)) })
-            if (selected.isNotEmpty()) {
-                TextButton(text = "复制选中 ${selected.size}", onClick = { onCopy(TagCopyFormatter.format(post, options, selected = selected)) })
-                TextButton(text = "清空选择", onClick = onClear)
-            }
-        }
-        TagGroup.entries.forEach { group ->
-            val tags = post.tags[group].orEmpty()
-            var expanded by rememberSaveable(post.id, group) { mutableStateOf(true) }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(text = "${if (expanded) "▾" else "▸"} ${group.title}（${tags.size}）", onClick = { expanded = !expanded })
-                if (tags.isNotEmpty()) TextButton(text = "全选${group.title}", onClick = { onGroup(group) })
-            }
-            if (expanded) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                tags.forEach { tag ->
-                    Card(Modifier.combinedClickable(
-                        onClick = {
-                            if (selected.isNotEmpty()) onSelect(tag)
-                            else onCopy(TagCopyFormatter.format(post, options, selected = setOf(tag)))
-                        }, onLongClick = { onSelect(tag) })) {
-                        Text((if (tag in selected) "✓ " else "") + tag, Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            style = MiuixTheme.textStyles.footnote1)
-                    }
-                }
             }
         }
     }

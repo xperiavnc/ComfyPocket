@@ -17,12 +17,14 @@ class DanbooruViewModelTest {
         override var settings = DanbooruSettings()
         override val repository get() = this
         val requests = mutableListOf<Pair<String, String?>>()
+        val refreshFlags = mutableListOf<Boolean>()
         var failSave = false
         var cleared = false
         var failTest: DanbooruException? = null
         var handler: (suspend (DanbooruQuery, String?) -> List<DanbooruPost>)? = null
         override suspend fun posts(query: DanbooruQuery, page: String?, refresh: Boolean): List<DanbooruPost> {
             requests += query.tags to page
+            refreshFlags += refresh
             handler?.let { return it(query, page) }
             val top = page?.removePrefix("b")?.toLong()?.minus(1) ?: 10000L
             return (0..39).map { fixture(top - it) }
@@ -185,5 +187,79 @@ class DanbooruViewModelTest {
         assertTrue(vm.logout().isSuccess)
         assertFalse(service.settings.loggedIn); assertTrue(service.settings.proxyEnabled)
         assertEquals("http://localhost:8080", service.settings.proxyAddress)
+    }
+    @Test fun hotSortResetsLatestCursorAndPreservesTagsAndExplicitRating() = runTest {
+        val service = Service()
+        service.handler = { _, page -> if (page == null) listOf(fixture(3), fixture(80)) else listOf(fixture(9), fixture(7)) }
+        val vm = DanbooruViewModel(SavedStateHandle(), service)
+        vm.setActive(true); advanceUntilIdle()
+        vm.sort("blue_sky rating:s order:score", DanbooruSort.HOT); advanceUntilIdle()
+        assertEquals("blue_sky rating:s", vm.state.value.query.text)
+        assertEquals(ContentFilter.SENSITIVE, vm.state.value.query.filter)
+        assertTrue(service.requests.last().first.contains("order:rank"))
+        assertNull(service.requests.last().second)
+        vm.loadNext(); advanceUntilIdle()
+        assertEquals("2", service.requests.last().second)
+        assertTrue(service.refreshFlags.last())
+        assertEquals(listOf(3L, 80L, 9L, 7L), vm.state.value.posts.map { it.id })
+    }
+    @Test fun rankPeriodAndDateSurviveSavedStateAndKeepNumberedPagination() = runTest {
+        val service = Service()
+        service.handler = { _, page -> listOf(fixture(if (page == null) 60 else 40)) }
+        val saved = SavedStateHandle()
+        val vm = DanbooruViewModel(saved, service)
+        vm.setActive(true); advanceUntilIdle()
+        vm.rankingPeriod("blue_sky", RankingPeriod.MONTH); advanceUntilIdle()
+        vm.rankingDate(java.time.LocalDate.of(2025, 12, 31)); advanceUntilIdle()
+        vm.loadNext(); advanceUntilIdle()
+        assertEquals("2", service.requests.last().second)
+        assertTrue(service.requests.last().first.contains("date:2025-12-01..2026-01-01"))
+        val restored = DanbooruViewModel(saved, service)
+        assertEquals(DanbooruSort.RANKING, restored.state.value.query.sort)
+        assertEquals(RankingPeriod.MONTH, restored.state.value.query.rankingPeriod)
+        assertEquals(vm.state.value.query.tags, restored.state.value.query.tags)
+    }
+    @Test fun pullRefreshKeepsPicturesAndRejectsDuplicateRefreshOrAppendUntilComplete() = runTest {
+        val service = Service(); val vm = DanbooruViewModel(SavedStateHandle(), service)
+        vm.setActive(true); advanceUntilIdle()
+        val previous = vm.state.value.posts
+        service.handler = { _, _ -> delay(100); listOf(fixture(20000)) }
+        vm.refresh(); runCurrent()
+        assertTrue(vm.state.value.refreshing)
+        assertEquals(previous, vm.state.value.posts)
+        vm.refresh(); vm.loadNext(); runCurrent()
+        assertEquals(2, service.requests.size)
+        advanceUntilIdle()
+        assertFalse(vm.state.value.refreshing)
+        assertEquals(listOf(20000L), vm.state.value.posts.map { it.id })
+        assertTrue(service.refreshFlags.last())
+        assertEquals(1, vm.state.value.pages.single().number)
+    }
+    @Test fun failedRefreshKeepsTheWindowAndCanRetryFromTheFirstPage() = runTest {
+        val service = Service(); val vm = DanbooruViewModel(SavedStateHandle(), service)
+        vm.setActive(true); advanceUntilIdle(); vm.loadNext(); advanceUntilIdle()
+        val previous = vm.state.value.pages
+        service.handler = { _, _ -> throw DanbooruException("refresh timeout") }
+        vm.refresh(); advanceUntilIdle()
+        assertFalse(vm.state.value.refreshing); assertEquals(previous, vm.state.value.pages)
+        assertEquals("refresh timeout", vm.state.value.error); assertFalse(vm.state.value.ended)
+        service.handler = { _, _ -> listOf(fixture(30000)) }
+        vm.refresh(); advanceUntilIdle()
+        assertNull(service.requests.last().second)
+        assertNull(vm.state.value.error); assertEquals(30000L, vm.state.value.posts.single().id)
+    }
+    @Test fun lateRefreshCannotOverwriteANewSortAndLeavingResetsIndicator() = runTest {
+        val service = Service(); val vm = DanbooruViewModel(SavedStateHandle(), service)
+        vm.setActive(true); advanceUntilIdle()
+        service.handler = { q, _ ->
+            if (q.sort == DanbooruSort.LATEST) withContext(NonCancellable) { delay(100); listOf(fixture(1)) }
+            else listOf(fixture(2))
+        }
+        vm.refresh(); runCurrent()
+        vm.sort("", DanbooruSort.HOT); advanceUntilIdle()
+        assertEquals(DanbooruSort.HOT, vm.state.value.query.sort)
+        assertEquals(2L, vm.state.value.posts.single().id)
+        assertFalse(vm.state.value.refreshing)
+        vm.setActive(false); assertFalse(vm.state.value.refreshing)
     }
 }

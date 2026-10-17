@@ -24,7 +24,7 @@
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.8`，版本号为 `10`。显示名 **ComfyPocket**，Agent 改动说明见 `AGENT.md`，在线画廊见 `DANBOORU_GALLERY_PLAN.md`。
+当前构建版本名为 `0.0.9`，版本号为 `11`。显示名 **ComfyPocket**，Agent 改动说明见 `AGENT.md`，在线画廊见 `DANBOORU_GALLERY_PLAN.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 

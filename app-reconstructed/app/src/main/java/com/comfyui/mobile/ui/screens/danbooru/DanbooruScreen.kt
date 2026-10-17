@@ -2,41 +2,26 @@ package com.comfyui.mobile.ui.screens.danbooru
 
 import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.unit.Velocity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.comfyui.mobile.danbooru.*
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
-import com.comfyui.mobile.ui.screens.CategoryChip
 import kotlinx.coroutines.flow.distinctUntilChanged
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -56,12 +41,12 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
     LaunchedEffect(state.message) {
         state.message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); vm.consumeMessage() }
     }
-    // Platform Dialog owns settings Back; otherwise exactly one completed gesture consumes one layer.
+    // The settings overlay owns Back; otherwise one completed gesture consumes one layer.
     PredictiveBackHandler(enabled = !state.settingsOpen && (vm.hasDetail || state.selected.isNotEmpty())) { events ->
         events.collect { }
         vm.back()
     }
-    val grid = rememberLazyGridState(vm.scrollIndex, vm.scrollOffset)
+    val grid = rememberLazyStaggeredGridState(vm.scrollIndex, vm.scrollOffset)
     LaunchedEffect(grid) {
         snapshotFlow { grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset }.collect {
             vm.scrollIndex = it.first; vm.scrollOffset = it.second
@@ -72,128 +57,61 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
     val keyboard = LocalSoftwareKeyboardController.current
     val clearance = LocalFloatingNavClearance.current
     val scope = runtime.settings.namespace()
-    val posts = remember(state.pages) { state.posts }
     val latestState by rememberUpdatedState(state)
     LaunchedEffect(grid, vm) {
         snapshotFlow {
             val s = latestState
-            val last = grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val last = grid.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
             val nearEnd = last >= grid.layoutInfo.totalItemsCount - 5 && s.posts.isNotEmpty()
             Triple(nearEnd, s.pages.lastOrNull()?.number, s.appending)
         }.distinctUntilChanged().collect { (near, _, busy) ->
             val s = vm.state.value
-            if (near && !busy && !vm.hasDetail && !s.settingsOpen && s.appendError == null && s.error == null) vm.loadNext()
+            if (near && !busy && !s.refreshing && !vm.hasDetail && !s.settingsOpen && s.appendError == null && s.error == null) vm.loadNext()
         }
     }
     Scaffold(containerColor = MiuixTheme.colorScheme.background, topBar = {
-        Row(Modifier.fillMaxWidth().statusBarsPadding().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (vm.hasDetail) TextButton(text = if (state.selected.isNotEmpty()) "退出多选" else "返回", onClick = vm::back)
-            Text(if (vm.hasDetail) "帖子 #${state.detail?.id ?: "…"}" else "画廊·Danbooru",
-                Modifier.weight(1f), style = MiuixTheme.textStyles.title3)
-            TextButton(text = "设置", onClick = vm::showSettings)
+        Row(Modifier.fillMaxWidth().statusBarsPadding().heightIn(min = 56.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (vm.hasDetail) IconButton(onClick = vm::back) {
+                Icon(MiuixIcons.Back, contentDescription = if (state.selected.isNotEmpty()) "退出多选" else "返回图片列表")
+            }
+            Text(if (state.selected.isNotEmpty()) "已选 ${state.selected.size} 个标签" else if (vm.hasDetail) "图片详情" else "画廊",
+                Modifier.weight(1f), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.SemiBold)
+            IconButton(onClick = vm::showSettings) { Icon(MiuixIcons.Settings, contentDescription = "Danbooru 设置") }
         }
     }) { padding ->
-        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).padding(horizontal = 20.dp)) {
             if (vm.hasDetail) {
                 DanbooruDetailScreen(state, runtime, vm, Modifier.weight(1f).padding(bottom = clearance))
             } else {
                 sourcePicker()
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextField(input, { input = it }, label = "搜索 Tag / Danbooru 语法", singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); vm.search(input) }),
-                        modifier = Modifier.weight(1f))
-                    TextButton(text = "搜索", onClick = { keyboard?.hide(); vm.search(input) })
-                }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${state.account.title}${state.identity?.let { " · ${it.name}" }.orEmpty()}",
-                        Modifier.weight(1f), style = MiuixTheme.textStyles.footnote1)
-                    TextButton(text = "刷新", onClick = vm::refresh)
-                }
-                Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf(ContentFilter.GENERAL, ContentFilter.ALL).forEach { filter ->
-                        CategoryChip(filter.title, state.query.filter == filter) { vm.filter(input, filter) }
-                    }
-                }
-                Text("评级：${state.query.filter.title} · ${state.query.order} · ${if (state.query.cursorPaging) "ID 游标" else "数字页"}",
-                    style = MiuixTheme.textStyles.footnote1)
-                state.accountError?.let { Text(it, style = MiuixTheme.textStyles.footnote1) }
-                if (state.loading) {
+                DanbooruBrowseControls(input, { input = it }, state.query,
+                    onSearch = { keyboard?.hide(); vm.search(input) },
+                    onSort = { keyboard?.hide(); vm.sort(input, it) },
+                    onFilter = { vm.filter(input, it) },
+                    onPeriod = { vm.rankingPeriod(input, it) }, onDate = vm::rankingDate)
+                if (state.loading && state.posts.isEmpty()) {
                     Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else if (state.error != null) {
-                    Feedback(state.error!!, "重试", vm::retry)
-                } else if (posts.isEmpty()) {
-                    Feedback(if (state.ended) "当前查询没有结果；这不是网络错误" else "准备读取帖子", "刷新", vm::refresh)
+                } else if (state.error != null && state.posts.isEmpty()) {
+                    Feedback(state.error!!, "重试", vm::refresh)
+                } else if (state.posts.isEmpty()) {
+                    Feedback(if (state.ended) "没有找到图片，试试其他标签或日期" else "正在准备画廊", "重新加载", vm::refresh)
                 } else {
-                    var pull by remember { mutableFloatStateOf(0f) }
-                    val threshold = with(LocalDensity.current) { 72.dp.toPx() }
-                    val refresh by rememberUpdatedState<() -> Unit>(vm::refresh)
-                    val connection = remember(grid) { object : NestedScrollConnection {
-                        override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
-                            if (source != NestedScrollSource.UserInput) return Offset.Zero
-                            if (available.y > 0 && !grid.canScrollBackward) {
-                                pull = (pull + available.y * 0.5f).coerceAtMost(threshold * 2)
-                                return Offset(0f, available.y)
-                            }
-                            return Offset.Zero
-                        }
-                        override suspend fun onPreFling(available: Velocity): Velocity {
-                            if (pull >= threshold) refresh()
-                            pull = 0f
-                            return Velocity.Zero
-                        }
-                    } }
-                    if (pull > 0) Text(if (pull >= threshold) "松开刷新" else "下拉刷新")
-                    LazyVerticalGrid(GridCells.Fixed(2), state = grid,
-                        modifier = Modifier.weight(1f).nestedScroll(connection),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = clearance + 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if ((state.pages.firstOrNull()?.number ?: 1) > 1) item(span = { GridItemSpan(2) }, key = "previous") {
-                            TextButton(text = "加载前一页（当前窗口从第 ${state.pages.first().number} 页开始）", onClick = vm::previous)
-                        }
-                        items(posts, key = { it.id }) { post ->
-                            Card(Modifier.fillMaxWidth().clickable { vm.open(post) }) {
-                                Column {
-                                    var failure by remember(post.id, post.previewUrl, scope) { mutableStateOf<String?>(null) }
-                                    val url = post.previewUrl
-                                    Box(Modifier.fillMaxWidth().aspectRatio(0.85f).background(MiuixTheme.colorScheme.secondaryContainer),
-                                        contentAlignment = Alignment.Center) {
-                                        if (url != null && failure == null) AsyncImage(
-                                            ImageRequest.Builder(context).data(url)
-                                                .diskCacheKey(post.mediaKey(scope, "thumbnail", url))
-                                                .memoryCacheKey(post.mediaKey(scope, "thumbnail", url)).build(),
-                                            contentDescription = "帖子 ${post.id}", imageLoader = runtime.imageLoader,
-                                            modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop,
-                                            onError = { failure = danbooruMediaError(it.result.throwable) })
-                                        else Text((failure ?: "预览不可用") + "\nTag 仍可查看", Modifier.padding(8.dp),
-                                            style = MiuixTheme.textStyles.footnote1)
-                                    }
-                                    Text("#${post.id} · ${post.rating.uppercase()}${if (post.isVideo) " · 视频" else ""}",
-                                        Modifier.padding(8.dp), style = MiuixTheme.textStyles.footnote1)
-                                }
-                            }
-                        }
-                        item(span = { GridItemSpan(2) }, key = "footer") {
-                            when {
-                                state.appending -> Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                                state.appendError != null -> Feedback(state.appendError!!, "重试本页", vm::retry)
-                                state.ended -> Text("已到底（成功空页）", Modifier.padding(16.dp))
-                                else -> TextButton(text = "加载下一页", onClick = { vm.loadNext() })
-                            }
-                        }
-                    }
+                    state.error?.let { Feedback("$it；当前图片已保留", "重新刷新", vm::refresh) }
+                    DanbooruGalleryGrid(state, grid, runtime.imageLoader, scope, clearance, Modifier.weight(1f),
+                        vm::open, vm::previous, vm::retry, { vm.loadNext() }, vm::refresh)
                 }
             }
         }
+        if (state.settingsOpen) DanbooruSettingsDialog(vm.settings, state, vm::closeSettings, vm::save, vm::test, vm::logout, vm::clearCache)
     }
-    if (state.settingsOpen) DanbooruSettingsDialog(vm.settings, state, vm::closeSettings, vm::save, vm::test, vm::logout, vm::clearCache)
 }
 
 @Composable
 internal fun Feedback(message: String, action: String, onAction: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(message)
-        TextButton(text = action, onClick = onAction)
+        Text(message, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSecondaryContainer)
+        DanbooruSmallAction(action, onClick = onAction)
     }
 }
 

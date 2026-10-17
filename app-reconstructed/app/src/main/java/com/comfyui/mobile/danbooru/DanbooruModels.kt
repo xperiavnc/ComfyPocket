@@ -4,6 +4,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.IOException
 import java.security.MessageDigest
+import java.time.LocalDate
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 enum class TagGroup(val title: String, val field: String) {
@@ -37,9 +38,19 @@ data class DanbooruPost(
         "danbooru:$scope:$id:${md5.orEmpty()}:$representation:${danbooruHash(url)}"
 }
 
-data class DanbooruQuery(val text: String, val filter: ContentFilter, val tags: String, val cursorPaging: Boolean, val order: String) {
+data class DanbooruQuery(
+    val text: String, val filter: ContentFilter, val tags: String, val cursorPaging: Boolean, val order: String,
+    val sort: DanbooruSort = DanbooruSort.LATEST,
+    val rankingPeriod: RankingPeriod = RankingPeriod.DAY,
+    val rankingDate: LocalDate = danbooruToday()
+) {
     companion object {
-        fun resolve(input: String, defaultFilter: ContentFilter): DanbooruQuery {
+        fun resolve(
+            input: String, defaultFilter: ContentFilter,
+            sort: DanbooruSort = DanbooruSort.LATEST,
+            rankingPeriod: RankingPeriod = RankingPeriod.DAY,
+            rankingDate: LocalDate = danbooruToday()
+        ): DanbooruQuery {
             val text = input.trim()
             val tokens = text.split(Regex("\\s+")).filter(String::isNotBlank)
             val ratings = tokens.filter { it.matches(Regex("(?i)-?rating:.*")) }
@@ -54,11 +65,32 @@ data class DanbooruQuery(val text: String, val filter: ContentFilter, val tags: 
                 }
             }
             val orders = tokens.filter { it.startsWith("order:", ignoreCase = true) }
-            val cursor = orders.isEmpty() || orders.singleOrNull()?.lowercase() == "order:id_desc"
+            // An explicitly typed order wins. Toolbar selections remove only order: tokens,
+            // preserving the user's tags, negative tags and rating expression.
+            val effectiveSort = if (orders.isEmpty()) sort else when (orders.singleOrNull()?.lowercase()) {
+                "order:id_desc" -> DanbooruSort.LATEST
+                "order:rank" -> DanbooruSort.HOT
+                "order:score" -> DanbooruSort.SCORE
+                "order:favcount" -> DanbooruSort.FAVORITES
+                else -> DanbooruSort.CUSTOM
+            }
+            val generated = buildList {
+                if (ratings.isEmpty()) addAll(listOfNotNull(filter.token))
+                if (orders.isEmpty() && effectiveSort != DanbooruSort.LATEST) add(effectiveSort.token)
+                if (effectiveSort == DanbooruSort.RANKING) {
+                    add("status:active")
+                    add(rankingPeriod.dateTag(rankingDate))
+                }
+            }.filter(String::isNotBlank)
             return DanbooruQuery(text, filter,
-                (tokens + if (ratings.isEmpty()) listOfNotNull(filter.token) else emptyList()).joinToString(" "),
-                cursor, orders.joinToString(" ").ifBlank { "最新（ID 降序）" })
+                (tokens + generated).joinToString(" "),
+                effectiveSort == DanbooruSort.LATEST,
+                orders.joinToString(" ").ifBlank { effectiveSort.token },
+                effectiveSort, rankingPeriod, rankingDate)
         }
+
+        fun withoutOrder(input: String): String =
+            input.trim().split(Regex("\\s+")).filter { it.isNotBlank() && !it.startsWith("order:", true) }.joinToString(" ")
 
         fun withFilter(input: String, filter: ContentFilter): String =
             (input.trim().split(Regex("\\s+")).filter { it.isNotBlank() && !it.matches(Regex("(?i)-?rating:.*")) } +
