@@ -96,10 +96,13 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     if (mode == AgentMode.CHAT) {
                         generateChat(turn, settings, prior + user, progress)
                     } else {
+                        val negativeContext = AgentWorkflowPromptContext.negative(vm, version)
+                        session.requireCurrent(turn)
                         MainViewModelAgent.expandPromptWithLlm(
                             vm, text, prior,
                             attachments.filter { it.isImage }.mapNotNull(MainViewModelAgent::imageDataUrl),
                             settings = settings, requestId = turn.id,
+                            currentNegativePrompt = negativeContext,
                             onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) },
                             checkCurrent = { session.requireCurrent(turn) },
                             onTagChecking = { origin ->
@@ -149,6 +152,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                 it.copy(
                                     content = if (mode == AgentMode.CHAT) reply.tip else MainViewModelAgent.sanitizeAgentReply(reply.tip),
                                     expandedPrompt = reply.prompt.takeIf(String::isNotBlank),
+                                    expandedNegativePrompt = reply.negativePrompt,
                                     thinkingContent = reply.thinking.takeIf(String::isNotBlank),
                                     isThinking = false, errorMessage = null, tagCheckingOrigin = null
                                 )
@@ -249,15 +253,19 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             }
         }
 
-        override suspend fun patchPrompt(prompt: String) = withContext(Dispatchers.Main) {
+        override suspend fun patchPrompt(prompt: String, negativePrompt: String?) = withContext(Dispatchers.Main) {
             session.requireCurrent(turn)
             val target = MainViewModelAgent.findPrimaryPositivePromptTarget(vm)
                 ?: throw AgentExecutionException("模板中找不到提示词输入，请在工作流设置选择注入节点。")
-            val snapshot = workflowSnapshot(target)
+            val negativeTargets = if (negativePrompt != null) {
+                AgentPromptTargets.negative(vm.agentWorkflow.orEmpty(), target)
+            } else emptyList()
+            val snapshot = workflowSnapshot(listOf(target) + negativeTargets)
             tools.inspectWorkflow.execute(snapshot).getOrElse {
                 throw AgentExecutionException("工作流检查失败：${it.message}")
             }
             val changes = mutableListOf(AgentFieldChange(target.first, target.second, prompt))
+            negativeTargets.forEach { (id, key) -> changes.add(AgentFieldChange(id, key, negativePrompt!!)) }
             uploadedImage?.let { (node, value) -> changes.add(AgentFieldChange(node.nodeId, node.key, value)) }
             val patch = tools.patchWorkflow.execute(AgentPatchRequest(snapshot, changes)).getOrElse {
                 throw AgentExecutionException("工作流修改未通过校验：${it.message}")
@@ -267,12 +275,22 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             patch.diff.forEach { vm.agentWorkflowParamValues["${it.nodeId}:${it.key}"] = it.after }
             MainViewModelAgent.parseAgentEditableNodes(vm, patch.workflow)
             MainViewModelAgent.persistAgentWorkflowParams(vm)
+            val negativeStatus = when {
+                negativePrompt == null -> "模型未返回反向提示词，已保留工作流原值"
+                negativeTargets.isEmpty() -> "未写入：工作流没有可识别的独立反向输入，已保留原配置"
+                negativePrompt.isEmpty() -> "已清空工作流反向输入（${negativeTargets.size} 项）"
+                else -> "已写入工作流反向输入（${negativeTargets.size} 项）"
+            }
+            MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = true) {
+                it.copy(negativePromptStatus = negativeStatus)
+            }
+            vm.addLog("Agent 反向提示词：$negativeStatus", LogType.INFO)
             vm.addLog("Agent patch_workflow 已校验并修改 ${patch.diff.size} 个字段", LogType.INFO)
         }
 
-        private fun workflowSnapshot(target: Pair<String, String>): AgentWorkflowSnapshot {
+        private fun workflowSnapshot(targets: List<Pair<String, String>>): AgentWorkflowSnapshot {
             val graph = vm.agentWorkflow ?: throw AgentExecutionException("工作流为空")
-            val allowed = vm._agentAuxNodeKeys.value + "${target.first}:${target.second}" +
+            val allowed = vm._agentAuxNodeKeys.value + targets.map { "${it.first}:${it.second}" } +
                 listOfNotNull(uploadedImage?.first?.let { "${it.nodeId}:${it.key}" })
             val fields = vm._agentEditableNodes.value.mapNotNull { node ->
                 val key: String
@@ -293,11 +311,13 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 if ("${node.nodeId}:$key" !in allowed) null else AgentFieldSpec(node.nodeId, key, node.classType, kind, options, min, max)
             }.toMutableList()
             // Preserve automatic prompt targeting for API nodes not exposed by object_info.
-            if (fields.none { it.nodeId == target.first && it.key == target.second }) {
-                val node = graph[target.first] as? Map<*, *>
-                val inputs = node?.get("inputs") as? Map<*, *>
-                if (inputs?.get(target.second) is String && node["class_type"] is String) {
-                    fields.add(AgentFieldSpec(target.first, target.second, node["class_type"] as String, AgentFieldKind.TEXT))
+            for (target in targets) {
+                if (fields.none { it.nodeId == target.first && it.key == target.second }) {
+                    val node = graph[target.first] as? Map<*, *>
+                    val inputs = node?.get("inputs") as? Map<*, *>
+                    if (inputs?.get(target.second) is String && node["class_type"] is String) {
+                        fields.add(AgentFieldSpec(target.first, target.second, node["class_type"] as String, AgentFieldKind.TEXT))
+                    }
                 }
             }
             return AgentWorkflowSnapshot(graph, fields)

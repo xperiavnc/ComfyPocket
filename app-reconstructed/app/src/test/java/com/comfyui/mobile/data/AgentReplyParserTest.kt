@@ -100,4 +100,47 @@ class AgentReplyParserTest {
         assertEquals("", r.reply)
         assertEquals("1girl", r.prompt)
     }
+
+    @Test fun positiveAndNegativeAreParsedIndependently() {
+        val result = AgentReplyParser.parse("""{"reply":"好","prompt":"cat, rain","negative_prompt":"blurry, (extra limbs:1.2), <embedding:custom>","should_draw":true}""")
+        assertEquals("cat, rain", result.prompt)
+        assertEquals("blurry, (extra limbs:1.2), <embedding:custom>", result.negativePrompt)
+        assertFalse(result.prompt.contains("blurry"))
+    }
+
+    @Test fun omittedInvalidAndExplicitEmptyNegativeHaveDifferentMeanings() {
+        assertNull(AgentReplyParser.parse("""{"prompt":"cat"}""").negativePrompt)
+        for (value in listOf("null", "false", "123", """{"text":"blurry"}""", """"纯中文无效标签"""")) {
+            assertNull(AgentReplyParser.parse("""{"prompt":"cat","negative_prompt":$value}""").negativePrompt)
+        }
+        assertEquals("", AgentReplyParser.parse("""{"prompt":"cat","negative_prompt":""}""").negativePrompt)
+        assertEquals("", AgentReplyParser.parse("""{"prompt":"cat","negative_prompt":[]}""").negativePrompt)
+    }
+
+    @Test fun negativeAliasesArraysAndNaturalLanguageKeepTheirSyntax() {
+        val array = AgentReplyParser.parse("""{"positive":"cat","negativePrompt":["blurry","bad hands"]}""")
+        assertEquals("blurry, bad hands", array.negativePrompt)
+        val natural = AgentReplyParser.parse(
+            """{"prompt":"A person holds a sign.","negative_prompt":"Avoid distorted letters in \"Hello\".\nKeep hands free of extra fingers."}""",
+            preserveNaturalLanguage = true)
+        assertEquals("Avoid distorted letters in \"Hello\".\nKeep hands free of extra fingers.", natural.negativePrompt)
+    }
+
+    @Test fun labelledSectionsDoNotAppendNegativeOrDrawFlagToPositive() {
+        val parsed = AgentReplyParser.parse("回复：好的\n正向提示词：cat, rain\n反向提示词：blurry, bad hands\nshould_draw: true")
+        assertEquals("好的", parsed.reply)
+        assertEquals("cat, rain", parsed.prompt)
+        assertEquals("blurry, bad hands", parsed.negativePrompt)
+        assertEquals(true, parsed.shouldDraw)
+        val reverseOrder = AgentReplyParser.parse("negative_prompt: blurry\nprompt: cat")
+        assertEquals("cat", reverseOrder.prompt)
+        assertEquals("blurry", reverseOrder.negativePrompt)
+    }
+
+    @Test fun truncatedNegativeIsNotMisinterpretedAsAnExplicitClear() {
+        assertNull(AgentReplyParser.parse("""{"prompt":"cat","negative_prompt":"blur""").negativePrompt)
+        assertEquals("blurry", AgentReplyParser.parse(
+            """{"prompt":"cat","negative_prompt":"blurry","should_dra"""
+        ).negativePrompt)
+    }
 }

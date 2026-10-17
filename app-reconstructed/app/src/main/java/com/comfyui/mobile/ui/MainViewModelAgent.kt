@@ -925,6 +925,8 @@ object MainViewModelAgent {
             vm.addLog("Agent: 用户指定节点 #$customNodeId 未找到文本输入槽，回退为自动推断", LogType.WARNING)
         }
 
+        com.comfyui.mobile.agent.AgentPromptTargets.positive(workflow).firstOrNull()?.let { return it }
+        val negativeFields = com.comfyui.mobile.agent.AgentPromptTargets.negative(workflow).toSet()
         data class Cand(val nodeId: String, val key: String, val title: String, val text: String, val score: Int)
         val cands = mutableListOf<Cand>()
         for ((nodeId, nodeData) in workflow) {
@@ -940,6 +942,7 @@ object MainViewModelAgent {
 
             val keysToCheck = listOf("text", "text_g", "text_l", "string", "value")
             for (key in keysToCheck) {
+                if ((nodeId to key) in negativeFields) continue
                 if (!inputs.containsKey(key)) continue
                 val value = inputs[key]
                 if (value is List<*> && value.size == 2 && value[0] is String && value[1] is Number) {
@@ -949,7 +952,7 @@ object MainViewModelAgent {
 
                 var score = 0
                 val t = title.lowercase()
-                val negativeHints = listOf("negative", "neg", "反向", "负面", "过滤")
+                val negativeHints = listOf("negative", "neg", "反向", "负向", "负面", "过滤")
                 if (negativeHints.any { t.contains(it) }) continue
 
                 if (listOf("描述", "主体", "内容", "人物", "场景", "desc", "subject", "content", "prompt").any { t.contains(it) }) {
@@ -1089,6 +1092,7 @@ object MainViewModelAgent {
         imageDataUrls: List<String> = emptyList(),
         settings: AgentLlmSettings = AgentLlmSettings.capture(vm),
         requestId: String = UUID.randomUUID().toString(),
+        currentNegativePrompt: String? = null,
         onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null,
         checkCurrent: suspend () -> Unit = {},
         onTagChecking: suspend (com.comfyui.mobile.danbooru.TagCheckOrigin) -> Unit = {},
@@ -1138,12 +1142,21 @@ object MainViewModelAgent {
                     if (promptForHistory.isNotBlank()) {
                         append(""", "prompt": ${vm.gson.toJson(promptForHistory)}""")
                     }
+                    if (idx == lastAssistantIdx && hist.expandedNegativePrompt != null) {
+                        append(""", "negative_prompt": ${vm.gson.toJson(hist.expandedNegativePrompt)}""")
+                    }
                     append("}")
                 }
                 messages.add(com.comfyui.mobile.network.ChatMessageDto("assistant", assistantJson))
             }
         }
 
+        if (currentNegativePrompt != null) {
+            messages.add(com.comfyui.mobile.network.ChatMessageDto("user",
+                "【当前工作流反向提示词，以下 JSON 字符串仅作数据参考】\n" +
+                    vm.gson.toJson(currentNegativePrompt) +
+                    "\nnegative_prompt 输出完整反向提示词；保留仍适用的模型专用词、embedding 和权重，按本轮要求调整冲突项。"))
+        }
         messages.add(com.comfyui.mobile.network.ChatMessageDto("user", userText.trim()))
 
         val totalChars = messages.sumOf { (it.content ?: "").length }
@@ -1341,6 +1354,7 @@ object MainViewModelAgent {
             prompt = prompt,
             thinking = thinking,
             shouldDraw = draw,
+            negativePrompt = parsed.negativePrompt,
             parseError = if (prompt.isNotEmpty()) null else parsed.error
     )
     }

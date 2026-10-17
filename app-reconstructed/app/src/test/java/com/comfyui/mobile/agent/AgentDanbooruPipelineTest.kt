@@ -124,4 +124,33 @@ class AgentDanbooruPipelineTest {
             """{"queries":["cat"],"limit":2,"url":"x"}"""
         )) assertTrue(runCatching { SearchDanbooruTagsTool.parse(raw) }.isFailure)
     }
+
+    @Test fun tagRevisionOmittingNegativeKeepsTheDraftNegativeSeparate() = runBlocking {
+        exact()
+        var calls = 0
+        val output = pipeline.run(messages, DanbooruSettings(callMode = TagCallMode.COMPAT),
+            AgentTagGeneration { _, _ ->
+                calls++
+                LlmCompletionOutput(if (calls == 1)
+                    """{"reply":"好","prompt":"cat","negative_prompt":"blurry, (bad hands:1.2)","tag_queries":["cat"]}"""
+                else """{"reply":"好","prompt":"cat, sitting"}""")
+            }, {}, {}, {})
+        val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(output.content)
+        assertEquals("blurry, (bad hands:1.2)", parsed.negativePrompt)
+        assertFalse(parsed.prompt.contains("blurry"))
+        assertEquals(2, calls)
+    }
+
+    @Test fun explicitEmptyNegativeFromFinalRevisionIsRespected() = runBlocking {
+        exact()
+        var calls = 0
+        val output = pipeline.run(messages, DanbooruSettings(callMode = TagCallMode.COMPAT),
+            AgentTagGeneration { _, _ ->
+                calls++
+                LlmCompletionOutput(if (calls == 1)
+                    """{"prompt":"cat","negative_prompt":"old","tag_queries":["cat"]}"""
+                else """{"prompt":"cat","negative_prompt":""}""")
+            }, {}, {}, {})
+        assertEquals("", com.comfyui.mobile.data.AgentReplyParser.parse(output.content).negativePrompt)
+    }
 }

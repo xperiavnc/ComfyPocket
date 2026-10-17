@@ -191,6 +191,9 @@ fun AgentBubble(msg: AgentChatMessage, refreshEnabled: Boolean = true, onRefresh
 
 
 
+                if (!isUser) {
+                    AgentPromptDetails(msg.expandedPrompt, msg.expandedNegativePrompt, msg.negativePromptStatus)
+                }
                 if (!isUser && (msg.tagCheck != null || msg.tagCheckingOrigin != null)) {
                     DanbooruCheckPanel(msg.tagCheck, msg.tagCheckingOrigin, refreshEnabled, onRefreshTags)
                 }

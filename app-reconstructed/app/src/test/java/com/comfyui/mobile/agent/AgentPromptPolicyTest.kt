@@ -33,4 +33,20 @@ class AgentPromptPolicyTest {
         assertTrue(AgentDrawIntent.isExplicitVeto("反推这张图的提示词"))
         assertFalse(AgentDrawIntent.isExplicitVeto("反推后再出图"))
     }
+
+    @Test fun outputContractRequiresSeparateNegativeEvenWithCustomRules() {
+        val system = AgentPromptPolicy.system("自定义", "只输出正向 tags", AgentPromptFormat.ANIMA, emptyList())
+        assertTrue(system.contains("negative_prompt（最终反向提示词字符串）"))
+        assertTrue(system.contains("每次同时输出正向与反向"))
+        assertTrue(system.contains("不要把反向写进 prompt"))
+        assertTrue(system.contains("\"negative_prompt\""))
+    }
+
+    @Test fun negativePromptIsNotImageReversePromptingOrAnAutomaticDrawVeto() {
+        assertFalse(AgentDrawIntent.isExplicitVeto("画一只猫，反向提示词添加 blurry"))
+        assertFalse(AgentDrawIntent.isExplicitVeto("改一下反向提示词，然后出图"))
+        assertTrue(AgentDrawIntent.isExplicitVeto("只要反向提示词"))
+        assertTrue(AgentDrawIntent.isExplicitVeto("只要负向提示词"))
+        assertTrue(AgentDrawIntent.isExplicitVeto("反推这张图片"))
+    }
 }

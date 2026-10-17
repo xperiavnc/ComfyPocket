@@ -8,7 +8,9 @@ data class AgentReply(
     val prompt: String = "",
     val thinking: String = "",
     val shouldDraw: Boolean = false,
-    val parseError: String? = null
+    val parseError: String? = null,
+    /** null preserves workflow defaults; an explicit empty string clears the negative input. */
+    val negativePrompt: String? = null
 )
 
 data class AgentProgress(val reasoning: String, val content: String)
@@ -27,7 +29,7 @@ interface AgentConversationObserver {
 /** Android/network adaptation stays outside the runner; tests exercise this same execution path. */
 interface AgentWorkflowPort {
     suspend fun prepare()
-    suspend fun patchPrompt(prompt: String)
+    suspend fun patchPrompt(prompt: String, negativePrompt: String?)
     suspend fun promptApplied(prompt: String)
     suspend fun submit(): String
 }
@@ -50,7 +52,7 @@ class AgentDrawExecutor(private val workflow: AgentWorkflowPort) {
         phase(AgentPhase.APPLYING)
         workflow.prepare()
         checkCurrent()
-        workflow.patchPrompt(reply.prompt)
+        workflow.patchPrompt(reply.prompt, reply.negativePrompt)
         checkCurrent()
         workflow.promptApplied(reply.prompt)
         if (!reply.shouldDraw) return null

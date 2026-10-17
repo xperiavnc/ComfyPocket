@@ -8,7 +8,7 @@ package com.comfyui.mobile.data
 object AgentDrawIntent {
 
     private val VETO = Regex(
-        "(?i)(只要提示词|只要\\s*tags?|只要prompt|只要英文|" +
+        "(?i)(只要(?:正向|反向|负向)?提示词|只要\\s*tags?|只要prompt|只要英文|" +
             "先别(出图|画|生成|渲染)|不要(出图|画|生成|渲染)|别(出图|画|生成|渲染)|先不要画|先别提交|不要提交|" +
             "explain\\s+(the\\s+)?tags?|only\\s+(the\\s+)?prompt|don'?t\\s+draw|do\\s+not\\s+draw|no\\s+render|without\\s+rendering)"
     )
@@ -64,7 +64,7 @@ object AgentDrawIntent {
     fun isExplicitVeto(userText: String): Boolean {
         val t = userText.trim()
         if (t.isEmpty()) return false
-        val reverseOnly = Regex("反推|反向提示词").containsMatchIn(t) &&
+        val reverseOnly = Regex("反推").containsMatchIn(t) &&
             !Regex("(并|再|然后|接着).{0,6}(出图|生图|生成|画)").containsMatchIn(t)
         return reverseOnly || VETO.containsMatchIn(t)
     }

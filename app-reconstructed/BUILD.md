@@ -24,7 +24,7 @@ Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中�
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.4-agent-prompts`，版本号为 `6`，Agent 改动说明见 `AGENT.md`。
+当前构建版本名为 `0.0.5-agent-negative`，版本号为 `7`，Agent 改动说明见 `AGENT.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 

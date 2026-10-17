@@ -25,7 +25,7 @@ class AgentConversationRunnerTest {
         }
         val port = object : AgentWorkflowPort {
             override suspend fun prepare() { events += "prepare" }
-            override suspend fun patchPrompt(prompt: String) {
+            override suspend fun patchPrompt(prompt: String, negativePrompt: String?) {
                 beforePatch()
                 session.requireCurrent(turn)
                 events += "patch"

@@ -65,4 +65,22 @@ class AgentPromptControlsTest {
             assertTrue(refreshed)
         } finally { controller.pause().stop().destroy() }
     }
+
+    @Test fun positiveAndNegativePromptDetailsExpandSeparately() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    AgentPromptDetails("cat, rain", "blurry, extra limbs", "已写入工作流反向输入（1 项）")
+                } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("正向 / 反向提示词").performClick()
+            compose.onNodeWithText("正向提示词").assertExists()
+            compose.onNodeWithText("cat, rain").assertExists()
+            compose.onNodeWithText("反向提示词").assertExists()
+            compose.onNodeWithText("blurry, extra limbs").assertExists()
+            compose.onNodeWithText("已写入工作流反向输入（1 项）").assertExists()
+        } finally { controller.pause().stop().destroy() }
+    }
 }

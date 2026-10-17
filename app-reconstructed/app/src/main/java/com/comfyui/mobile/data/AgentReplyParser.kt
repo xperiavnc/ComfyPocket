@@ -7,7 +7,7 @@ import com.google.gson.stream.JsonReader
 import java.io.StringReader
 
 /**
- * Parses the Draw-mode LLM reply `{"reply": ..., "prompt": ..., "should_draw": ...}`.
+ * Parses the Draw-mode reply including separate positive and negative prompt fields.
  * Pure Kotlin (no Android) so it is unit-testable.
  *
  * Extracts only the prompt field, never the serialized reply envelope. Anima/natural mode keeps
@@ -21,10 +21,13 @@ object AgentReplyParser {
         /** null = field missing / unreadable. */
         val shouldDraw: Boolean?,
         /** Short reason when no usable prompt was extracted. */
-        val error: String? = null
+        val error: String? = null,
+        /** Missing / invalid = preserve existing; explicit "" = clear existing. */
+        val negativePrompt: String? = null
     )
 
     private val PROMPT_KEYS = listOf("prompt", "tags", "positive")
+    private val NEGATIVE_KEYS = listOf("negative_prompt", "negativePrompt", "negative", "反向提示词", "负向提示词")
     private val REPLY_KEYS = listOf("reply", "tip", "message")
     private val DRAW_KEYS = listOf("should_draw", "draw", "shouldDraw")
 
@@ -39,9 +42,10 @@ object AgentReplyParser {
             val obj = parseObject(candidate) ?: parseObject(repairJson(candidate)) ?: continue
             val reply = cleanReply(stringField(obj, REPLY_KEYS))
             val prompt = sanitizePrompt(stringField(obj, PROMPT_KEYS), preserveNaturalLanguage)
+            val negative = optionalPromptField(obj, NEGATIVE_KEYS, preserveNaturalLanguage)
             val draw = boolField(obj, DRAW_KEYS)
-            if (prompt.isNotEmpty() || reply.isNotEmpty()) {
-                return Result(reply, prompt, draw, if (prompt.isEmpty()) "JSON 中没有有效的 prompt" else null)
+            if (prompt.isNotEmpty() || reply.isNotEmpty() || negative != null) {
+                return Result(reply, prompt, draw, if (prompt.isEmpty()) "JSON 中没有有效的 prompt" else null, negative)
             }
         }
 
@@ -49,8 +53,9 @@ object AgentReplyParser {
         if (text.contains('{') || text.contains("\"prompt\"")) {
             val reply = cleanReply(salvageString(text, REPLY_KEYS))
             val prompt = sanitizePrompt(salvageString(text, PROMPT_KEYS), preserveNaturalLanguage)
+            val negative = salvageOptionalString(text, NEGATIVE_KEYS)?.let { sanitizeOptionalPrompt(it, preserveNaturalLanguage) }
             val draw = salvageBool(text, DRAW_KEYS)
-            return Result(reply, prompt, draw, if (prompt.isEmpty()) "模型返回的 JSON 无法解析" else null)
+            return Result(reply, prompt, draw, if (prompt.isEmpty()) "模型返回的 JSON 无法解析" else null, negative)
         }
 
         // 3. Plain-text labelled format ("回复：… / prompt: …"); never dump the whole reply.
@@ -118,6 +123,23 @@ object AgentReplyParser {
         return ""
     }
 
+    private fun optionalPromptField(obj: JsonObject, keys: List<String>, natural: Boolean): String? {
+        for (key in keys) {
+            val value = obj[key] ?: continue
+            val raw = when {
+                value.isJsonPrimitive && value.asJsonPrimitive.isString -> value.asString
+                value.isJsonArray && value.asJsonArray.all { it.isJsonPrimitive && it.asJsonPrimitive.isString } ->
+                    value.asJsonArray.joinToString(", ") { it.asString }
+                else -> return null
+            }
+            return sanitizeOptionalPrompt(raw, natural)
+        }
+        return null
+    }
+
+    private fun sanitizeOptionalPrompt(raw: String, natural: Boolean): String? =
+        sanitizePrompt(raw, natural).takeIf { raw.isBlank() || it.isNotBlank() }
+
     private fun boolField(obj: JsonObject, keys: List<String>): Boolean? {
         for (k in keys) {
             val el = obj.get(k) ?: continue
@@ -139,12 +161,15 @@ object AgentReplyParser {
     }
 
     /** `"key" : "value"` with a fully closed string. */
-    private fun salvageString(text: String, keys: List<String>): String {
+    private fun salvageString(text: String, keys: List<String>): String =
+        salvageOptionalString(text, keys).orEmpty()
+
+    private fun salvageOptionalString(text: String, keys: List<String>): String? {
         for (k in keys) {
             val m = Regex(""""${Regex.escape(k)}"\s*:\s*"((?:\\.|[^"\\])*)"""").find(text) ?: continue
             return unescape(m.groupValues[1])
         }
-        return ""
+        return null
     }
 
     private fun salvageBool(text: String, keys: List<String>): Boolean? {
@@ -156,20 +181,31 @@ object AgentReplyParser {
     }
 
     private fun parseLabelled(text: String, preserveNaturalLanguage: Boolean): Result {
-        val promptLabel = Regex("""(?im)^\s*[\*#\-_\[\(]*(?:prompt|tags|positive|正面提示词|提示词)[\*\]\)]*\s*[:：]\s*""")
-        val m = promptLabel.find(text)
-        val prompt = if (m != null) sanitizePrompt(text.substring(m.range.last + 1), preserveNaturalLanguage) else ""
-        val before = if (m != null) text.substring(0, m.range.first) else text
+        val labels = Regex("""(?im)^[ \t]*[\*#\-\[\(]*(negative_prompt|negativePrompt|negative prompt|negative|反向提示词|负向提示词|负面提示词|prompt|tags|positive|正向提示词|正面提示词|提示词|tip|reply|回复|should_draw)[\*\]\)]*[ \t]*[:：][ \t]*""")
+        val matches = labels.findAll(text).toList()
+        val sections = matches.mapIndexed { index, match ->
+            match.groupValues[1].lowercase() to text.substring(
+                match.range.last + 1, matches.getOrNull(index + 1)?.range?.first ?: text.length
+            ).trim()
+        }
+        val prompt = sections.firstOrNull { it.first in setOf("prompt", "tags", "positive", "正向提示词", "正面提示词", "提示词") }
+            ?.second?.let { sanitizePrompt(it, preserveNaturalLanguage) }.orEmpty()
+        val negative = sections.firstOrNull {
+            it.first in setOf("negative_prompt", "negativeprompt", "negative prompt", "negative", "反向提示词", "负向提示词", "负面提示词")
+        }?.second?.let { sanitizeOptionalPrompt(it, preserveNaturalLanguage) }
+        val before = sections.firstOrNull { it.first in setOf("tip", "reply", "回复") }?.second
+            ?: text.substring(0, matches.firstOrNull()?.range?.first ?: text.length)
         val reply = cleanReply(
             before.replace(Regex("""(?im)^\s*[\*#\-_\[\(]*(?:tip|reply|回复|提示)[\*\]\)]*\s*[:：]\s*"""), "")
                 .lines().firstOrNull { line -> line.any { it in '\u4e00'..'\u9fa5' } }.orEmpty()
         )
-        return Result(reply, prompt, null, if (prompt.isEmpty()) "未找到 prompt 字段" else null)
+        val draw = sections.firstOrNull { it.first == "should_draw" }?.second?.let(::parseBoolString)
+        return Result(reply, prompt, draw, if (prompt.isEmpty()) "未找到 prompt 字段" else null, negative)
     }
 
     // ---- sanitizers ----
 
-    private val KEY_PREFIX = Regex("""(?i)^["'\s]*(prompt|reply|tip|tags|positive|should_draw|shoulddraw|draw|message)["'\s]*[:：]\s*""")
+    private val KEY_PREFIX = Regex("""(?i)^["'\s]*(negative_prompt|negativePrompt|negative|prompt|reply|tip|tags|positive|should_draw|shoulddraw|draw|message)["'\s]*[:：]\s*""")
     private val JSONISH = Regex("""(?i)("\s*:|:\s*"|\bshould_draw\b)""")
 
     /**

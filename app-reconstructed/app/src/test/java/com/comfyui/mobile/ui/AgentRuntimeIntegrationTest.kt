@@ -129,6 +129,108 @@ class AgentRuntimeIntegrationTest {
     private fun awaitDone() = pumpUntil { !vm.agentBusy.value }
     private fun graphText() = ((vm.agentWorkflow!!["1"] as Map<*, *>)["inputs"] as Map<*, *>)["text"]
 
+    private fun withNegativeWorkflow() {
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
+            """{"2":{"class_type":"CLIPTextEncode","inputs":{"text":"template_embedding, (blurry:1.2)"}},"1":{"class_type":"CLIPTextEncode","inputs":{"text":"before"}},"3":{"class_type":"KSampler","inputs":{"positive":["1",0],"negative":["2",0]}}}"""
+        )
+    }
+
+    private fun submittedNegative(): String = JsonParser.parseString(promptBodies.last()).asJsonObject["prompt"]
+        .asJsonObject["2"].asJsonObject["inputs"].asJsonObject["text"].asString
+
+    @Test fun negativePromptReachesTheRealSubmissionHistoryAndSavedConversation() {
+        withNegativeWorkflow()
+        responses += success("""{"reply":"好","prompt":"cat, rain","negative_prompt":"template_embedding, (blurry:1.2), extra limbs","should_draw":true}""")
+        vm.sendAgentMessage("画猫，反向提示词加上 extra limbs")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("cat, rain", graphText())
+        assertEquals("template_embedding, (blurry:1.2), extra limbs", submittedNegative())
+        assertEquals(1, promptBodies.size)
+        val message = vm.agentMessages.value.last()
+        assertEquals(submittedNegative(), message.expandedNegativePrompt)
+        assertTrue(message.negativePromptStatus!!.startsWith("已写入"))
+        val saved = JsonParser.parseString(vm.prefs.getString(MainViewModelAgent.scopedPref("agent_messages", vm), "")!!)
+            .asJsonArray.last().asJsonObject
+        assertEquals(message.expandedNegativePrompt, saved["expandedNegativePrompt"].asString)
+        val requestMessages = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
+        assertTrue(requestMessages.first().asJsonObject["content"].asString.contains("negative_prompt"))
+        assertTrue(requestMessages.any { it.asJsonObject["content"].asString.contains("template_embedding") })
+
+        responses += success("""{"reply":"换好了","prompt":"cat, snow","negative_prompt":"template_embedding, extra limbs","should_draw":true}""")
+        vm.sendAgentMessage("换成雪景")
+        awaitDone()
+        val nextMessages = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
+        val history = nextMessages.first { it.asJsonObject["role"].asString == "assistant" }.asJsonObject["content"].asString
+        assertEquals(message.expandedNegativePrompt, JsonParser.parseString(history).asJsonObject["negative_prompt"].asString)
+        assertEquals(2, promptBodies.size)
+    }
+
+    @Test fun oldResponseWithoutNegativePreservesTemplateAndExplicitEmptyClearsIt() {
+        withNegativeWorkflow()
+        responses += success("""{"reply":"好","prompt":"cat","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals("template_embedding, (blurry:1.2)", submittedNegative())
+        assertNull(vm.agentMessages.value.last().expandedNegativePrompt)
+        responses += success("""{"reply":"已清空","prompt":"cat","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("清空反向提示词，然后出图")
+        awaitDone()
+        assertEquals("", submittedNegative())
+        assertEquals("", vm.agentMessages.value.last().expandedNegativePrompt)
+        assertTrue(vm.agentMessages.value.last().negativePromptStatus!!.startsWith("已清空"))
+    }
+
+    @Test fun noNegativeInputKeepsGeneratedNegativeVisibleWithoutClaimingItWasApplied() {
+        responses += success("""{"reply":"好","prompt":"cat","negative_prompt":"blurry","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat", graphText())
+        assertEquals("blurry", vm.agentMessages.value.last().expandedNegativePrompt)
+        assertTrue(vm.agentMessages.value.last().negativePromptStatus!!.startsWith("未写入"))
+        val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        assertEquals(setOf("1"), graph.keySet())
+    }
+
+    @Test fun promptOnlyWritesBothFieldsWithoutSubmitting() {
+        withNegativeWorkflow()
+        responses += success("""{"reply":"给你两组词","prompt":"cat, rain","negative_prompt":"blurry","should_draw":false}""")
+        vm.sendAgentMessage("只要提示词，先别出图")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("cat, rain", graphText())
+        val negative = ((vm.agentWorkflow!!["2"] as Map<*, *>)["inputs"] as Map<*, *>)["text"]
+        assertEquals("blurry", negative)
+        assertTrue(promptBodies.isEmpty())
+    }
+
+    @Test fun sdxlNegativeWritesBothTextSlotsAndPreservesConditioningLinks() {
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
+            """{"1":{"class_type":"CLIPTextEncode","inputs":{"text":"before"}},"2":{"class_type":"CLIPTextEncodeSDXL","inputs":{"text_g":"old g","text_l":"old l"}},"3":{"class_type":"KSampler","inputs":{"positive":["1",0],"negative":["2",0]}}}"""
+        )
+        responses += success("""{"reply":"好","prompt":"cat","negative_prompt":"blurry, extra limbs","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        val inputs = graph["2"].asJsonObject["inputs"].asJsonObject
+        assertEquals("blurry, extra limbs", inputs["text_g"].asString)
+        assertEquals("blurry, extra limbs", inputs["text_l"].asString)
+        assertEquals("2", graph["3"].asJsonObject["inputs"].asJsonObject["negative"].asJsonArray[0].asString)
+    }
+
+    @Test fun negativeReferenceUsesSavedOverridesWithoutLoadingOrMutatingTheActiveGraph() {
+        withNegativeWorkflow()
+        vm.prefs.edit().putString(MainViewModelAgent.getAgentWorkflowParamStorageKey(
+            vm, MainViewModel.AGENT_WF_SAVED, "agent-fixture.json"),
+            """{"2:text":"saved_embedding, blurry"}""").commit()
+        assertEquals("saved_embedding, blurry",
+            AgentWorkflowPromptContext.negative(vm, vm.agentSession.contextVersion()))
+        assertNull(vm.agentWorkflow)
+        assertTrue(vm.agentWorkflowParamValues.isEmpty())
+        assertTrue(promptBodies.isEmpty())
+    }
+
     @Test fun chatUsesMaxAndDoubleTapIsReservedSynchronously() {
         vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
         vm._llmReasoningEffort.value = AgentReasoningEffort.MAX
