@@ -54,7 +54,7 @@ internal fun MaterialConnectionScreen(
     editor: MaterialConnectionEditor, online: Boolean, onClose: () -> Unit,
     onSave: suspend (DanbooruSettings) -> Result<Unit>,
     onTest: suspend (DanbooruSettings) -> String,
-    onClear: suspend () -> String, onSaved: (String) -> Unit
+    onClear: suspend () -> String, onSaved: (String) -> Unit, active: Boolean = true
 ) {
     val draft = editor.draft
     val scope = rememberCoroutineScope()
@@ -63,12 +63,12 @@ internal fun MaterialConnectionScreen(
     var visible by remember { mutableStateOf(false) }
     var preferences by remember { mutableStateOf(false) }
     fun leave() {
-        if (editor.busy) return
+        if (editor.busy || !active) return
         if (editor.dirty) discardOpen = true else onClose()
     }
-    PredictiveBackHandler(enabled = !discardOpen && !clearOpen) { events -> events.collect {}; leave() }
+    PredictiveBackHandler(enabled = active && !discardOpen && !clearOpen) { events -> events.collect {}; leave() }
     fun action(block: suspend () -> Unit) {
-        if (editor.busy) return
+        if (editor.busy || !active) return
         editor.busy = true
         scope.launch {
             try { block() } catch (e: CancellationException) { throw e }
@@ -169,7 +169,7 @@ internal fun MaterialConnectionScreen(
             Spacer(Modifier.height(12.dp))
         }
     }
-    if (discardOpen) AlertDialog(onDismissRequest = { discardOpen = false },
+    if (active && discardOpen) AlertDialog(onDismissRequest = { discardOpen = false },
         title = { Text("保留这次修改？") }, text = { Text("当前设置尚未保存。") },
         confirmButton = { TextButton(onClick = { discardOpen = false; save() }) { Text("保存并返回") } },
         dismissButton = {
@@ -178,7 +178,7 @@ internal fun MaterialConnectionScreen(
                 TextButton(onClick = { editor.discard(); discardOpen = false; onClose() }) { Text("放弃修改") }
             }
         })
-    if (clearOpen) AlertDialog(onDismissRequest = { clearOpen = false },
+    if (active && clearOpen) AlertDialog(onDismissRequest = { clearOpen = false },
         title = { Text("清除 Danbooru 在线缓存？") },
         text = { Text("只清除此来源的列表、图片和临时分享缓存；账号配置与系统相册保持不变。") },
         confirmButton = { TextButton(onClick = { clearOpen = false; action { editor.status = onClear() } }) { Text("清除") } },

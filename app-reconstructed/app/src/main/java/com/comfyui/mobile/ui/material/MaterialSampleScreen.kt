@@ -16,6 +16,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -64,6 +67,8 @@ private fun MaterialSampleContent(
     var mediaBusy by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    val focus = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val grid = rememberLazyStaggeredGridState(vm.scrollIndex, vm.scrollOffset)
     DisposableEffect(lifecycle, vm, tab) {
@@ -111,66 +116,81 @@ private fun MaterialSampleContent(
     PredictiveBackHandler(enabled = !state.settingsOpen && !appearance && !connect && fullscreen == null && !tags && !menu) {
         events -> events.collect {}; back()
     }
-    if (state.settingsOpen) {
-        MaterialConnectionScreen(editor, online, vm::closeSettings, vm::save, vm::test, vm::clearCache, ::notice)
-    } else {
-        val names = listOf("主页", "控制", "Agent", "应用", "画廊")
-        val icons = listOf(Icons.Default.Home, Icons.Default.Build, Icons.Default.Person, Icons.AutoMirrored.Filled.List,
-            androidx.compose.ui.graphics.vector.ImageVector.vectorResource(com.comfyui.mobile.R.drawable.material_symbol_gallery))
-        Scaffold(modifier = Modifier.imePadding(),
-            topBar = { TopAppBar(
-                title = { Column {
-                    Text(if (vm.hasDetail) "图片详情" else names[tab], maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text("Material 样板 · ${if (online) "真实 Danbooru" else "离线演示"}",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } },
-                navigationIcon = { IconButton(onClick = ::back) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, if (vm.hasDetail) "返回图片列表" else "退出样板")
-                } },
-                actions = {
-                    IconButton(onClick = { editor.begin(vm.settings); vm.showSettings() }) { Icon(Icons.Default.Settings, "Danbooru 设置") }
-                    Box {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "样板选项") }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            DropdownMenuItem(text = { Text("主题与外观") }, onClick = { menu = false; appearance = true })
-                            DropdownMenuItem(text = { Text(if (online) "回到离线样板" else "连接现有 Danbooru") },
-                                onClick = { menu = false; if (online) onOnline(false) else connect = true })
-                            if (!online) SampleScenario.entries.forEach { value ->
-                                DropdownMenuItem(text = { Text("演示 · ${value.title}") },
-                                    onClick = { menu = false; tab = 4; tags = false; onScenario(value); vm.search("") })
+    val page = MaterialPage(tab, detail = vm.hasDetail, settings = state.settingsOpen)
+    LaunchedEffect(vm, page) { focus.clearFocus(); keyboard?.hide() }
+    key(vm) {
+        MaterialPageTransition(MaterialPageFrame(page, state, vm.settings.namespace()), animateTabs = false,
+            hostTag = "material-shell-motion-host", pageTagPrefix = "material-shell-page") { frame, active ->
+            val shown = frame.state
+            val shownPage = frame.page
+            if (shownPage.settings) {
+                MaterialConnectionScreen(editor, online, vm::closeSettings, vm::save, vm::test, vm::clearCache, ::notice,
+                    active = active)
+            } else {
+                val names = listOf("主页", "控制", "Agent", "应用", "画廊")
+                val icons = listOf(Icons.Default.Home, Icons.Default.Build, Icons.Default.Person, Icons.AutoMirrored.Filled.List,
+                    androidx.compose.ui.graphics.vector.ImageVector.vectorResource(com.comfyui.mobile.R.drawable.material_symbol_gallery))
+                Scaffold(modifier = Modifier.imePadding(),
+                    topBar = { TopAppBar(
+                        title = { Column {
+                            Text(if (shownPage.detail) "图片详情" else names[shownPage.tab], maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Material 样板 · ${if (online) "真实 Danbooru" else "离线演示"}",
+                                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        } },
+                        navigationIcon = { IconButton(onClick = ::back, enabled = active) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, if (shownPage.detail) "返回图片列表" else "退出样板")
+                        } },
+                        actions = {
+                            IconButton(onClick = { editor.begin(vm.settings); vm.showSettings() }) { Icon(Icons.Default.Settings, "Danbooru 设置") }
+                            Box {
+                                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "样板选项") }
+                                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                    DropdownMenuItem(text = { Text("主题与外观") }, onClick = { menu = false; appearance = true })
+                                    DropdownMenuItem(text = { Text(if (online) "回到离线样板" else "连接现有 Danbooru") },
+                                        onClick = { menu = false; if (online) onOnline(false) else connect = true })
+                                    if (!online) SampleScenario.entries.forEach { value ->
+                                        DropdownMenuItem(text = { Text("演示 · ${value.title}") },
+                                            onClick = { menu = false; tab = 4; tags = false; onScenario(value); vm.search("") })
+                                    }
+                                }
+                            }
+                        }
+                    ) },
+                    snackbarHost = { if (active) SnackbarHost(snackbar) },
+                    bottomBar = {
+                        if (!shownPage.detail && !WindowInsets.isImeVisible) NavigationBar {
+                            names.forEachIndexed { index, name ->
+                                NavigationBarItem(selected = shownPage.tab == index, onClick = { tab = index }, enabled = active,
+                                    modifier = Modifier.testTag("material-tab-$index"),
+                                    icon = { Icon(icons[index], null) }, label = { Text(name, maxLines = 1) })
+                            }
+                        }
+                    }
+                ) { padding ->
+                    Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
+                        if (shownPage.detail) MaterialDanbooruDetail(vm, shown, loader, frame.namespace, online, mediaBusy,
+                            onTags = { tags = true }, onFullscreen = { url, key -> fullscreen = url to key },
+                            onMedia = { post, share ->
+                                if (!mediaBusy) {
+                                    mediaBusy = true
+                                    scope.launch {
+                                        try { notice(onOriginal(post, share)) }
+                                        catch (e: kotlinx.coroutines.CancellationException) { throw e }
+                                        catch (e: Exception) { notice(if (e is DanbooruException) e.message ?: "原图读取失败" else "操作失败，请检查网络或存储空间") }
+                                        finally { mediaBusy = false }
+                                    }
+                                }
+                            }, onWeb = onWeb, modifier = Modifier.weight(1f))
+                        else MaterialPageTransition(frame, Modifier.weight(1f)) { tabFrame, _ ->
+                            Column(Modifier.fillMaxSize()) {
+                                if (tabFrame.page.tab == 4) {
+                                    MaterialBrowseControls(vm, tabFrame.state, input) { input = it }
+                                    MaterialDanbooruGrid(vm, tabFrame.state, grid, loader, tabFrame.namespace, Modifier.weight(1f))
+                                } else MaterialNavigationDemo(names[tabFrame.page.tab])
                             }
                         }
                     }
                 }
-            ) },
-            snackbarHost = { SnackbarHost(snackbar) },
-            bottomBar = {
-                if (!vm.hasDetail && !WindowInsets.isImeVisible) NavigationBar {
-                    names.forEachIndexed { index, name ->
-                        NavigationBarItem(selected = tab == index, onClick = { tab = index },
-                            icon = { Icon(icons[index], null) }, label = { Text(name, maxLines = 1) })
-                    }
-                }
-            }
-        ) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)) {
-                if (vm.hasDetail) MaterialDanbooruDetail(vm, state, loader, vm.settings.namespace(), online, mediaBusy,
-                    onTags = { tags = true }, onFullscreen = { url, key -> fullscreen = url to key },
-                    onMedia = { post, share ->
-                        if (!mediaBusy) {
-                            mediaBusy = true
-                            scope.launch {
-                                try { notice(onOriginal(post, share)) }
-                                catch (e: kotlinx.coroutines.CancellationException) { throw e }
-                                catch (e: Exception) { notice(if (e is DanbooruException) e.message ?: "原图读取失败" else "操作失败，请检查网络或存储空间") }
-                                finally { mediaBusy = false }
-                            }
-                        }
-                    }, onWeb = onWeb, modifier = Modifier.weight(1f))
-                else if (tab == 4) {
-                    MaterialBrowseControls(vm, state, input) { input = it }
-                    MaterialDanbooruGrid(vm, state, grid, loader, vm.settings.namespace(), Modifier.weight(1f))
-                } else MaterialNavigationDemo(names[tab])
             }
         }
     }
@@ -184,7 +204,7 @@ private fun MaterialSampleContent(
             if (it.text.isNotBlank()) { onCopy(it); notice("已复制 ${it.count} 个标签") }
         }
     }
-    fullscreen?.let { (url, key) -> MaterialFullscreenImage(url, key, loader) { fullscreen = null } }
+    MaterialFullscreenImage(fullscreen, loader) { fullscreen = null }
     if (appearance) ModalBottomSheet(onDismissRequest = { appearance = false }) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

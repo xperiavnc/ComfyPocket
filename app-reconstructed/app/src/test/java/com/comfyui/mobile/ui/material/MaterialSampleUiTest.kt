@@ -180,4 +180,58 @@ class MaterialSampleUiTest {
             assertEquals("landscape studio, scenery", h.copies.text)
         }
     }
+
+    @Test fun rapidTabSwitchesKeepGalleryScrollAndDoNotRepeatRequests() {
+        Harness().use { h ->
+            compose.onNodeWithTag("material-grid").performScrollToIndex(6)
+            compose.waitForIdle()
+            val index = h.vm.scrollIndex
+            val requests = h.service.requests
+            compose.mainClock.autoAdvance = false
+            for (index in listOf(0, 2, 1, 3, 4, 4)) {
+                compose.onNodeWithTag("material-tab-$index").performClick()
+                compose.mainClock.advanceTimeBy(32)
+            }
+            compose.mainClock.advanceTimeBy(400)
+            compose.onNodeWithTag("material-motion-host").assert(hasStateDescription("页面稳定"))
+            compose.onNodeWithTag("material-grid").assertExists()
+            assertEquals(index, h.vm.scrollIndex)
+            assertEquals(requests, h.service.requests)
+            assertEquals(0, h.exits)
+        }
+    }
+
+    @Test fun outgoingSettingsDoesNotConsumeTheNextBackDuringItsExitAnimation() {
+        Harness().use { h ->
+            compose.onNodeWithTag("material-image-100").performClick()
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("Danbooru 设置").performClick()
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithContentDescription("返回画廊").performClick()
+            compose.mainClock.advanceTimeBy(32)
+            assertFalse(h.vm.state.value.settingsOpen)
+            assertTrue(h.vm.hasDetail)
+            h.back()
+            compose.mainClock.advanceTimeBy(400)
+            assertFalse(h.vm.hasDetail)
+            assertEquals(0, h.exits)
+            compose.onNodeWithTag("material-grid").assertExists()
+        }
+    }
+
+    @Test fun fullscreenFadeClosesOnlyTheOverlayAndKeepsTheDetail() {
+        Harness().use { h ->
+            compose.onNodeWithTag("material-image-100").performClick()
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("放大图片").performClick()
+            compose.waitForIdle()
+            compose.onNodeWithTag("material-fullscreen").assertExists()
+            compose.onNodeWithContentDescription("关闭全屏").performClick()
+            compose.waitForIdle()
+            compose.onNodeWithTag("material-fullscreen").assertDoesNotExist()
+            assertTrue(h.vm.hasDetail)
+            assertEquals(0, h.exits)
+        }
+    }
 }

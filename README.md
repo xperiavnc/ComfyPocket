@@ -53,6 +53,11 @@ cd app-reconstructed
 
 ## 当前验证状态
 
+- `0.0.11-material-motion`（versionCode 13）：为 **Material 预览**补充可中断的 Tab 内容切换、
+  详情／设置进入与返回、全屏图淡入淡出。底栏固定，重复点击不刷新，不改原 Miuix 外壳。
+  保留退场内容快照，退场页不再处理点击与返回；系统动画倍率为 0 时直接结束过渡。
+  验证边界和动效规格见 `app-reconstructed/MATERIAL.md`。
+
 - `0.0.10-material-preview`（versionCode 12）：新增 **设置 → Material 预览**，原界面保留。
   提供 Material 3 主题、五入口导航演示、Danbooru 图片／Tag／全屏与账号代理表单样板。
   默认离线，可演示空／失败／追加状态，手动确认后可连接现有 Danbooru 配置。

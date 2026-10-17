@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.0.10-material-preview"
+        versionCode = 13
+        versionName = "0.0.11-material-motion"
     }
 
     buildFeatures {

@@ -2,6 +2,11 @@
 
 package com.comfyui.mobile.ui.material
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -172,26 +178,45 @@ internal fun MaterialTagPanel(
 }
 
 @Composable
-internal fun MaterialFullscreenImage(url: String, key: String, loader: ImageLoader, onClose: () -> Unit) {
+internal fun MaterialFullscreenImage(image: Pair<String, String>?, loader: ImageLoader, onClose: () -> Unit) {
+    val visibility = remember { MutableTransitionState(false) }
+    var retained by remember { mutableStateOf(image) }
+    SideEffect {
+        if (image != null) retained = image
+        visibility.targetState = image != null
+    }
+    val displayed = retained
+    if (displayed != null && (visibility.currentState || visibility.targetState)) {
+        Dialog(onDismissRequest = { if (image != null) onClose() },
+            properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+            AnimatedVisibility(visibility, enter = fadeIn(tween(180)), exit = fadeOut(tween(140))) {
+                MaterialFullscreenContent(displayed.first, displayed.second, loader, image != null) {
+                    if (image != null) onClose()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MaterialFullscreenContent(url: String, key: String, loader: ImageLoader, active: Boolean, onClose: () -> Unit) {
     var scale by remember(url) { mutableFloatStateOf(1f) }
     var pan by remember(url) { mutableStateOf(Offset.Zero) }
     val transform = rememberTransformableState { zoom, offset, _ ->
         scale = (scale * zoom).coerceIn(1f, 5f)
         pan = if (scale <= 1f) Offset.Zero else pan + offset
     }
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black).clipToBounds()) {
-            AsyncImage(ImageRequest.Builder(LocalContext.current).data(url).memoryCacheKey(key).diskCacheKey(key).build(),
-                "全屏图片，可双指缩放", loader, contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y)
-                    .transformable(transform))
-            IconButton(onClick = onClose, modifier = Modifier.statusBarsPadding().align(Alignment.TopStart).padding(8.dp)) {
-                Icon(Icons.Default.Close, "关闭全屏", tint = Color.White)
-            }
-            TextButton(onClick = { scale = 1f; pan = Offset.Zero },
-                modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp)) {
-                Text("重置缩放", color = Color.White)
-            }
+    Box(Modifier.fillMaxSize().background(Color.Black).clipToBounds().testTag("material-fullscreen")) {
+        AsyncImage(ImageRequest.Builder(LocalContext.current).data(url).memoryCacheKey(key).diskCacheKey(key).build(),
+            "全屏图片，可双指缩放", loader, contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize().graphicsLayer(scaleX = scale, scaleY = scale, translationX = pan.x, translationY = pan.y)
+                .transformable(transform, enabled = active))
+        IconButton(onClick = onClose, enabled = active, modifier = Modifier.statusBarsPadding().align(Alignment.TopStart).padding(8.dp)) {
+            Icon(Icons.Default.Close, "关闭全屏", tint = Color.White)
+        }
+        TextButton(onClick = { scale = 1f; pan = Offset.Zero }, enabled = active,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(12.dp)) {
+            Text("重置缩放", color = Color.White)
         }
     }
 }

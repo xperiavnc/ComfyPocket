@@ -140,4 +140,46 @@ class MaterialVisualTest {
             save(view, "tags-long-font130")
         } finally { controller.pause().stop().destroy() }
     }
+
+    @Test fun captureNativeMidTransitionFramesAndKeepTheTabBarStationary() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val activity = controller.get()
+        val service = Service(activity)
+        val vm = DanbooruViewModel(SavedStateHandle(), service)
+        val loader = ImageLoader.Builder(activity).crossfade(false).build()
+        val view = ComposeView(activity)
+        try {
+            activity.setContentView(view.apply { setContent {
+                MaterialSampleScreen(vm, remember { MaterialConnectionEditor() }, loader, false, {}, {}, {}, {}, {}, { _, _ -> "" })
+            } })
+            compose.waitUntil(15000) { compose.onAllNodes(hasStateDescription("图片已加载")).fetchSemanticsNodes().size >= 2 }
+            compose.waitForIdle()
+            val tabBounds = compose.onNodeWithTag("material-tab-4").fetchSemanticsNode().boundsInRoot
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithTag("material-tab-0").performClick()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(80)
+            compose.onNodeWithTag("material-motion-host").assert(hasStateDescription("页面切换中"))
+            assertEquals(tabBounds, compose.onNodeWithTag("material-tab-4").fetchSemanticsNode().boundsInRoot)
+            save(view, "motion-tab-mid")
+            compose.mainClock.advanceTimeBy(400)
+            compose.onNodeWithTag("material-tab-4").performClick()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(400)
+            compose.onNodeWithTag("material-image-100").performClick()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(120)
+            compose.onNodeWithTag("material-shell-motion-host").assert(hasStateDescription("页面切换中"))
+            save(view, "motion-enter-mid")
+            compose.mainClock.advanceTimeBy(400)
+            compose.onNodeWithContentDescription("返回图片列表").performClick()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(120)
+            compose.onNodeWithTag("material-shell-motion-host").assert(hasStateDescription("页面切换中"))
+            save(view, "motion-return-mid")
+            compose.mainClock.advanceTimeBy(400)
+            assertFalse(vm.hasDetail)
+            compose.onNodeWithTag("material-grid").assertIsDisplayed()
+        } finally { controller.pause().stop().destroy(); loader.shutdown() }
+    }
 }
