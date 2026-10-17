@@ -11,6 +11,7 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
 - `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
 - `app-reconstructed/DANBOORU_GALLERY_PLAN.md`：Danbooru 原生画廊的实施记录、账号/代理操作与验证边界。
+- `app-reconstructed/MATERIAL.md`：Material P0／P1 样板入口、演示状态与迁移边界。
 - `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
 - `app-reconstructed/TAG_LIBRARY.md`：内置词库来源、查询边界与可复现构建方式。
 - `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
@@ -51,6 +52,11 @@ cd app-reconstructed
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
 
 ## 当前验证状态
+
+- `0.0.10-material-preview`（versionCode 12）：新增 **设置 → Material 预览**，原界面保留。
+  提供 Material 3 主题、五入口导航演示、Danbooru 图片／Tag／全屏与账号代理表单样板。
+  默认离线，可演示空／失败／追加状态，手动确认后可连接现有 Danbooru 配置。
+  仅完成 P0／P1，未进入全应用迁移；使用和验证边界见 `app-reconstructed/MATERIAL.md`。
 
 - `0.0.9`（versionCode 11）：Danbooru 增加热度、评分、收藏排序及日／周／月排行榜，可前后切换榜期。
   热度使用官方 `order:rank`，排行榜使用官方日历范围和 `order:score`；请求在服务端排序，排序列表使用数字分页。

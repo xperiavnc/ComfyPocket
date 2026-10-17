@@ -53,6 +53,7 @@ class DanbooruViewModel(
     val state = _state.asStateFlow()
     private var generation = 0L
     private var active = false
+    private var observedSettings = settings
     private var loadJob: Job? = null
     private var detailJob: Job? = null
     // Only cursors, never post bodies or keys, go into SavedState. Eight visible page blocks.
@@ -73,6 +74,13 @@ class DanbooruViewModel(
             loadJob?.cancel()
             detailJob?.cancel()
             update { copy(loading = false, refreshing = false, appending = false, detailLoading = false) }
+        } else if (settings != observedSettings) {
+            // Another UI (the opt-in Material sample) may save while this owner is paused.
+            // Never resume old-account content with a newly configured client/cache scope.
+            observedSettings = settings
+            update { copy(account = if (settings.loggedIn) AccountStatus.SAVED else AccountStatus.ANONYMOUS,
+                identity = null, accountError = null) }
+            search(_state.value.query.text, settings.defaultFilter)
         } else if (_state.value.pages.isEmpty() && !_state.value.ended) {
             restore()
         } else if (hasDetail && _state.value.detail == null) {
@@ -250,6 +258,7 @@ class DanbooruViewModel(
         generation++; loadJob?.cancel(); detailJob?.cancel()
         update { copy(loading = false, refreshing = false, appending = false, detailLoading = false) }
         service.save(snapshot)
+        observedSettings = settings
         update { copy(account = if (snapshot.loggedIn) AccountStatus.SAVED else AccountStatus.ANONYMOUS,
             identity = null, accountError = null, message = "Danbooru 设置已保存") }
         search(_state.value.query.text, snapshot.defaultFilter)

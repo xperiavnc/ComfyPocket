@@ -299,6 +299,13 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     },
                     onClick = { navController.navigate("theme") }
     )
+                ArrowPreference(
+                    title = "Material 预览",
+                    summary = "P0 / P1 · 独立样板，原界面保留",
+                    onClick = {
+                        context.startActivity(Intent(context, com.comfyui.mobile.ui.material.MaterialSampleActivity::class.java))
+                    }
+                )
             }
 
             // 3. 智能助手 Agent

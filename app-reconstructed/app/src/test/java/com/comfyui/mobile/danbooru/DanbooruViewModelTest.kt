@@ -262,4 +262,19 @@ class DanbooruViewModelTest {
         assertFalse(vm.state.value.refreshing)
         vm.setActive(false); assertFalse(vm.state.value.refreshing)
     }
+    @Test fun resumingAfterAnotherUiSavedConnectionDiscardsTheOldWindowAndIdentity() = runTest {
+        val service = Service(); val vm = DanbooruViewModel(SavedStateHandle(), service)
+        vm.setActive(true); advanceUntilIdle()
+        vm.open(vm.state.value.posts.first()); advanceUntilIdle()
+        vm.setActive(false)
+        service.settings = DanbooruSettings("other-user", "fixture-key", defaultFilter = ContentFilter.SENSITIVE)
+        service.handler = { _, _ -> listOf(fixture(90000)) }
+        vm.setActive(true); advanceUntilIdle()
+        assertEquals(listOf(90000L), vm.state.value.posts.map { it.id })
+        assertFalse(vm.hasDetail)
+        assertEquals(AccountStatus.SAVED, vm.state.value.account)
+        assertNull(vm.state.value.identity)
+        assertTrue(service.requests.last().first.contains("rating:s"))
+        assertNull(service.requests.last().second)
+    }
 }

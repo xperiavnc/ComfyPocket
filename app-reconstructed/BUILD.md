@@ -20,11 +20,12 @@
 | Activity / Lifecycle | 1.13.0 / 2.10.0 |
 | Navigation / NavigationEvent | 2.9.5 / 1.1.2 |
 | Coil | 2.7.0 |
+| Material 3 / Icons Core（独立样板） | 1.4.0 / 1.7.8 |
 | OkHttp / Retrofit / Gson | 4.12.0 / 2.12.0 / 2.11.0 |
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.9`，版本号为 `11`。显示名 **ComfyPocket**，Agent 改动说明见 `AGENT.md`，在线画廊见 `DANBOORU_GALLERY_PLAN.md`。
+当前构建版本名为 `0.0.10-material-preview`，版本号为 `12`。显示名 **ComfyPocket**，Agent 改动说明见 `AGENT.md`，在线画廊见 `DANBOORU_GALLERY_PLAN.md`，独立 Material 样板见 `MATERIAL.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 
