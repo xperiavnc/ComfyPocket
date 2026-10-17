@@ -64,7 +64,9 @@ object AgentDrawIntent {
     fun isExplicitVeto(userText: String): Boolean {
         val t = userText.trim()
         if (t.isEmpty()) return false
-        return VETO.containsMatchIn(t)
+        val reverseOnly = Regex("反推|反向提示词").containsMatchIn(t) &&
+            !Regex("(并|再|然后|接着).{0,6}(出图|生图|生成|画)").containsMatchIn(t)
+        return reverseOnly || VETO.containsMatchIn(t)
     }
 
     fun suggestsDraw(userText: String): Boolean {

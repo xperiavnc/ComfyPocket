@@ -75,6 +75,7 @@ fun AgentChatPanel(
     onPickFiles: () -> Unit = {},
     onRemoveAttachment: (String) -> Unit = {},
     onStop: () -> Unit = {},
+    onRefreshTags: (String) -> Unit = {},
     onSendMessage: (String) -> Unit
     ) {
     val haptics = rememberAppHaptics()
@@ -109,7 +110,7 @@ fun AgentChatPanel(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
                 items(messages, key = { it.id }) { msg ->
-                    AgentBubble(msg)
+                    AgentBubble(msg, refreshEnabled = !busy, onRefreshTags = { onRefreshTags(msg.id) })
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))

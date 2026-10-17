@@ -33,7 +33,8 @@ internal class AgentLlmSettings(
     val persona: String,
     val drawRules: String,
     val lores: List<CharacterLore>,
-    val lastPrompt: String
+    val lastPrompt: String,
+    val tagSettings: com.comfyui.mobile.danbooru.DanbooruSettings = com.comfyui.mobile.danbooru.DanbooruSettings()
 ) {
     companion object {
         fun capture(vm: MainViewModel) = AgentLlmSettings(
@@ -44,7 +45,8 @@ internal class AgentLlmSettings(
                 vm._agentMessages.value.asReversed().firstOrNull {
                     it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()
                 }?.expandedPrompt.orEmpty()
-            }
+            },
+            vm._agentDanbooruSettings.value
         )
     }
 }
@@ -62,6 +64,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             it.copy(
                 content = partial ?: reason,
                 isThinking = false,
+                tagCheckingOrigin = null,
                 errorMessage = if (submitting) {
                     "$reason；服务端已接收的任务可能继续运行"
                 } else reason
@@ -97,7 +100,25 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                             vm, text, prior,
                             attachments.filter { it.isImage }.mapNotNull(MainViewModelAgent::imageDataUrl),
                             settings = settings, requestId = turn.id,
-                            onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) }
+                            onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) },
+                            checkCurrent = { session.requireCurrent(turn) },
+                            onTagChecking = { origin ->
+                                withContext(Dispatchers.Main) {
+                                    session.requireCurrent(turn)
+                                    MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = false) {
+                                        it.copy(tagCheckingOrigin = origin)
+                                    }
+                                }
+                            },
+                            onTagReport = { report ->
+                                withContext(Dispatchers.Main) {
+                                    session.requireCurrent(turn)
+                                    MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = false) {
+                                        it.copy(tagCheck = report, tagCheckingOrigin = null)
+                                    }
+                                    vm.addLog("Agent ${report.origin.title}: ${report.summary}；HTTP ${report.networkRequests}/3", LogType.INFO)
+                                }
+                            }
                         ).getOrThrow()
                     }
                 }
@@ -129,7 +150,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     content = if (mode == AgentMode.CHAT) reply.tip else MainViewModelAgent.sanitizeAgentReply(reply.tip),
                                     expandedPrompt = reply.prompt.takeIf(String::isNotBlank),
                                     thinkingContent = reply.thinking.takeIf(String::isNotBlank),
-                                    isThinking = false, errorMessage = null
+                                    isThinking = false, errorMessage = null, tagCheckingOrigin = null
                                 )
                             }
                         }
@@ -157,7 +178,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                             val hasReply = it.content.isNotBlank() && it.content != "✨深度求索中..."
                             it.copy(
                                 content = if (hasReply) it.content else message,
-                                errorMessage = message, isThinking = false
+                                errorMessage = message, isThinking = false, tagCheckingOrigin = null
                             )
                         }
                         vm.addLog("Agent 本轮失败: ${if (e is LlmException) e.errorType else e.javaClass.simpleName}", LogType.ERROR)

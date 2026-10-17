@@ -94,3 +94,55 @@ HTTP、Coil 读写、分享文件字节均为真实执行；尚待真机分享�
 
 CPU 监控需更新并重启电脑上的完整 Bridge 2.1 插件（或保留已有 Crystools）。
 本批只验证配套插件源码和本地采样，远端插件部署及真机显示仍待更新后复测。
+
+## 0.0.4 提示词职责拆分与 Danbooru 核对
+
+版本 `0.0.4-agent-prompts`（versionCode 6）；不改 Bridge、导航和底栏动画。
+
+### 提示词与格式
+
+入口：**Agent 设置 → 提示词格式与标签核对**。人设只定义 reply 的语气；分镜只定义
+画面内容、连续性、主体属性归属和可见表情；外层 JSON 由 App 的统一契约负责。
+
+- 通用 Tags：兼容已有标签工作流。
+- Anima 混合：英文 tags + 必要的空间/属性绑定短句，保留段落、标点和引号。
+- 自然语言 / 反推：连贯描述可见画面，不臆测身份、相机或画师，反推本身不自动出图。
+
+参考资料中的 XML、regex、image### 等宿主包装不会成为 App 的输出协议。
+外部示例文件保留在用户本地，不随源码提交；内置规则仅提炼可见状态、属性绑定与格式分工。
+未对 Anima 真实生成效果做保证。仅完全匹配旧内置默认值才升级，旧值保存在本地偏好副本；
+用户改过的提示词保留。所选格式优先于自定义规则中的旧格式约定，仍可手动编辑或恢复默认。
+
+### Danbooru
+
+默认开启，独立 HTTP 代理默认关闭/直连，不借用或修改 ComfyUI、集市、LLM 的客户端。
+自动模式优先使用 Chat Completions 函数工具；明确收到 400/422 的工具不支持错误时，
+只进行一次兼容初稿请求。也可直接选“兼容核对”。模型忽略工具时由 App 从初稿提取候选。
+UI/记录区分“模型请求查询”和“App 兼容核对”。
+
+只执行受限的 search_danbooru_tags（短查询词和结果上限），不搜索图片、帖子或用户。
+一轮最多一次查询阶段、最多三个未缓存 GET、一次最终修订；优先一个待确认关键词，
+多词共享预算，重复规范化词合并；预算用尽的项标为未完成，不把截断结果当作不存在。
+初稿与查询阶段都没有工作流提交副作用，最后沿用现有 patch/submit，最多提交一次。
+
+搜索：search[name_or_alias_matches]，按 search[order]=count 排序，精确名称优先。
+别名只接受 active 的 antecedent_name → consequent_name，模糊候选不直接替换。
+Wiki 用标题路径，独立“无 Wiki”状态，摘要只取定义段并限制到 600 字符。
+查询失败/超时/限流/解析异常与空结果区分；保留未知、自定义、权重、转义和 LoRA 语法。
+
+每次未缓存请求至少间隔 1 秒；429 遵循 Retry-After，本轮不重试。标签/别名缓存 24 小时，
+Wiki 缓存 7 天，以 API 类型、规范化词和独立代理摘要隔离，最多 200 项 / 2 MiB。
+缓存位于 cacheDir，应用现有清缓存入口可清除；不存 Danbooru 账号或 API Key。
+对话可展开候选、类别、作品数、别名、Wiki 与未查证状态；主动刷新只更新字典结果，
+不重写提示词、不再次调用 LLM、不重新出图。停止或切换上下文后的旧查询不写入新轮次。
+
+2026-10-17 对正式 API 执行了三次 GET，标签、别名、Wiki 均返回 200，并将公共响应样本
+用于生产解析器回归。单元/Compose/MockWebServer 测试覆盖两种模型路径、缓存与频率、
+设置保存、正文语法保留、查询中止、刷新不重提任务；没有调用付费 LLM 或真实出图服务。
+主页 CPU、显存、内存进度条统一使用主题 primary 色。
+
+官方接口参考：
+- https://safebooru.donmai.us/wiki_pages/api:tags
+- https://safebooru.donmai.us/wiki_pages/api:tag_aliases
+- https://safebooru.donmai.us/wiki_pages/api:wiki_pages
+- https://platform.openai.com/docs/guides/function-calling

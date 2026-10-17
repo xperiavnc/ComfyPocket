@@ -140,7 +140,7 @@ object MainViewModelAgent {
         val hasDrawPrompt = vm.prefs.contains("agent_draw_prompt")
         if (!hasDrawPrompt) {
             val oldSys = vm.prefs.getString("agent_system_prompt", null)
-            if (!oldSys.isNullOrBlank() && oldSys.contains("动态插图分镜导演")) {
+            if (!oldSys.isNullOrBlank() && com.comfyui.mobile.agent.AgentPromptPolicy.fingerprint(oldSys) == "a5a157580c32e8c5e2e88584ea7b20f8b42bd9f063731028c3883c6d9c100397") {
                 vm.prefs.edit()
                     .putString("agent_draw_prompt", oldSys)
                     .putString("agent_system_prompt", MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT)
@@ -152,14 +152,31 @@ object MainViewModelAgent {
         vm.prefs.edit().putBoolean("agent_prompt_v2_migrated", true).apply()
     }
 
+    private fun ensurePromptV3Migration(vm: MainViewModel) {
+        if (vm.prefs.getBoolean("agent_prompt_v3_migrated", false)) return
+        val editor = vm.prefs.edit()
+        for ((key, oldHash) in listOf(
+            "agent_system_prompt" to "ffc65fd937267af8f0d9eaa65a13a6b1d82fbf23552306e4bccb47521969203e",
+            "agent_draw_prompt" to "a5a157580c32e8c5e2e88584ea7b20f8b42bd9f063731028c3883c6d9c100397"
+        )) {
+            val old = vm.prefs.getString(key, null) ?: continue
+            if (com.comfyui.mobile.agent.AgentPromptPolicy.fingerprint(old) == oldHash) {
+                editor.putString("agent_prompt_v3_previous_" + key, old).remove(key)
+            }
+        }
+        editor.putBoolean("agent_prompt_v3_migrated", true).apply()
+    }
+
     fun loadAgentSystemPrompt(vm: MainViewModel): String {
         ensurePromptSplitMigration(vm)
+        ensurePromptV3Migration(vm)
         val saved = vm.prefs.getString("agent_system_prompt", null)?.takeIf { it.isNotBlank() }
         return saved ?: MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT
     }
 
     fun loadAgentDrawPrompt(vm: MainViewModel): String {
         ensurePromptSplitMigration(vm)
+        ensurePromptV3Migration(vm)
         val saved = vm.prefs.getString("agent_draw_prompt", null)?.takeIf { it.isNotBlank() }
         return saved ?: MainViewModel.DEFAULT_AGENT_DRAW_PROMPT
     }
@@ -754,6 +771,48 @@ object MainViewModelAgent {
         vm.prefs.edit().putString("agent_system_prompt", v).apply()
     }
 
+    fun setDanbooruSettings(vm: MainViewModel, value: com.comfyui.mobile.danbooru.DanbooruSettings) {
+        try {
+            val settings = value.validated()
+            invalidateContext(vm)
+            com.comfyui.mobile.danbooru.DanbooruSettingsStore(vm.prefs).save(settings)
+            vm._agentDanbooruSettings.value = settings
+            vm.showUserMessage("已保存提示词格式与 Danbooru 设置")
+        } catch (e: IllegalArgumentException) {
+            vm.showUserMessage(e.message ?: "请检查 HTTP 代理地址")
+        }
+    }
+
+    /** Dictionary-only refresh. Never revises a prompt or submits another workflow. */
+    fun refreshTagCheck(vm: MainViewModel, messageId: String) {
+        if (vm.agentBusy.value) { vm.showUserMessage("请等本轮完成后刷新"); return }
+        val message = vm._agentMessages.value.firstOrNull { it.id == messageId } ?: return
+        val previous = message.tagCheck ?: return
+        if (message.tagCheckingOrigin != null) return
+        val version = vm.agentSession.contextVersion()
+        val turnId = vm.agentSession.state.value.turn?.id
+        val settings = vm._agentDanbooruSettings.value
+        fun valid() = vm.agentSession.contextVersion() == version &&
+            vm.agentSession.state.value.turn?.id == turnId && !vm.agentBusy.value
+        updateAgentMessage(vm, messageId, persist = false) { it.copy(tagCheckingOrigin = previous.origin) }
+        vm.viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val report = vm.danbooruRepository.lookup(previous.items.map { it.query }, 3,
+                    previous.origin, settings, refresh = true)
+                withContext(Dispatchers.Main) {
+                    if (valid()) updateAgentMessage(vm, messageId, persist = true) {
+                        it.copy(tagCheck = report, tagCheckingOrigin = null)
+                    }
+                }
+            } finally {
+                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
+                    // Clear only this refresh marker, even if a new turn has started.
+                    updateAgentMessage(vm, messageId, persist = false) { it.copy(tagCheckingOrigin = null) }
+                }
+            }
+        }
+    }
+
     fun resetAgentSystemPrompt(vm: MainViewModel) {
         setAgentSystemPrompt(vm, MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT)
     }
@@ -1030,7 +1089,10 @@ object MainViewModelAgent {
         imageDataUrls: List<String> = emptyList(),
         settings: AgentLlmSettings = AgentLlmSettings.capture(vm),
         requestId: String = UUID.randomUUID().toString(),
-        onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null
+        onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null,
+        checkCurrent: suspend () -> Unit = {},
+        onTagChecking: suspend (com.comfyui.mobile.danbooru.TagCheckOrigin) -> Unit = {},
+        onTagReport: suspend (com.comfyui.mobile.danbooru.DanbooruCheckReport) -> Unit = {}
     ): Result<AgentLlmResult> {
         val persona = settings.persona.ifBlank { MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT }
         val drawRules = settings.drawRules.ifBlank { MainViewModel.DEFAULT_AGENT_DRAW_PROMPT }
@@ -1057,53 +1119,8 @@ object MainViewModelAgent {
             lore.isEnabled && cleanName.isNotBlank() && userText.contains(cleanName, ignoreCase = true)
         }
 
-        val systemPrompt = buildString {
-            appendLine("【一、你的身份与系统人设】")
-            appendLine(persona.trim())
-            appendLine()
-
-            appendLine("【二、画图分镜规则】")
-            appendLine(drawRules.trim())
-            appendLine()
-
-            appendLine("【特别连续性法则 - 追问改图必须严格继承】")
-            appendLine("- 当用户在多轮对话中提出修改要求（例如更换服装、调整姿势、替换背景、微调表情等）时，必须保持上一轮已确定的角色核心特征（如发色、瞳色、专属饰品、体型）严格一致！")
-            appendLine("- 追问改图时，必须在上一轮的 prompt tags 基础上做针对性替换或增删；但若用户明确提出更换角色、不画该角色或绘制全新主体，应以最新指令为准并剥离旧角色特征。")
-            appendLine()
-
-            if (matchedLores.isNotEmpty()) {
-                appendLine("【三、已匹配的角色视觉设定档案（深度学习与情境融合准则）】")
-                appendLine("当前剧情涉及以下角色设定，请深入理解其角色特征，按如下认知规则进行智能学习、融合与取舍：")
-                matchedLores.forEach { lore ->
-                    appendLine("- 角色「${lore.name}」视觉档案：${lore.triggerWords.trim()}")
-                }
-                appendLine("1. 固有特征（绝对不可变）：如发色、瞳色、专属发饰/标志、LoRA 唤醒词，无论换装或更换场景，必须永久保留！")
-                appendLine("2. 情境特征（智能替换与取舍）：若角色档案包含默认服装、配剑或站姿，当用户提出特定情境要求（例如换成睡衣、泳装、躺在床上睡觉等）时，必须智能剥离冲突的旧服装与旧道具，替换为符合当前剧情的新衣物与新姿态，严禁机械死板叠加（例如严禁让比基尼与厚重铠甲共存）！")
-                appendLine()
-            }
-
-            appendLine("【四、是否立即出图（should_draw）——必填布尔，勿省略】")
-            appendLine("true（立刻渲染）——只要用户是在「要一张图 / 改一张图」，就 true，例如：")
-            appendLine("  · 描述场景、角色、服装、姿势、风格并希望看到画面（即使没写「画」「生成」）")
-            appendLine("  · 改图 / 修图 / 再画 / 出图 / 画一张 / 生成 / 加点 / 去掉 / 立绘 / 壁纸")
-            appendLine("  · 换装 / 换个服装 / 换衣服 / 换发型 / 换背景 / 换姿势 / 「把…改成…」「换成…」")
-            appendLine("  · 追问改上一张图、对附图提出修改")
-            appendLine("false——仅当明确不要渲染，或纯文字闲聊/问答：")
-            appendLine("  · 只要提示词 / 先别出图 / 先别画 / 不要生成 / 解释 tags 含义")
-            appendLine("  · 你好、这是什么模型、怎么用、纯闲聊且无画面描述")
-            appendLine("原则：创意出图场景默认 true；拿不准时选 true。只有明确只要文字或非视觉闲聊才 false。")
-            appendLine()
-            appendLine("【五、输出格式规范】")
-            appendLine("只输出一个 JSON 对象：不要 markdown 代码块（```）、不要任何解释或前后缀文字，三个字段都要有：")
-            appendLine("{")
-            appendLine("""  "reply": "用搭档口吻的一句中文回复（严禁客服套话如'正在提交出图'）",""")
-            appendLine("""  "prompt": "纯英文 Danbooru tags，逗号分隔，无中文废话",""")
-            appendLine("""  "should_draw": true""")
-            appendLine("}")
-            appendLine("示例A（改服饰→true）：{\"reply\":\"好，换成校服风。\",\"prompt\":\"1girl, school uniform, ...\",\"should_draw\":true}")
-            appendLine("示例B（描述场景→true）：{\"reply\":\"雨中撑伞，来了。\",\"prompt\":\"1girl, umbrella, rain, ...\",\"should_draw\":true}")
-            appendLine("示例C（只要提示词→false）：{\"reply\":\"这版 tags 先给你。\",\"prompt\":\"1girl, ...\",\"should_draw\":false}")
-        }
+        val systemPrompt = com.comfyui.mobile.agent.AgentPromptPolicy.system(
+            persona, drawRules, settings.tagSettings.promptFormat, matchedLores)
 
         val messages = mutableListOf<com.comfyui.mobile.network.ChatMessageDto>()
         messages.add(com.comfyui.mobile.network.ChatMessageDto("system", systemPrompt))
@@ -1135,30 +1152,30 @@ object MainViewModelAgent {
             LogType.INFO
         )
 
-        val result = if (onProgress != null) {
-            vm.llmClient.chatCompletionsStream(
-                baseUrl = settings.baseUrl,
-                apiKey = settings.apiKey,
-                model = settings.model,
-                messages = messages,
-                images = imageDataUrls,
-                requestId = requestId,
-                reasoningEffort = settings.effort,
-                onProgress = onProgress
-            )
-        } else {
-            vm.llmClient.chatCompletions(
-                baseUrl = settings.baseUrl,
-                apiKey = settings.apiKey,
-                model = settings.model,
-                messages = messages,
-                images = imageDataUrls,
-                requestId = requestId,
-                reasoningEffort = settings.effort
-    )
+        val source = com.comfyui.mobile.agent.AgentTagGeneration { currentMessages, tools ->
+            if (tools == null && onProgress != null) {
+                vm.llmClient.chatCompletionsStream(
+                    settings.baseUrl, settings.apiKey, settings.model, currentMessages,
+                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
+                    onProgress = onProgress).getOrThrow()
+            } else {
+                vm.llmClient.chatCompletions(
+                    settings.baseUrl, settings.apiKey, settings.model, currentMessages,
+                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
+                    tools = tools).getOrThrow()
+            }
         }
-        return result.map { output ->
-            parseAgentLlmReply(vm, output.content, output.reasoning, userText = userText, previousPrompt = settings.lastPrompt)
+        return try {
+            val output = com.comfyui.mobile.agent.AgentDanbooruPipeline(vm.danbooruRepository).run(
+                messages, settings.tagSettings, source, checkCurrent, onTagChecking, onTagReport,
+                protectedWords = matchedLores.flatMap { it.triggerWords.split(',').map(String::trim) })
+            Result.success(parseAgentLlmReply(vm, output.content, output.reasoning,
+                userText = userText, previousPrompt = settings.lastPrompt,
+                promptFormat = settings.tagSettings.promptFormat))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -1283,10 +1300,11 @@ object MainViewModelAgent {
         raw: String,
         apiReasoning: String? = null,
         userText: String = "",
-        previousPrompt: String? = null
+        previousPrompt: String? = null,
+        promptFormat: com.comfyui.mobile.agent.AgentPromptFormat = com.comfyui.mobile.agent.AgentPromptFormat.TAGS
     ): AgentLlmResult {
         val thinking = (apiReasoning?.takeIf { it.isNotBlank() } ?: extractThinkingContent(raw)).trim()
-        val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(sanitizeThinkingContent(raw))
+        val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(sanitizeThinkingContent(raw), preserveNaturalLanguage = promptFormat != com.comfyui.mobile.agent.AgentPromptFormat.TAGS)
         val lastPrompt = previousPrompt ?: vm._agentLastExpandedPrompt.value.trim().ifBlank {
             vm._agentMessages.value.asReversed().firstOrNull {
                 it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()

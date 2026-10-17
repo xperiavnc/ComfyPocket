@@ -1,0 +1,33 @@
+[
+  {
+    "url": "https://danbooru.donmai.us/tags.json?search%5Bname_or_alias_matches%5D=blonde_hair&search%5Border%5D=count&limit=3&only=name%2Ccategory%2Cpost_count%2Cis_deprecated",
+    "status": 200,
+    "body": [
+      {
+        "name": "blonde_hair",
+        "category": 0,
+        "post_count": 2211779,
+        "is_deprecated": false
+      }
+    ]
+  },
+  {
+    "url": "https://danbooru.donmai.us/tag_aliases.json?search%5Bantecedent_name_matches%5D=blond_hair&search%5Bstatus%5D=active&limit=3&only=antecedent_name%2Cconsequent_name%2Cstatus",
+    "status": 200,
+    "body": [
+      {
+        "antecedent_name": "blond_hair",
+        "consequent_name": "blonde_hair",
+        "status": "active"
+      }
+    ]
+  },
+  {
+    "url": "https://danbooru.donmai.us/wiki_pages/blonde_hair.json?only=title%2Cbody",
+    "status": 200,
+    "body": {
+      "title": "blonde_hair",
+      "body": "Hair that is colored blonde or yellow.\r\n\r\nh4. Examples\r\n\r\n* !post #7108311\r\n* !post #5432598\r\n\r\nh4. See also\r\n\r\n* [[brown hair]]\r\n* [[white hair]]\r\n* [[tag group:hair color]]"
+    }
+  }
+]

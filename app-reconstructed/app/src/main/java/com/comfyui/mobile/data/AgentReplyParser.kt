@@ -10,7 +10,8 @@ import java.io.StringReader
  * Parses the Draw-mode LLM reply `{"reply": ..., "prompt": ..., "should_draw": ...}`.
  * Pure Kotlin (no Android) so it is unit-testable.
  *
- * Guarantees: [Result.prompt] never contains JSON syntax; when no valid prompt is found it is "".
+ * Extracts only the prompt field, never the serialized reply envelope. Anima/natural mode keeps
+ * visual sentences and quoted image text. When no valid prompt is found it is "".
  */
 object AgentReplyParser {
 
@@ -27,7 +28,7 @@ object AgentReplyParser {
     private val REPLY_KEYS = listOf("reply", "tip", "message")
     private val DRAW_KEYS = listOf("should_draw", "draw", "shouldDraw")
 
-    fun parse(raw: String): Result {
+    fun parse(raw: String, preserveNaturalLanguage: Boolean = false): Result {
         val text = stripFences(raw).trim()
         if (text.isEmpty()) return Result("", "", null, "空响应")
 
@@ -37,7 +38,7 @@ object AgentReplyParser {
         for (candidate in ordered) {
             val obj = parseObject(candidate) ?: parseObject(repairJson(candidate)) ?: continue
             val reply = cleanReply(stringField(obj, REPLY_KEYS))
-            val prompt = sanitizePrompt(stringField(obj, PROMPT_KEYS))
+            val prompt = sanitizePrompt(stringField(obj, PROMPT_KEYS), preserveNaturalLanguage)
             val draw = boolField(obj, DRAW_KEYS)
             if (prompt.isNotEmpty() || reply.isNotEmpty()) {
                 return Result(reply, prompt, draw, if (prompt.isEmpty()) "JSON 中没有有效的 prompt" else null)
@@ -47,13 +48,13 @@ object AgentReplyParser {
         // 2. Truncated / malformed JSON: salvage complete string fields only.
         if (text.contains('{') || text.contains("\"prompt\"")) {
             val reply = cleanReply(salvageString(text, REPLY_KEYS))
-            val prompt = sanitizePrompt(salvageString(text, PROMPT_KEYS))
+            val prompt = sanitizePrompt(salvageString(text, PROMPT_KEYS), preserveNaturalLanguage)
             val draw = salvageBool(text, DRAW_KEYS)
             return Result(reply, prompt, draw, if (prompt.isEmpty()) "模型返回的 JSON 无法解析" else null)
         }
 
         // 3. Plain-text labelled format ("回复：… / prompt: …"); never dump the whole reply.
-        return parseLabelled(text)
+        return parseLabelled(text, preserveNaturalLanguage)
     }
 
     // ---- extraction ----
@@ -154,10 +155,10 @@ object AgentReplyParser {
         return null
     }
 
-    private fun parseLabelled(text: String): Result {
+    private fun parseLabelled(text: String, preserveNaturalLanguage: Boolean): Result {
         val promptLabel = Regex("""(?im)^\s*[\*#\-_\[\(]*(?:prompt|tags|positive|正面提示词|提示词)[\*\]\)]*\s*[:：]\s*""")
         val m = promptLabel.find(text)
-        val prompt = if (m != null) sanitizePrompt(text.substring(m.range.last + 1)) else ""
+        val prompt = if (m != null) sanitizePrompt(text.substring(m.range.last + 1), preserveNaturalLanguage) else ""
         val before = if (m != null) text.substring(0, m.range.first) else text
         val reply = cleanReply(
             before.replace(Regex("""(?im)^\s*[\*#\-_\[\(]*(?:tip|reply|回复|提示)[\*\]\)]*\s*[:：]\s*"""), "")
@@ -169,25 +170,33 @@ object AgentReplyParser {
     // ---- sanitizers ----
 
     private val KEY_PREFIX = Regex("""(?i)^["'\s]*(prompt|reply|tip|tags|positive|should_draw|shoulddraw|draw|message)["'\s]*[:：]\s*""")
-    private val JSONISH = Regex("""(?i)("\s*:|:\s*"|[{}\[\]]|\b(should_draw|reply)\b)""")
+    private val JSONISH = Regex("""(?i)("\s*:|:\s*"|\bshould_draw\b)""")
 
     /**
-     * Comma-separated English tags only. Strips leaked keys (`prompt": "`), quotes, braces,
-     * Chinese fragments and filler. Returns "" if nothing tag-like survives.
+     * Tag mode strips leaked envelope keys and conversational filler without damaging model syntax.
+     * Mixed/natural mode preserves the already-decoded prompt, including punctuation and image text.
      */
-    fun sanitizePrompt(raw: String): String {
+    fun sanitizePrompt(raw: String, preserveNaturalLanguage: Boolean = false): String {
         if (raw.isBlank()) return ""
-        var text = stripFences(unescape(raw)).trim()
+        // Parsed JSON strings are already unescaped; a second decoding would destroy \(...\).
+        var text = stripFences(raw).trim()
+        if (preserveNaturalLanguage) {
+            text = text.replace(KEY_PREFIX, "").trim()
+            if (JSONISH.containsMatchIn(text) || text.startsWith("{\"")) return ""
+            return text
+        }
         text = text.lines().filterNot { it.trim().startsWith("---") }.joinToString(",")
         val tags = text.split(',', '\n', '，').mapNotNull { piece ->
             var t = piece.trim()
             repeat(3) { t = t.replace(KEY_PREFIX, "").trim() }
-            t = t.trim('"', '\'', '`', '{', '}', '[', ']', ' ', '*', '#', '>', ';', '.')
+            t = t.trim('"', '\'', '`', ' ', '*', '#', ';', '.')
                 .trim()
             when {
                 t.isEmpty() -> null
                 t.any { it in '\u4e00'..'\u9fa5' } -> null
                 JSONISH.containsMatchIn(t) -> null
+                t.contains('"') || t.none { it.isLetterOrDigit() } -> null
+                (t.contains('{') || t.contains('}')) && !Regex("""\{[^{}"]+}""").matches(t) -> null
                 t.lowercase().let { l -> l in setOf("true", "false", "null") } -> null
                 t.lowercase().startsWith("here is") || t.lowercase().startsWith("here are") ||
                     t.lowercase().startsWith("sure") || t.lowercase().startsWith("okay") ||
@@ -219,7 +228,8 @@ object AgentReplyParser {
                     'u' -> if (i + 5 < s.length && s.substring(i + 2, i + 6).toIntOrNull(16) != null) {
                         sb.append(s.substring(i + 2, i + 6).toInt(16).toChar()); i += 4
                     } else sb.append('u')
-                    else -> sb.append(n)
+                    '"', '\\', '/' -> sb.append(n)
+                    else -> sb.append('\\').append(n)
                 }
                 i += 2
             } else { sb.append(c); i++ }

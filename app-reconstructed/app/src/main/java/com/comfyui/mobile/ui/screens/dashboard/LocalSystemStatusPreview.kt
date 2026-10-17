@@ -29,7 +29,7 @@ internal fun LocalSystemStatusPreview(stats: SystemMonitorData, contentColor: Co
         memoryLabel(stats.vramUsed, stats.vramTotal), scheme.primary, contentColor)
     val cpu = if (stats.cpuAvailable) stats.cpuUtil.coerceIn(0f, 100f) else null
     StatProgressRow("CPU 利用率", (cpu ?: 0f) / 100f,
-        cpu?.let { String.format(Locale.US, "%.1f%%", it) } ?: "暂无数据", scheme.secondary, contentColor)
+        cpu?.let { String.format(Locale.US, "%.1f%%", it) } ?: "暂无数据", scheme.primary, contentColor)
     val ramProgress = if (stats.ramAvailable && stats.ramTotal > 0f) {
         (stats.ramUsed / stats.ramTotal).coerceIn(0f, 1f)
     } else 0f

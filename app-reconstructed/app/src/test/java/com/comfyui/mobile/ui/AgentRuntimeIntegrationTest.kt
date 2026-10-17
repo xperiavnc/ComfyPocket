@@ -49,6 +49,8 @@ class AgentRuntimeIntegrationTest {
     private val promptBodies = CopyOnWriteArrayList<String>()
     private val uploadBodies = CopyOnWriteArrayList<String>()
     private val gson = Gson()
+    private val tagResponses = LinkedBlockingQueue<MockResponse>()
+    private val tagRequests = CopyOnWriteArrayList<RecordedRequest>()
 
     private fun event(text: String) = "data: " + gson.toJson(mapOf(
         "choices" to listOf(mapOf("delta" to mapOf("content" to text)))
@@ -71,6 +73,10 @@ class AgentRuntimeIntegrationTest {
                     llmBodies += request.body.readUtf8()
                     responses.poll(5, TimeUnit.SECONDS) ?: MockResponse().setResponseCode(500)
                 }
+                "/tags.json", "/tag_aliases.json", "/wiki_pages/cat.json" -> {
+                    tagRequests += request
+                    tagResponses.poll(5, TimeUnit.SECONDS) ?: MockResponse().setResponseCode(500)
+                }
                 "/prompt" -> {
                     promptBodies += request.body.readUtf8()
                     MockResponse().setBody("""{"prompt_id":"fixture-pid"}""")
@@ -85,6 +91,7 @@ class AgentRuntimeIntegrationTest {
         }
         server.start()
         vm = MainViewModel(app)
+        vm._agentDanbooruSettings.value = com.comfyui.mobile.danbooru.DanbooruSettings(enabled = false)
         store = ViewModelStore().apply { put("agent", vm) }
         vm._servers.value = emptyList()
         vm._currentServerId.value = ""
@@ -303,6 +310,93 @@ class AgentRuntimeIntegrationTest {
         assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
         assertEquals(listOf("2", 0), graphText())
         assertTrue(promptBodies.isEmpty())
+    }
+
+    private fun enableTags(compat: Boolean = false) {
+        vm._agentDanbooruSettings.value = com.comfyui.mobile.danbooru.DanbooruSettings(
+            callMode = if (compat) com.comfyui.mobile.danbooru.TagCallMode.COMPAT else com.comfyui.mobile.danbooru.TagCallMode.AUTO)
+        vm.danbooruRepository = com.comfyui.mobile.danbooru.DanbooruRepository(
+            com.comfyui.mobile.danbooru.DanbooruCache(File(app.cacheDir, "integration-tags").apply { deleteRecursively() }),
+            server.url("/"), intervalMillis = 0)
+    }
+    private fun tagSuccess() {
+        tagResponses += MockResponse().setBody("""[{"name":"cat","category":0,"post_count":10}]""")
+        tagResponses += MockResponse().setBody("""{"title":"cat","body":"A domestic cat."}""")
+    }
+    private fun nativeDraft() = MockResponse().setBody(gson.toJson(mapOf("choices" to listOf(mapOf(
+        "finish_reason" to "tool_calls", "message" to mapOf(
+            "role" to "assistant",
+            "content" to """{"reply":"好","prompt":"cat, my_trigger","should_draw":true}""",
+            "tool_calls" to listOf(mapOf("id" to "tag-1", "type" to "function",
+                "function" to mapOf("name" to "search_danbooru_tags", "arguments" to """{"queries":["cat"],"limit":3}""")))
+        )
+    )))))
+
+    @Test fun nativeTagsReviseBeforeOneWorkflowSubmissionAndRefreshNeverResubmits() {
+        enableTags()
+        tagSuccess()
+        responses += nativeDraft()
+        responses += success("""{"reply":"好了","prompt":"cat, sitting","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals(2, tagRequests.size)
+        assertTrue(tagRequests.all { it.method == "GET" })
+        val report = vm.agentMessages.value.last().tagCheck!!
+        assertEquals(com.comfyui.mobile.danbooru.TagCheckOrigin.MODEL_TOOL, report.origin)
+        assertTrue(graphText().toString().contains("my_trigger"))
+        val first = JsonParser.parseString(llmBodies.first()).asJsonObject
+        assertEquals("search_danbooru_tags", first["tools"].asJsonArray[0].asJsonObject["function"].asJsonObject["name"].asString)
+        val second = JsonParser.parseString(llmBodies.last()).asJsonObject
+        assertFalse(second.has("tools"))
+        assertTrue(second["messages"].asJsonArray.any { it.asJsonObject["role"].asString == "tool" })
+        tagSuccess()
+        vm.refreshAgentTagCheck(vm.agentMessages.value.last().id)
+        pumpUntil { tagRequests.size == 4 && vm.agentMessages.value.last().tagCheckingOrigin == null }
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertTrue(vm.agentMessages.value.last().tagCheck!!.refreshed)
+    }
+
+    @Test fun compatibilityTagsUseSseAndPersistAnAccurateOrigin() {
+        enableTags(compat = true)
+        tagSuccess()
+        responses += success("""{"reply":"好","prompt":"cat, rain","should_draw":true,"tag_queries":["cat"]}""")
+        responses += success("""{"reply":"好了","prompt":"cat, rain","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals(com.comfyui.mobile.danbooru.TagCheckOrigin.APP_COMPAT, vm.agentMessages.value.last().tagCheck!!.origin)
+        assertTrue(llmBodies.all { !JsonParser.parseString(it).asJsonObject.has("tools") })
+        assertTrue(vm.prefs.getString(MainViewModelAgent.scopedPref("agent_messages", vm), "")!!.contains("APP_COMPAT"))
+    }
+
+    @Test fun stoppingDuringTagLookupCancelsTheQueryAndNeverSubmitsOrRevises() {
+        enableTags(compat = true)
+        responses += success("""{"reply":"好","prompt":"cat","should_draw":true,"tag_queries":["cat"]}""")
+        tagResponses += MockResponse().setBody("[]").setBodyDelay(2, TimeUnit.SECONDS)
+        vm.sendAgentMessage("画猫")
+        pumpUntil { tagRequests.size == 1 }
+        vm.stopAgentGeneration()
+        pumpUntil { !vm.agentBusy.value }
+        assertEquals(AgentPhase.STOPPED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(promptBodies.isEmpty())
+        assertEquals(1, llmBodies.size)
+        assertNull(vm.agentMessages.value.last().tagCheckingOrigin)
+    }
+
+    @Test fun failedTagLookupKeepsDraftAndQueuesOnlyOnce() {
+        enableTags(compat = true)
+        responses += success("""{"reply":"好","prompt":"cat, my_trigger","should_draw":true,"tag_queries":["cat"]}""")
+        tagResponses += MockResponse().setResponseCode(503)
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat, my_trigger", graphText())
+        assertTrue(vm.agentMessages.value.last().tagCheck!!.incomplete)
     }
 
     @Test fun llmSettingsAreFrozenAtSendRatherThanReadAfterLaunch() {

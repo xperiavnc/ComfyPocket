@@ -34,6 +34,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -509,6 +510,7 @@ internal fun StatProgressRow(
             progress = progress.coerceIn(0f, 1f),
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag("system-progress:$label")
                 .clip(RoundedCornerShape(99.dp)),
             colors = ProgressIndicatorDefaults.progressIndicatorColors(
                 foregroundColor = barColor,

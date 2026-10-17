@@ -344,6 +344,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 },
                 onRemoveAttachment = { viewModel.removeAgentAttachment(it) },
                 onStop = { viewModel.stopAgentGeneration() },
+                onRefreshTags = viewModel::refreshAgentTagCheck,
                 onSendMessage = { text ->
                     viewModel.sendAgentMessage(text)
                     input = TextFieldValue("")

@@ -77,6 +77,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     val currentLlmProfile by viewModel.currentLlmProfile.collectAsState()
     val agentSystemPrompt by viewModel.agentSystemPrompt.collectAsState()
     val agentDrawPrompt by viewModel.agentDrawPrompt.collectAsState()
+    val tagSettings by viewModel.agentDanbooruSettings.collectAsState()
 
     val floatingNavClearance = LocalFloatingNavClearance.current
     val scrollBehavior = MiuixScrollBehavior()
@@ -348,6 +349,9 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 }
             }
 
+            com.comfyui.mobile.ui.screens.agent.AgentPromptNetworkSettings(
+                settings = tagSettings, onSave = viewModel::setAgentDanbooruSettings)
+
             // 2. 系统人设提示词卡片（自然清爽的预览区，点击弹出全屏编辑，彻底解决滑动卡顿）
             PromptCard(
                 title = "系统人设提示词",
@@ -366,7 +370,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             // 3. 画图分镜提示词规则卡片
             PromptCard(
                 title = "画图分镜规则",
-                description = "指导大模型分析分镜，并将画面扩写为高质量 SD / Danbooru tags。",
+                description = "只规定画面内容、构图和连续性；具体写法由上方格式决定，无需重复 JSON 或插件包装。",
                 promptContent = agentDrawPrompt,
                 defaultPrompt = MainViewModel.DEFAULT_AGENT_DRAW_PROMPT,
                 onEditClick = {

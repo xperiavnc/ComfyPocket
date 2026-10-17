@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.0.3-agent-media-monitor"
+        versionCode = 6
+        versionName = "0.0.4-agent-prompts"
     }
 
     buildFeatures {
