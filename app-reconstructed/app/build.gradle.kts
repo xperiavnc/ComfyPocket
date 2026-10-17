@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.0.15-material-p3"
+        versionCode = 18
+        versionName = "0.0.16-material-p4"
     }
 
     buildFeatures {

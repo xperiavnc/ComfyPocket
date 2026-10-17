@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.dashboard
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,19 +39,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.R
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardColors
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.CloudFill
-import top.yukonga.miuix.kmp.icon.extended.Report
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
+
 import java.util.Calendar
 import com.comfyui.mobile.ui.components.DialogFormColumn
 
@@ -122,7 +124,7 @@ fun UserProfileCard(
     onCardColor: Color,
     modifier: Modifier = Modifier
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     val greeting = remember {
         val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -146,9 +148,7 @@ fun UserProfileCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = DashCardRadius,
-        colors = cardColors,
-        pressFeedbackType = PressFeedbackType.None
-    ) {
+        colors = cardColors) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -203,7 +203,7 @@ fun UserProfileCard(
     ) {
                         Text(
                             text = greeting,
-                            style = MiuixTheme.textStyles.body2,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = onCardColor.copy(alpha = 0.65f),
                             maxLines = 1
     )
@@ -219,7 +219,7 @@ fun UserProfileCard(
     ) {
                             Text(
                                 text = badgeText,
-                                style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                                 color = badgeColor,
                                 maxLines = 1
     )
@@ -229,7 +229,7 @@ fun UserProfileCard(
                     // 第二行：昵称（整行独立加粗大字，不拥挤）
                     Text(
                         text = displayName,
-                        style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                         color = onCardColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -238,7 +238,7 @@ fun UserProfileCard(
                     // 第三行：个性签名
                     Text(
                         text = displayBio,
-                        style = MiuixTheme.textStyles.footnote1,
+                        style = MaterialTheme.typography.bodySmall,
                         color = onCardColor.copy(alpha = 0.72f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -275,14 +275,14 @@ fun UserProfileCard(
     )
                         Text(
                             text = statusText,
-                            style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                             color = if (statusOk) onCardColor else scheme.error,
                             maxLines = 1
     )
                         if (serverDisplayName.isNotBlank()) {
                             Text(
                                 text = serverDisplayName,
-                                style = MiuixTheme.textStyles.body2,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = onCardColor.copy(alpha = 0.72f),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -292,7 +292,7 @@ fun UserProfileCard(
                     }
 
                     Icon(
-                        imageVector = if (statusOk) MiuixIcons.CloudFill else MiuixIcons.Report,
+                        imageVector = if (statusOk) PocketIcons.CloudFill else PocketIcons.Report,
                         contentDescription = null,
                         tint = if (statusOk) scheme.primary else scheme.error,
                         modifier = Modifier.size(18.dp)
@@ -319,7 +319,7 @@ fun UserProfileCard(
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = "账号余额",
-                                style = MiuixTheme.textStyles.footnote1,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = onCardColor.copy(alpha = 0.65f)
     )
                             Row(
@@ -329,12 +329,12 @@ fun UserProfileCard(
     ) {
                                 Text(
                                     text = "RH币",
-                                    style = MiuixTheme.textStyles.body2,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = onCardColor.copy(alpha = 0.68f)
     )
                                 Text(
                                     text = if (rhRefreshing && rhCoins == null) "…" else if (authorized) formatRhCoins(rhCoins) else "—",
-                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                                     color = onCardColor
     )
                             }
@@ -345,12 +345,12 @@ fun UserProfileCard(
     ) {
                                 Text(
                                     text = "钱包",
-                                    style = MiuixTheme.textStyles.body2,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = onCardColor.copy(alpha = 0.68f)
     )
                                 Text(
                                     text = if (rhRefreshing && rhMoney == null) "…" else if (authorized) formatRhMoney(rhMoney, rhCurrency) else "—",
-                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                                     color = onCardColor
     )
                             }
@@ -369,7 +369,7 @@ fun UserProfileCard(
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(
                                 text = "云端任务",
-                                style = MiuixTheme.textStyles.footnote1,
+                                style = MaterialTheme.typography.bodySmall,
                                 color = onCardColor.copy(alpha = 0.65f)
     )
                             val runningVal = if (authorized) rhRunning?.toString() ?: "—" else "—"
@@ -381,12 +381,12 @@ fun UserProfileCard(
     ) {
                                 Text(
                                     text = "运行",
-                                    style = MiuixTheme.textStyles.body2,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = onCardColor.copy(alpha = 0.68f)
     )
                                 Text(
                                     text = runningVal,
-                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                                     color = if (authorized && (rhRunning ?: 0) > 0) scheme.primary else onCardColor
     )
                             }
@@ -397,12 +397,12 @@ fun UserProfileCard(
     ) {
                                 Text(
                                     text = "排队",
-                                    style = MiuixTheme.textStyles.body2,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = onCardColor.copy(alpha = 0.68f)
     )
                                 Text(
                                     text = queuedVal,
-                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                                     color = onCardColor
     )
                             }
@@ -433,7 +433,7 @@ fun UserProfileCard(
     ) {
                                 Text(
                                     text = "任务",
-                                    style = MiuixTheme.textStyles.footnote1,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = onCardColor.copy(alpha = 0.65f)
     )
                                 Row(
@@ -449,7 +449,7 @@ fun UserProfileCard(
                                     )
                                     Text(
                                         text = if (!statusOk) "未连接" else if (isBusy) "运行中" else "空闲",
-                                        style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.Medium),
                                         color = if (!statusOk) scheme.error else if (isBusy) scheme.primary else onCardColor.copy(alpha = 0.60f)
     )
                                 }
@@ -466,12 +466,12 @@ fun UserProfileCard(
     ) {
                                     Text(
                                         text = "排队",
-                                        style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                         color = onCardColor.copy(alpha = 0.60f)
     )
                                     Text(
                                         text = "$queueSize",
-                                        style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                                         color = if (queueSize > 0) scheme.primary else onCardColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -493,12 +493,12 @@ fun UserProfileCard(
     ) {
                                     Text(
                                         text = "生成",
-                                        style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                         color = onCardColor.copy(alpha = 0.60f)
     )
                                     Text(
                                         text = if (latestCount > 0) "$latestCount ↗" else "0",
-                                        style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                                         color = if (latestCount > 0) scheme.primary else onCardColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -526,12 +526,12 @@ fun UserProfileCard(
     ) {
                                 Text(
                                     text = "资产",
-                                    style = MiuixTheme.textStyles.footnote1,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = onCardColor.copy(alpha = 0.65f)
     )
                                 Text(
                                     text = "集市 ↗",
-                                    style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                                     color = scheme.primary
     )
                             }
@@ -547,12 +547,12 @@ fun UserProfileCard(
     ) {
                                     Text(
                                         text = "模型",
-                                        style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                         color = onCardColor.copy(alpha = 0.60f)
     )
                                     Text(
                                         text = if (totalModels > 0) "$totalModels" else "—",
-                                        style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                                         color = onCardColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -574,12 +574,12 @@ fun UserProfileCard(
     ) {
                                     Text(
                                         text = "插件",
-                                        style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                         color = onCardColor.copy(alpha = 0.60f)
     )
                                     Text(
                                         text = if (totalPlugins > 0) "$totalPlugins" else "—",
-                                        style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                                         color = onCardColor,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -603,7 +603,7 @@ fun EditUserProfileDialog(
     onDismiss: () -> Unit,
     onSave: (nickname: String, bio: String, qq: String) -> Unit,
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     var editNickname by remember { mutableStateOf(currentNickname) }
     var editBio by remember { mutableStateOf(currentBio) }
@@ -679,7 +679,7 @@ fun EditUserProfileDialog(
 
             Text(
                 text = if (previewAvatarUrl != null) "已获取 QQ 头像" else "输入 QQ 号即可获取对应头像",
-                style = MiuixTheme.textStyles.footnote1,
+                style = MaterialTheme.typography.bodySmall,
                 color = if (previewAvatarUrl != null) scheme.primary else scheme.onSurface.copy(alpha = 0.6f),
             )
 
@@ -690,7 +690,6 @@ fun EditUserProfileDialog(
                 onValueChange = { editQq = it.filter { ch -> ch.isDigit() } },
                 label = "QQ 号",
                 singleLine = true,
-                useLabelAsPlaceholder = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -702,7 +701,6 @@ fun EditUserProfileDialog(
                 onValueChange = { editNickname = it },
                 label = "昵称",
                 singleLine = true,
-                useLabelAsPlaceholder = true,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -713,7 +711,6 @@ fun EditUserProfileDialog(
                 onValueChange = { editBio = it },
                 label = "个性签名",
                 singleLine = true,
-                useLabelAsPlaceholder = true,
                 modifier = Modifier.fillMaxWidth(),
             )
         }

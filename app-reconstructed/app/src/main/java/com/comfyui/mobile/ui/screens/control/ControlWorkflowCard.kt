@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,19 +21,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardColors
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.File
-import top.yukonga.miuix.kmp.icon.extended.Import
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import androidx.compose.material3.CardColors
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+
+
+
+
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun ControlWorkflowHeaderCard(
@@ -46,23 +47,20 @@ fun ControlWorkflowHeaderCard(
     onImportClick: () -> Unit,
     onCloudSyncClick: (() -> Unit)? = null
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     Card(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = cornerRadius,
         colors = cardColors,
-        onClick = null,
-        pressFeedbackType = PressFeedbackType.None,
-        showIndication = false
-    ) {
+        onClick = null) {
         Column(
             modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
             Text(
                 if (isCloudMode) "云端工作流" else "选择工作流",
-                style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = onCard
     )
 
@@ -72,10 +70,7 @@ fun ControlWorkflowHeaderCard(
                 colors = CardDefaults.defaultColors(
                     color = scheme.primaryContainer.copy(alpha = 0.55f)
     ),
-                onClick = onLocalClick,
-                pressFeedbackType = PressFeedbackType.Tilt,
-                showIndication = true
-    ) {
+                onClick = onLocalClick) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -89,13 +84,10 @@ fun ControlWorkflowHeaderCard(
                         colors = CardDefaults.defaultColors(
                             color = scheme.primary.copy(alpha = 0.18f)
     ),
-                        onClick = null,
-                        pressFeedbackType = PressFeedbackType.None,
-                        showIndication = false
-    ) {
+                        onClick = null) {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                             Icon(
-                                MiuixIcons.File,
+                                PocketIcons.File,
                                 contentDescription = null,
                                 tint = scheme.primary,
                                 modifier = Modifier.size(22.dp)
@@ -105,7 +97,7 @@ fun ControlWorkflowHeaderCard(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = workflowName?.removeSuffix(".json")?.ifBlank { null } ?: "未选择工作流",
-                            style = MiuixTheme.textStyles.subtitle.copy(fontWeight = FontWeight.SemiBold),
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             color = scheme.onPrimaryContainer,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -116,7 +108,7 @@ fun ControlWorkflowHeaderCard(
                             } else {
                                 "当前已加载"
                             },
-                            style = MiuixTheme.textStyles.footnote1,
+                            style = MaterialTheme.typography.bodySmall,
                             color = scheme.onPrimaryContainer.copy(alpha = 0.75f)
     )
                     }
@@ -151,7 +143,7 @@ fun ControlWorkflowHeaderCard(
                         cornerRadius = pillRadius,
                         colors = ButtonDefaults.buttonColors()
     ) {
-                        Icon(MiuixIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(PocketIcons.Download, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("本地")
                     }
@@ -161,7 +153,7 @@ fun ControlWorkflowHeaderCard(
                         cornerRadius = pillRadius,
                         colors = ButtonDefaults.buttonColors()
     ) {
-                        Icon(MiuixIcons.Import, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(PocketIcons.Import, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text("导入")
                     }

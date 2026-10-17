@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.ui.screens.agent.AgentImagePreviewCard
 import com.comfyui.mobile.ui.screens.agent.AgentCardStatusFactory
@@ -68,28 +70,24 @@ import com.comfyui.mobile.model.MediaType
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import androidx.compose.foundation.layout.imePadding
 import com.comfyui.mobile.ui.MainViewModel
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
-import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.basic.TopAppBar
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Back
-import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.icon.extended.File
-import top.yukonga.miuix.kmp.icon.extended.Ok
-import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+
+import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
+
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
+
 import com.comfyui.mobile.ui.components.DialogFormColumn
 @Composable
 fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
@@ -125,9 +123,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val currentServerId by viewModel.currentServerId.collectAsState()
     val isCloudMode = servers.firstOrNull { it.effectiveId == currentServerId || it.id == currentServerId }?.isRunningHub == true
     val floatingNavClearance = LocalFloatingNavClearance.current
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
-    val scrollBehavior = MiuixScrollBehavior()
 
     var input by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
@@ -272,12 +269,10 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         topBar = {
             TopAppBar(
                 title = "Agent",
-                largeTitle = "Agent",
                 color = scheme.background,
-                scrollBehavior = scrollBehavior,
                 actions = {
                     IconButton(onClick = { navController.navigate("agent_settings") }) {
-                        Icon(MiuixIcons.Settings, contentDescription = "Agent 设置")
+                        Icon(PocketIcons.Settings, contentDescription = "Agent 设置")
                     }
                 }
     )
@@ -286,7 +281,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+
                 .padding(top = innerPadding.calculateTopPadding())
                 .imePadding()
                 .padding(bottom = bottomPad)
@@ -397,8 +392,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                 scheme.surfaceContainerHigh
                             }
     ),
-                        pressFeedbackType = PressFeedbackType.Tilt,
-                        showIndication = true,
                         onClick = {
                             viewModel.selectLlmProfile(item.id)
                             showModelSwitchDialog = false
@@ -414,7 +407,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = item.displayName,
-                                    style = MiuixTheme.textStyles.body1.copy(
+                                    style = MaterialTheme.typography.bodyLarge.copy(
                                         fontWeight = if (isChosen) FontWeight.SemiBold else FontWeight.Medium
     ),
                                     maxLines = 1,
@@ -423,8 +416,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                 if (item.shortSummary.isNotBlank() && item.shortSummary != item.displayName) {
                                     Text(
                                         text = item.shortSummary,
-                                        style = MiuixTheme.textStyles.footnote1,
-                                        color = scheme.onSurfaceVariantSummary,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = scheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
     )
@@ -432,7 +425,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             }
                             if (isChosen) {
                                 Icon(
-                                    MiuixIcons.Ok,
+                                    PocketIcons.Ok,
                                     contentDescription = "已选择",
                                     tint = scheme.primary,
                                     modifier = Modifier.size(20.dp)
@@ -497,13 +490,13 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "当前：$wfLabel",
-                                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
     )
                                 Text(
                                     text = "正向：${positiveBinding.label}\n反向：${negativeBinding.label}",
-                                    style = MiuixTheme.textStyles.footnote1,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = scheme.primary
     )
                             }
@@ -523,7 +516,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                     fontWeight = FontWeight.SemiBold
     )
                                 Icon(
-                                    MiuixIcons.Edit,
+                                    PocketIcons.Edit,
                                     contentDescription = null,
                                     modifier = Modifier.size(11.dp),
                                     tint = scheme.onPrimaryContainer
@@ -536,7 +529,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 if (savedFiles.isEmpty()) {
                     Text(
                         text = "暂无本地存档，请先在「控制」页保存工作流",
-                        style = MiuixTheme.textStyles.body2,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onSecondaryContainer
     )
                 } else {
@@ -573,8 +566,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                         scheme.secondaryContainer
                                     }
     ),
-                                pressFeedbackType = PressFeedbackType.Tilt,
-                                showIndication = true,
                                 onClick = {
                                     viewModel.setAgentDefaultWorkflow(
                                         source = MainViewModel.AGENT_WF_SAVED,
@@ -592,7 +583,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
                                     Icon(
-                                        MiuixIcons.File,
+                                        PocketIcons.File,
                                         contentDescription = null,
                                         tint = if (current) scheme.primary else scheme.onSecondaryContainer,
                                         modifier = Modifier.size(22.dp)
@@ -600,20 +591,20 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = label,
-                                            style = MiuixTheme.textStyles.body1.copy(
+                                            style = MaterialTheme.typography.bodyLarge.copy(
                                                 fontWeight = if (current) FontWeight.SemiBold else FontWeight.Medium
     ),
                                             maxLines = 2
     )
                                         Text(
                                             text = sizeLabel,
-                                            style = MiuixTheme.textStyles.footnote1,
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = scheme.onSecondaryContainer
     )
                                     }
                                     if (current) {
                                         Icon(
-                                            MiuixIcons.Ok,
+                                            PocketIcons.Ok,
                                             contentDescription = "当前",
                                             tint = scheme.primary,
                                             modifier = Modifier.size(22.dp)
@@ -686,8 +677,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                 Text(
                     text = "确定清空 Agent 当前的所有生图记录吗？清空后将恢复为初始状态。",
-                    style = MiuixTheme.textStyles.body2,
-                    color = scheme.onSurfaceVariantSummary
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant
     )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -856,8 +847,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
             Text(
                 text = "选择要与常用画师点选库绑定的文本节点：",
-                style = MiuixTheme.textStyles.footnote1,
-                color = scheme.onSurfaceVariantSummary
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
     )
 
             LazyColumn(
@@ -884,9 +875,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
     ) {
-                            Text("自动推断 / 取消绑定", style = MiuixTheme.textStyles.body1)
+                            Text("自动推断 / 取消绑定", style = MaterialTheme.typography.bodyLarge)
                             if (isChosen) {
-                                Icon(MiuixIcons.Ok, contentDescription = "已选择", tint = scheme.primary, modifier = Modifier.size(20.dp))
+                                Icon(PocketIcons.Ok, contentDescription = "已选择", tint = scheme.primary, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -914,25 +905,25 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = node.title,
-                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = if (isChosen) FontWeight.SemiBold else FontWeight.Medium),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = if (isChosen) FontWeight.SemiBold else FontWeight.Medium),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
     )
                                 Text(
                                     text = "#${node.nodeId} · ${node.classType}",
-                                    style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                     color = scheme.primary.copy(alpha = 0.8f)
     )
                                 Text(
                                     text = preview,
-                                    style = MiuixTheme.textStyles.footnote1,
-                                    color = scheme.onSurfaceVariantSummary,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = scheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
     )
                             }
                             if (isChosen) {
-                                Icon(MiuixIcons.Ok, contentDescription = "已选择", tint = scheme.primary, modifier = Modifier.size(20.dp))
+                                Icon(PocketIcons.Ok, contentDescription = "已选择", tint = scheme.primary, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -964,8 +955,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
             Text(
                 text = "勾选想要在 Agent 辅助面板中显示的参数节点：",
-                style = MiuixTheme.textStyles.footnote1,
-                color = scheme.onSurfaceVariantSummary
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
     )
 
             LazyColumn(
@@ -1007,14 +998,14 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = node.title,
-                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.Medium),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
     )
                                 Text(
                                     text = "#${node.nodeId} · ${node.classType}",
-                                    style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
-                                    color = scheme.onSurfaceVariantSummary
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = scheme.onSurfaceVariant
     )
                             }
                             Switch(
@@ -1096,7 +1087,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                     value = draftTriggers,
                     onValueChange = { draftTriggers = it },
                     label = "专属外貌与 LoRA 触发词",
-                    useLabelAsPlaceholder = true,
                     singleLine = false,
                     minLines = 3,
                     maxLines = 6,

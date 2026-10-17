@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -38,21 +40,20 @@ import com.comfyui.mobile.ui.components.MediaInputRow
 import com.comfyui.mobile.ui.components.NodeIdChip
 import com.comfyui.mobile.ui.components.isThirdPartyLoaderInput
 import com.comfyui.mobile.ui.components.mediaInputMime
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+
+
+
+import androidx.compose.material3.MaterialTheme
 
 /** Whether this node should span the full row in the AI App 2-column grid. */
 fun isParamFullWidth(node: EditableNode): Boolean = when (node) {
@@ -111,7 +112,7 @@ fun CompactParamCard(
     onValueChange: (nodeId: String, key: String, value: Any) -> Unit,
     onDropdownClick: (EditableNode.TextInput) -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val paramKey = paramKeyOf(node)
 
     Card(
@@ -126,10 +127,7 @@ fun CompactParamCard(
             },
             contentColor = onCard
     ),
-        onClick = null,
-        pressFeedbackType = PressFeedbackType.None,
-        showIndication = false
-    ) {
+        onClick = null) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -146,7 +144,7 @@ fun CompactParamCard(
     ) {
                     Text(
                         text = node.title,
-                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
                         color = onCard.copy(alpha = 0.85f),
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
@@ -159,7 +157,7 @@ fun CompactParamCard(
                 if (isHoverTarget) {
                     Text(
                         text = "移至此",
-                        style = MiuixTheme.textStyles.footnote2.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = scheme.primary
     )
                 } else {
@@ -168,7 +166,7 @@ fun CompactParamCard(
                         modifier = Modifier.size(22.dp)
     ) {
                         Icon(
-                            MiuixIcons.Edit,
+                            PocketIcons.Edit,
                             contentDescription = "重命名",
                             tint = onCard.copy(alpha = 0.45f),
                             modifier = Modifier.size(13.dp)
@@ -188,7 +186,7 @@ fun CompactParamCard(
     ) {
                         Text(
                             text = if (node.value) "开启" else "关闭",
-                            style = MiuixTheme.textStyles.body2,
+                            style = MaterialTheme.typography.bodyMedium,
                             color = if (node.value) scheme.primary else onCard.copy(alpha = 0.6f)
     )
                         Switch(
@@ -231,10 +229,7 @@ fun CompactParamCard(
                             color = scheme.secondaryContainer.copy(alpha = 0.65f)
     ),
                         insideMargin = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
-                        onClick = { onDropdownClick(node) },
-                        pressFeedbackType = PressFeedbackType.Tilt,
-                        showIndication = true
-    ) {
+                        onClick = { onDropdownClick(node) }) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -242,7 +237,7 @@ fun CompactParamCard(
     ) {
                             Text(
                                 text = node.text.ifBlank { "选择" },
-                                style = MiuixTheme.textStyles.body2,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = onCard,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
@@ -250,7 +245,7 @@ fun CompactParamCard(
                     )
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
-                                MiuixIcons.ExpandMore,
+                                PocketIcons.ExpandMore,
                                 contentDescription = null,
                                 tint = onCard.copy(alpha = 0.7f),
                                 modifier = Modifier.size(16.dp)
@@ -283,7 +278,7 @@ fun FullWidthParamCard(
     onUploadClick: (nodeId: String, key: String, mimeType: String) -> Unit,
     getViewUrl: (filename: String, subfolder: String, type: String) -> String
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val paramKey = paramKeyOf(node)
     val cloudModelType = if (node is EditableNode.TextInput) {
         cloudModelResourceTypeFor(node.classType, paramKey)
@@ -301,10 +296,7 @@ fun FullWidthParamCard(
             },
             contentColor = onCard
     ),
-        onClick = null,
-        pressFeedbackType = PressFeedbackType.None,
-        showIndication = false
-    ) {
+        onClick = null) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -313,7 +305,7 @@ fun FullWidthParamCard(
     ) {
                 Text(
                     text = node.title,
-                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                     color = onCard,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -326,7 +318,7 @@ fun FullWidthParamCard(
                 if (isHoverTarget) {
                     Text(
                         text = "松手移动至此",
-                        style = MiuixTheme.textStyles.footnote2.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                         color = scheme.primary
     )
                 } else {
@@ -335,7 +327,7 @@ fun FullWidthParamCard(
                         modifier = Modifier.size(24.dp)
     ) {
                         Icon(
-                            MiuixIcons.Edit,
+                            PocketIcons.Edit,
                             contentDescription = "重命名",
                             tint = onCard.copy(alpha = 0.45f),
                             modifier = Modifier.size(13.dp)
@@ -398,7 +390,7 @@ fun FullWidthParamCard(
                                 },
                                 colors = ButtonDefaults.buttonColorsPrimary()
     ) {
-                                Icon(MiuixIcons.Image, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Icon(PocketIcons.Image, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text("上传")
                             }

@@ -10,36 +10,39 @@ import com.comfyui.mobile.model.SystemMonitorData
 import com.comfyui.mobile.ui.screens.InfoRow
 import com.comfyui.mobile.ui.screens.StatProgressRow
 import java.util.Locale
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 
 /** CPU/RAM preview is available independently of the optional Crystools GPU feed. */
 @Composable
-internal fun LocalSystemStatusPreview(stats: SystemMonitorData, contentColor: Color) {
-    val scheme = MiuixTheme.colorScheme
+internal fun LocalSystemStatusPreview(
+    stats: SystemMonitorData,
+    contentColor: Color,
+    progressColor: Color = Color(0xFF3482FF)
+) {
     if (!stats.deviceName.isNullOrBlank()) {
         InfoRow("GPU 设备", stats.deviceName, contentColor)
         Spacer(Modifier.height(4.dp))
     }
     if (stats.isCrystools) {
-        StatProgressRow("GPU 利用率", stats.gpuUtil / 100f, "${stats.gpuUtil.toInt()}%", scheme.primary, contentColor)
+        StatProgressRow("GPU 利用率", stats.gpuUtil / 100f, "${stats.gpuUtil.toInt()}%", progressColor, contentColor)
     }
     val vramProgress = if (stats.vramTotal > 0f) (stats.vramUsed / stats.vramTotal).coerceIn(0f, 1f) else 0f
     StatProgressRow("显存占用", vramProgress,
-        memoryLabel(stats.vramUsed, stats.vramTotal), scheme.primary, contentColor)
+        memoryLabel(stats.vramUsed, stats.vramTotal), progressColor, contentColor)
     val cpu = if (stats.cpuAvailable) stats.cpuUtil.coerceIn(0f, 100f) else null
     StatProgressRow("CPU 利用率", (cpu ?: 0f) / 100f,
-        cpu?.let { String.format(Locale.US, "%.1f%%", it) } ?: "暂无数据", scheme.primary, contentColor)
+        cpu?.let { String.format(Locale.US, "%.1f%%", it) } ?: "暂无数据", progressColor, contentColor)
     val ramProgress = if (stats.ramAvailable && stats.ramTotal > 0f) {
         (stats.ramUsed / stats.ramTotal).coerceIn(0f, 1f)
     } else 0f
     StatProgressRow("内存占用", ramProgress,
         if (stats.ramAvailable) memoryLabel(stats.ramUsed, stats.ramTotal) else "暂无数据",
-        scheme.primary, contentColor)
+        progressColor, contentColor)
     if (!stats.cpuAvailable) {
         Spacer(Modifier.height(4.dp))
         Text("CPU 数据需 Mobile Bridge 2.1+ 或 Crystools 实时监控",
-            style = MiuixTheme.textStyles.footnote2, color = contentColor.copy(alpha = 0.65f))
+            style = MaterialTheme.typography.labelSmall, color = contentColor.copy(alpha = 0.65f))
     }
     if (stats.isCrystools) {
         Spacer(Modifier.height(4.dp))

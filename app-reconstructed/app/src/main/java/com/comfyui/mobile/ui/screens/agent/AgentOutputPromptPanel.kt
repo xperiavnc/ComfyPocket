@@ -12,25 +12,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.agent.AgentPromptOutput
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 internal fun AgentOutputPromptPanel(output: AgentPromptOutput, onCopy: (String, String) -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("正向提示词", color = MiuixTheme.colorScheme.primary)
+        Text("正向提示词", color = MaterialTheme.colorScheme.primary)
         SelectionContainer {
             Text(output.positive.ifEmpty { "暂无正向提示词" },
                 modifier = Modifier.fillMaxWidth().heightIn(max = 140.dp).verticalScroll(rememberScrollState()))
         }
-        Text("反向提示词", color = MiuixTheme.colorScheme.primary)
+        Text("反向提示词", color = MaterialTheme.colorScheme.primary)
         SelectionContainer {
             Text(output.negative?.ifEmpty { "（空反向提示词）" } ?: "尚未记录反向提示词",
                 modifier = Modifier.fillMaxWidth().heightIn(max = 140.dp).verticalScroll(rememberScrollState()))
         }
         if (!output.negativeStatus.isNullOrBlank()) {
-            Text(output.negativeStatus, style = MiuixTheme.textStyles.footnote1)
+            Text(output.negativeStatus, style = MaterialTheme.typography.bodySmall)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TextButton(text = "复制正向", modifier = Modifier.weight(1f),

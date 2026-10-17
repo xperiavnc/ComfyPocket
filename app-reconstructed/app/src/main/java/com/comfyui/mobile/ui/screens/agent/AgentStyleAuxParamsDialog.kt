@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -41,20 +43,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.model.EditableNode
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Close
-import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+
+
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.verticalScroll
 
@@ -87,7 +89,7 @@ fun AgentStyleAuxParamsDialog(
     onBrowseCloudModel: ((nodeId: String, key: String, resourceType: String) -> Unit)? = null
     ) {
     val context = LocalContext.current
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     OverlayDialog(
         show = show,
@@ -116,7 +118,7 @@ fun AgentStyleAuxParamsDialog(
     ) {
                         Text(
                             text = "画师串",
-                            style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold)
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
     )
                         Row(
                             modifier = Modifier
@@ -129,13 +131,13 @@ fun AgentStyleAuxParamsDialog(
     ) {
                             Text(
                                 text = if (boundArtistNode != null) "#${boundArtistNode.nodeId} ${boundArtistNode.title}" else "点击绑定节点",
-                                style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = scheme.primary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
     )
                             Icon(
-                                MiuixIcons.ExpandMore,
+                                PocketIcons.ExpandMore,
                                 contentDescription = "切换画师节点",
                                 modifier = Modifier.size(14.dp),
                                 tint = scheme.primary
@@ -194,8 +196,8 @@ fun AgentStyleAuxParamsDialog(
 
                         Text(
                             text = "常用候选画师 (点击一键填入，点击×删除)",
-                            style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
-                            color = scheme.onSurfaceVariantSummary
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = scheme.onSurfaceVariant
     )
 
                         // 横向滚动候选画师胶囊栏
@@ -236,7 +238,7 @@ fun AgentStyleAuxParamsDialog(
                                         fontWeight = if (isChosen) FontWeight.SemiBold else FontWeight.Normal
     )
                                     Icon(
-                                        MiuixIcons.Close,
+                                        PocketIcons.Close,
                                         contentDescription = "删除候选",
                                         modifier = Modifier
                                             .size(13.dp)
@@ -244,7 +246,7 @@ fun AgentStyleAuxParamsDialog(
                                             .clickable {
                                                 onRemoveFavoriteArtist(artist)
                                             },
-                                        tint = scheme.onSurfaceVariantSummary
+                                        tint = scheme.onSurfaceVariant
     )
                                 }
                             }
@@ -252,8 +254,8 @@ fun AgentStyleAuxParamsDialog(
                     } else {
                         Text(
                             text = "未绑定画师节点，点击右上角绑定工作流文本节点。",
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = scheme.onSurfaceVariantSummary
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant
     )
                     }
                 }
@@ -280,12 +282,12 @@ fun AgentStyleAuxParamsDialog(
     ) {
                             Text(
                                 text = "角色触发词库",
-                                style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold)
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
     )
                             Text(
                                 text = "($enabledCount/${characterLores.size})",
-                                style = MiuixTheme.textStyles.footnote1.copy(fontSize = 12.sp),
-                                color = if (enabledCount > 0) scheme.primary else scheme.onSurfaceVariantSummary
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
+                                color = if (enabledCount > 0) scheme.primary else scheme.onSurfaceVariant
     )
                         }
                         Row(
@@ -299,11 +301,11 @@ fun AgentStyleAuxParamsDialog(
     ) {
                             Text(
                                 text = "管理词库",
-                                style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = scheme.primary
     )
                             Icon(
-                                MiuixIcons.Edit,
+                                PocketIcons.Edit,
                                 contentDescription = "管理词库",
                                 modifier = Modifier.size(12.dp),
                                 tint = scheme.primary
@@ -314,14 +316,14 @@ fun AgentStyleAuxParamsDialog(
                     if (characterLores.isEmpty()) {
                         Text(
                             text = "暂无角色。点击“管理词库”登记，开启并在对话中提到角色名即可自动触发。",
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = scheme.onSurfaceVariantSummary
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant
     )
                     } else {
                         Text(
                             text = "💡 单击切换启用/停用，长按修改触发词",
-                            style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
-                            color = scheme.onSurfaceVariantSummary
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                            color = scheme.onSurfaceVariant
     )
 
                         Row(
@@ -355,7 +357,7 @@ fun AgentStyleAuxParamsDialog(
                                     Text(
                                         text = lore.name,
                                         fontSize = 12.sp,
-                                        color = if (active) scheme.primary else scheme.onSurfaceVariantSummary,
+                                        color = if (active) scheme.primary else scheme.onSurfaceVariant,
                                         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -383,7 +385,7 @@ fun AgentStyleAuxParamsDialog(
     ) {
                         Text(
                             text = "辅助参数调节 (${auxDisplayNodes.size})",
-                            style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold)
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
     )
                         Row(
                             modifier = Modifier
@@ -396,11 +398,11 @@ fun AgentStyleAuxParamsDialog(
     ) {
                             Text(
                                 text = "添加显示",
-                                style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = scheme.primary
     )
                             Icon(
-                                MiuixIcons.Edit,
+                                PocketIcons.Edit,
                                 contentDescription = "添加显示",
                                 modifier = Modifier.size(12.dp),
                                 tint = scheme.primary
@@ -411,8 +413,8 @@ fun AgentStyleAuxParamsDialog(
                     if (auxDisplayNodes.isEmpty()) {
                         Text(
                             text = "未添加辅助参数。点击右上角“添加显示”挑选常用节点参数。",
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = scheme.onSurfaceVariantSummary
+                            style = MaterialTheme.typography.bodySmall,
+                            color = scheme.onSurfaceVariant
     )
                     } else {
                         auxDisplayNodes.forEach { node ->

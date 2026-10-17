@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,15 +18,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.model.QueueDto
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardColors
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import androidx.compose.material3.CardColors
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+
+
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun ControlQueueCard(
@@ -35,16 +36,13 @@ fun ControlQueueCard(
     modifier: Modifier = Modifier,
     onRefreshQueue: () -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     Card(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = 18.dp,
         colors = cardColors,
-        onClick = null,
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true
-    ) {
+        onClick = null) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -56,7 +54,7 @@ fun ControlQueueCard(
     ) {
                 Text(
                     "队列",
-                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
                     color = onCard,
                     modifier = Modifier.weight(1f),
                     )
@@ -70,13 +68,10 @@ fun ControlQueueCard(
                             scheme.surfaceContainerHigh.copy(alpha = 0.9f)
                         }
     ),
-                    onClick = null,
-                    pressFeedbackType = PressFeedbackType.Tilt,
-                    showIndication = true
-    ) {
+                    onClick = null) {
                     Text(
                         text = if (queueRemaining > 0) "$queueRemaining 项" else "空闲",
-                        style = MiuixTheme.textStyles.footnote1,
+                        style = MaterialTheme.typography.bodySmall,
                         color = if (queueRemaining > 0) scheme.primary else onCard.copy(alpha = 0.65f)
     )
                 }
@@ -86,8 +81,6 @@ fun ControlQueueCard(
                     colors = CardDefaults.defaultColors(
                         color = scheme.surfaceContainerHigh.copy(alpha = 0.95f)
     ),
-                    pressFeedbackType = PressFeedbackType.Tilt,
-                    showIndication = true,
                     onClick = onRefreshQueue
     ) {
                     Row(
@@ -95,14 +88,14 @@ fun ControlQueueCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
                         Icon(
-                            MiuixIcons.Refresh,
+                            PocketIcons.Refresh,
                             contentDescription = null,
                             tint = onCard.copy(alpha = 0.75f),
                             modifier = Modifier.size(14.dp)
     )
                         Text(
                             text = "刷新",
-                            style = MiuixTheme.textStyles.footnote1,
+                            style = MaterialTheme.typography.bodySmall,
                             color = onCard.copy(alpha = 0.75f)
     )
                     }
@@ -112,7 +105,7 @@ fun ControlQueueCard(
             if (queueList.isEmpty()) {
                 Text(
                     text = "暂无排队任务",
-                    style = MiuixTheme.textStyles.footnote1,
+                    style = MaterialTheme.typography.bodySmall,
                     color = onCard.copy(alpha = 0.5f),
                     modifier = Modifier.padding(vertical = 4.dp)
     )
@@ -125,10 +118,7 @@ fun ControlQueueCard(
                         colors = CardDefaults.defaultColors(
                             color = scheme.surfaceContainerHigh.copy(alpha = 0.92f)
     ),
-                        onClick = null,
-                        pressFeedbackType = PressFeedbackType.Tilt,
-                        showIndication = true
-    ) {
+                        onClick = null) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -136,21 +126,21 @@ fun ControlQueueCard(
     ) {
                             Text(
                                 text = "${index + 1}",
-                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Bold),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                 color = scheme.primary,
                                 modifier = Modifier.width(18.dp)
     )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "Prompt ID: ${qItem.promptId}",
-                                    style = MiuixTheme.textStyles.body2,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = onCard,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
     )
                                 Text(
                                     text = "Node: ${qItem.id}",
-                                    style = MiuixTheme.textStyles.footnote1,
+                                    style = MaterialTheme.typography.bodySmall,
                                     color = onCard.copy(alpha = 0.6f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis

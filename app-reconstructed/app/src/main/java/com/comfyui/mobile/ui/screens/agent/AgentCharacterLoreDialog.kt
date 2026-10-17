@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -31,20 +33,20 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.comfyui.mobile.model.CharacterLore
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Delete
-import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -67,7 +69,7 @@ fun AgentCharacterLoreDialog(
     onRemoveLore: (id: String) -> Unit
     ) {
     val context = LocalContext.current
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     // 顶部新增角色的输入草稿
     var newCharName by remember(show) { mutableStateOf("") }
@@ -100,8 +102,8 @@ fun AgentCharacterLoreDialog(
     ) {
             Text(
                 text = "登记角色外貌与触发词，在对话中自动注入或点名激活：",
-                style = MiuixTheme.textStyles.footnote1,
-                color = scheme.onSurfaceVariantSummary
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
     )
 
             // 添加新角色卡片
@@ -117,7 +119,6 @@ fun AgentCharacterLoreDialog(
                         onValueChange = { newCharName = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = "角色名",
-                        useLabelAsPlaceholder = true,
                         singleLine = true
     )
 
@@ -126,7 +127,6 @@ fun AgentCharacterLoreDialog(
                         onValueChange = { newCharTriggers = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = "触发词与外貌特征",
-                        useLabelAsPlaceholder = true,
                         singleLine = false,
                         minLines = 2,
                         maxLines = 3
@@ -159,7 +159,7 @@ fun AgentCharacterLoreDialog(
             if (characterLores.isNotEmpty()) {
                 Text(
                     text = "已登记角色 (${characterLores.size})",
-                    style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold)
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
     )
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -199,14 +199,14 @@ fun AgentCharacterLoreDialog(
                                             .size(7.dp)
                                             .background(
                                                 if (lore.isEnabled) scheme.primary
-                                                else scheme.onSurfaceVariantSummary.copy(alpha = 0.35f),
+                                                else scheme.onSurfaceVariant.copy(alpha = 0.35f),
                                                 CircleShape
                                             )
                                     )
                                     Text(
                                         text = lore.name,
-                                        style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
-                                        color = if (lore.isEnabled) scheme.onSurface else scheme.onSurfaceVariantSummary,
+                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                                        color = if (lore.isEnabled) scheme.onSurface else scheme.onSurfaceVariant,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
     )
@@ -229,7 +229,7 @@ fun AgentCharacterLoreDialog(
                                         contentAlignment = Alignment.Center
     ) {
                                         Icon(
-                                            MiuixIcons.Edit,
+                                            PocketIcons.Edit,
                                             contentDescription = "编辑角色",
                                             modifier = Modifier.size(14.dp),
                                             tint = scheme.primary
@@ -251,7 +251,7 @@ fun AgentCharacterLoreDialog(
                                         contentAlignment = Alignment.Center
     ) {
                                         Icon(
-                                            MiuixIcons.Delete,
+                                            PocketIcons.Delete,
                                             contentDescription = "删除角色",
                                             modifier = Modifier.size(14.dp),
                                             tint = scheme.error
@@ -329,7 +329,6 @@ fun AgentCharacterLoreDialog(
                         onValueChange = { editName = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = "角色名",
-                        useLabelAsPlaceholder = true,
                         singleLine = true
     )
 
@@ -338,7 +337,6 @@ fun AgentCharacterLoreDialog(
                         onValueChange = { editTriggers = it },
                         modifier = Modifier.fillMaxWidth(),
                         label = "触发词与外貌特征",
-                        useLabelAsPlaceholder = true,
                         singleLine = false,
                         minLines = 3,
                         maxLines = 6

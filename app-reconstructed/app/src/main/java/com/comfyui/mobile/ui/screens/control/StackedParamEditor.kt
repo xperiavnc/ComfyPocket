@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
@@ -59,21 +61,20 @@ import com.comfyui.mobile.ui.screens.modelbrowser.cloudModelResourceTypeFor
 import com.comfyui.mobile.ui.components.MediaInputRow
 import com.comfyui.mobile.ui.components.isThirdPartyLoaderInput
 import com.comfyui.mobile.ui.components.mediaInputMime
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+
+
+import androidx.compose.material3.MaterialTheme
 
 /**
  * Control-screen style stacked parameter card (single column):
@@ -96,7 +97,7 @@ fun StackedParamCard(
     loaderUploadLabel: String = "上传文件",
     imageUploadLabel: String = "上传"
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val paramKey = paramKeyOf(node)
     val cloudModelType = if (node is EditableNode.TextInput) {
         cloudModelResourceTypeFor(node.classType, paramKey)
@@ -114,10 +115,7 @@ fun StackedParamCard(
             }
     ),
         holdDownState = false,
-        onClick = null,
-        pressFeedbackType = PressFeedbackType.None,
-        showIndication = false
-    ) {
+        onClick = null) {
         Column {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -131,13 +129,10 @@ fun StackedParamCard(
                     colors = CardDefaults.defaultColors(
                         color = scheme.primary.copy(alpha = 0.12f)
     ),
-                    onClick = null,
-                    pressFeedbackType = PressFeedbackType.None,
-                    showIndication = false
-    ) {
+                    onClick = null) {
                     Text(
                         text = node.title,
-                        style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                         color = scheme.primary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -146,7 +141,7 @@ fun StackedParamCard(
                 }
                 IconButton(onClick = { onRenameClick(node.nodeId, paramKey, node.title) }) {
                     Icon(
-                        MiuixIcons.Edit,
+                        PocketIcons.Edit,
                         contentDescription = "重命名",
                         tint = onCard.copy(alpha = 0.7f),
                         modifier = Modifier.size(18.dp)
@@ -168,8 +163,6 @@ fun StackedParamCard(
                                 colors = CardDefaults.defaultColors(
                                     color = scheme.secondaryContainer.copy(alpha = 0.65f)
     ),
-                                pressFeedbackType = PressFeedbackType.None,
-                                showIndication = false,
                                 onClick = { expanded = !expanded }
     ) {
                                 Row(
@@ -181,13 +174,13 @@ fun StackedParamCard(
     ) {
                                     Text(
                                         text = node.text.ifBlank { "选择选项" },
-                                        style = MiuixTheme.textStyles.body1,
+                                        style = MaterialTheme.typography.bodyLarge,
                                         modifier = Modifier.weight(1f),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
     )
                                     Icon(
-                                        MiuixIcons.ExpandMore,
+                                        PocketIcons.ExpandMore,
                                         contentDescription = null,
                                         tint = scheme.onSecondaryContainer
     )
@@ -207,10 +200,7 @@ fun StackedParamCard(
                                     colors = CardDefaults.defaultColors(
                                         color = scheme.surface.copy(alpha = 0.95f)
     ),
-                                    onClick = null,
-                                    pressFeedbackType = PressFeedbackType.None,
-                                    showIndication = false
-    ) {
+                                    onClick = null) {
                                     Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
@@ -220,7 +210,7 @@ fun StackedParamCard(
                                         options.forEach { opt ->
                                             Text(
                                                 text = opt,
-                                                style = MiuixTheme.textStyles.body1,
+                                                style = MaterialTheme.typography.bodyLarge,
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .clickable {
@@ -434,7 +424,7 @@ fun StackedParamEditorList(
     emptyText: String = "暂无显示的参数，点击右上角设置",
     modifier: Modifier = Modifier
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     var draggingKey by remember { mutableStateOf<String?>(null) }
     val localEditableNodes = rememberSyncedEditableNodes(sourceNodes, draggingKey)
     var editingTextNode by remember { mutableStateOf<EditableNode.TextInput?>(null) }
@@ -464,7 +454,7 @@ fun StackedParamEditorList(
     if (visibleNodes.isEmpty()) {
         Text(
             text = emptyText,
-            style = MiuixTheme.textStyles.body2,
+            style = MaterialTheme.typography.bodyMedium,
             color = onCard.copy(alpha = 0.6f),
             modifier = modifier.padding(vertical = 8.dp)
     )

@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -49,16 +51,16 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.AgentChatMessage
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardColors
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Close
-import top.yukonga.miuix.kmp.icon.extended.Add
-import top.yukonga.miuix.kmp.icon.extended.Send
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.overScrollVertical
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+
+
+
+
+import androidx.compose.material3.MaterialTheme
+
 import kotlinx.coroutines.launch
 
 @Composable
@@ -83,7 +85,7 @@ fun AgentChatPanel(
     val focusScope = rememberCoroutineScope()
     var attachMenuOpen by remember { mutableStateOf(false) }
 
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
 
     Card(
         modifier = modifier
@@ -106,7 +108,7 @@ fun AgentChatPanel(
                     .testTag("agent-chat-list")
                     // Concentric with the card: 28dp corner - 12dp content padding.
                     .clip(RoundedCornerShape(PanelCorner - PanelPadding))
-                    .overScrollVertical(),
+                    ,
                 contentPadding = PaddingValues(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -145,7 +147,7 @@ fun AgentChatPanel(
                     onClick = { haptics.tick(); attachMenuOpen = !attachMenuOpen }
     ) { tint ->
                     Icon(
-                        MiuixIcons.Add,
+                        PocketIcons.Add,
                         contentDescription = if (attachMenuOpen) "收起附件菜单" else "添加附件",
                         modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = plusRotation },
                         tint = tint
@@ -168,15 +170,15 @@ fun AgentChatPanel(
                         },
                     enabled = !busy,
                     maxLines = 5,
-                    textStyle = MiuixTheme.textStyles.body2.copy(color = scheme.onSurface),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = scheme.onSurface),
                     cursorBrush = SolidColor(scheme.primary),
                     decorationBox = { inner ->
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (input.text.isEmpty()) {
                                 Text(
                                     text = "Ciallo～(∠・ω< )⌒☆",
-                                    style = MiuixTheme.textStyles.body2,
-                                    color = scheme.onSurfaceVariantSummary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = scheme.onSurfaceVariant,
                                     maxLines = 1
     )
                             }
@@ -199,7 +201,7 @@ fun AgentChatPanel(
                     }
     ) { tint ->
                     Icon(
-                        if (busy) MiuixIcons.Close else MiuixIcons.Send,
+                        if (busy) PocketIcons.Close else PocketIcons.Send,
                         contentDescription = if (busy) "停止生成" else "发送",
                         modifier = Modifier.size(18.dp),
                         tint = tint
@@ -225,7 +227,7 @@ private fun ChatRoundButton(
     onClick: () -> Unit,
     content: @Composable (tint: Color) -> Unit
 ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     // One step off the chat card (highest) so stadium chips read clearly in light and dark.
     val capsule = scheme.surface
     val bg = when {
@@ -252,7 +254,7 @@ private fun ChatRoundButton(
 
 @Composable
 private fun AttachMenuChip(label: String, onClick: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
@@ -260,7 +262,7 @@ private fun AttachMenuChip(label: String, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        Text(text = label, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurface)
+        Text(text = label, style = MaterialTheme.typography.bodySmall, color = scheme.onSurface)
     }
 }
 
@@ -271,7 +273,7 @@ fun AgentAttachmentStrip(
     modifier: Modifier = Modifier,
     onRemove: ((String) -> Unit)? = null
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     Row(
         modifier = modifier.horizontalScroll(rememberScrollState()),
         verticalAlignment = Alignment.CenterVertically,
@@ -295,7 +297,7 @@ fun AgentAttachmentStrip(
                 } else {
                     Text(
                         text = "📄 ${att.name} · ${(att.sizeBytes + 1023) / 1024}KB",
-                        style = MiuixTheme.textStyles.footnote1,
+                        style = MaterialTheme.typography.bodySmall,
                         color = scheme.onSurface,
                         maxLines = 1,
                         modifier = Modifier.padding(start = 10.dp, end = if (onRemove != null) 26.dp else 10.dp)
@@ -312,7 +314,7 @@ fun AgentAttachmentStrip(
                             .clickable { onRemove(att.id) },
                         contentAlignment = Alignment.Center
     ) {
-                        Icon(MiuixIcons.Close, contentDescription = "移除附件", modifier = Modifier.size(12.dp), tint = Color.White)
+                        Icon(PocketIcons.Close, contentDescription = "移除附件", modifier = Modifier.size(12.dp), tint = Color.White)
                     }
                 }
             }

@@ -23,11 +23,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.model.MediaOutput
 import com.comfyui.mobile.ui.components.ResultMediaTile
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardColors
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 
 @Composable
 fun ControlLatestMediaCard(
@@ -39,21 +38,18 @@ fun ControlLatestMediaCard(
     getViewUrl: (MediaOutput) -> String,
     onItemClick: (Int) -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val innerShape = RoundedCornerShape(12.dp)
 
     Card(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = cornerRadius,
         colors = cardColors,
-        onClick = null,
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = true
-    ) {
+        onClick = null) {
         Column(modifier = Modifier.padding(18.dp)) {
             Text(
                 "本次生成 · ${latestGenerationList.size}",
-                style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = onCard
     )
             Spacer(modifier = Modifier.height(12.dp))

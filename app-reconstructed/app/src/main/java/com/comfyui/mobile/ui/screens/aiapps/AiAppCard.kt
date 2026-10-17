@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.aiapps
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -29,15 +31,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.AiApp
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.icon.extended.Settings
-import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+
+
+
+import androidx.compose.material3.MaterialTheme
+
 import java.io.File
 
 @Composable
@@ -45,7 +47,7 @@ fun AiAppEmptyCard(
     modifier: Modifier = Modifier,
     isCloudMode: Boolean = false
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val cardColors = CardDefaults.defaultColors(
         color = scheme.secondaryContainer,
         contentColor = scheme.onSecondaryContainer
@@ -54,10 +56,7 @@ fun AiAppEmptyCard(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = 28.dp,
         colors = cardColors,
-        onClick = null,
-        pressFeedbackType = PressFeedbackType.Tilt,
-        showIndication = false
-    ) {
+        onClick = null) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -66,19 +65,19 @@ fun AiAppEmptyCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
             Icon(
-                MiuixIcons.Image,
+                PocketIcons.Image,
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
                 tint = scheme.onSecondaryContainer.copy(alpha = 0.55f)
     )
             Text(
                 if (isCloudMode) "暂无应用" else "暂无 AI 应用",
-                style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
                 color = scheme.onSecondaryContainer
     )
             Text(
                 if (isCloudMode) "点右上角导入" else "在控制页保存后会出现",
-                style = MiuixTheme.textStyles.body2,
+                style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSecondaryContainer.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
     )
@@ -95,7 +94,7 @@ fun AiAppCard(
     onClick: () -> Unit,
     onSettingsClick: () -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     val cardColors = CardDefaults.defaultColors(
         color = scheme.secondaryContainer,
@@ -106,10 +105,7 @@ fun AiAppCard(
         modifier = modifier,
         cornerRadius = 28.dp,
         colors = cardColors,
-        onClick = if (!isDragging) onClick else null,
-        pressFeedbackType = if (!isDragging) PressFeedbackType.Tilt else PressFeedbackType.None,
-        showIndication = !isDragging
-    ) {
+        onClick = if (!isDragging) onClick else null) {
         Column {
             Box(
                 modifier = Modifier
@@ -130,7 +126,7 @@ fun AiAppCard(
                         contentScale = ContentScale.Crop
                     )
                 } else {
-                    Icon(MiuixIcons.Image, contentDescription = null, modifier = Modifier.size(40.dp))
+                    Icon(PocketIcons.Image, contentDescription = null, modifier = Modifier.size(40.dp))
                 }
 
                 Box(
@@ -157,7 +153,7 @@ fun AiAppCard(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(MiuixTheme.colorScheme.surface.copy(alpha = 0.38f))
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.38f))
                     )
 
                     Text(
@@ -168,8 +164,8 @@ fun AiAppCard(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         textAlign = TextAlign.Center,
-                        style = MiuixTheme.textStyles.subtitle,
-                        color = MiuixTheme.colorScheme.onSurface
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
 
@@ -190,7 +186,7 @@ fun AiAppCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        MiuixIcons.Settings,
+                        PocketIcons.Settings,
                         contentDescription = null,
                         modifier = Modifier.size(settingsIconSize),
                         tint = Color.White

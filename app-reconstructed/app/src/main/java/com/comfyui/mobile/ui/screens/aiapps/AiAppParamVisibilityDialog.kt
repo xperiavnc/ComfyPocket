@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.aiapps
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,17 +22,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.ui.components.NodeIdChip
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.IconButton
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.overlay.OverlayDialog
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import androidx.compose.material3.Icon
+import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+
+import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import androidx.compose.material3.MaterialTheme
 
 private fun nodeKey(node: EditableNode): String = when (node) {
     is EditableNode.TextInput -> node.key
@@ -81,9 +83,7 @@ fun AiAppParamVisibilityDialog(
                 onValueChange = { paramQuery = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = "搜索参数",
-                useLabelAsPlaceholder = true
-    )
+                label = "搜索参数")
 
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -115,8 +115,8 @@ fun AiAppParamVisibilityDialog(
                                 }
                                 Text(
                                     text = "Key: $k",
-                                    style = MiuixTheme.textStyles.footnote1,
-                                    color = MiuixTheme.colorScheme.onSecondaryContainer,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
                                     maxLines = 1
                                 )
                             }
@@ -126,7 +126,7 @@ fun AiAppParamVisibilityDialog(
                                 onRenameClick(node.nodeId, k, node.title)
                             }
                         ) {
-                            Icon(MiuixIcons.Edit, contentDescription = null)
+                            Icon(PocketIcons.Edit, contentDescription = null)
                         }
                         Switch(
                             checked = node.isVisible,

@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import com.comfyui.mobile.ui.designsystem.PocketIcons
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,20 +40,20 @@ import androidx.compose.ui.unit.sp
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.ui.screens.modelbrowser.CloudModelBrowseRow
 import com.comfyui.mobile.ui.screens.modelbrowser.cloudModelResourceTypeFor
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
-import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
-import top.yukonga.miuix.kmp.basic.Icon
-import top.yukonga.miuix.kmp.basic.Slider
-import top.yukonga.miuix.kmp.basic.Switch
-import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextField
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
-import top.yukonga.miuix.kmp.icon.extended.Ok
-import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketButton as Button
+import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
+import com.comfyui.mobile.ui.designsystem.PocketCard as Card
+import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
+
+
+
+
+import androidx.compose.material3.MaterialTheme
 import kotlin.random.Random
 
 @Composable
@@ -127,7 +129,7 @@ fun AgentAuxDropdownWidget(
     modifier: Modifier = Modifier,
     onSelect: (String) -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     var expanded by remember(node.nodeId, node.key) { mutableStateOf(false) }
 
     Column(
@@ -136,8 +138,8 @@ fun AgentAuxDropdownWidget(
     ) {
         Text(
             text = "${node.title} (#${node.nodeId})",
-            style = MiuixTheme.textStyles.footnote1,
-            color = scheme.onSurfaceVariantSummary
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant
     )
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -154,15 +156,15 @@ fun AgentAuxDropdownWidget(
     ) {
                 Text(
                     text = node.text.ifBlank { "选择选项" },
-                    style = MiuixTheme.textStyles.body2,
+                    style = MaterialTheme.typography.bodyMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                     )
                 Icon(
-                    MiuixIcons.ExpandMore,
+                    PocketIcons.ExpandMore,
                     contentDescription = if (expanded) "收起" else "展开",
-                    tint = scheme.onSurfaceVariantSummary
+                    tint = scheme.onSurfaceVariant
     )
             }
         }
@@ -202,7 +204,7 @@ fun AgentAuxDropdownWidget(
     ) {
                             Text(
                                 text = opt,
-                                style = MiuixTheme.textStyles.body2,
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = if (isChosen) scheme.primary else scheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -210,7 +212,7 @@ fun AgentAuxDropdownWidget(
                     )
                             if (isChosen) {
                                 Icon(
-                                    MiuixIcons.Ok,
+                                    PocketIcons.Ok,
                                     contentDescription = "已选中",
                                     tint = scheme.primary,
                                     modifier = Modifier.size(16.dp)
@@ -235,7 +237,7 @@ fun AgentAuxTextWidget(
     modifier: Modifier = Modifier,
     onTextCommit: (String) -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
@@ -261,8 +263,8 @@ fun AgentAuxTextWidget(
     ) {
         Text(
             text = "${node.title} (#${node.nodeId})",
-            style = MiuixTheme.textStyles.footnote1,
-            color = scheme.onSurfaceVariantSummary
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant
     )
         TextField(
             value = textState,
@@ -289,7 +291,7 @@ fun AgentAuxSeedWidget(
     modifier: Modifier = Modifier,
     onValueCommit: (Any) -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
 
@@ -316,8 +318,8 @@ fun AgentAuxSeedWidget(
     ) {
             Text(
                 text = "${node.title} (#${node.nodeId})",
-                style = MiuixTheme.textStyles.footnote1,
-                color = scheme.onSurfaceVariantSummary
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
     )
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 // 设为 -1 (随机)
@@ -357,7 +359,7 @@ fun AgentAuxSeedWidget(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
     ) {
                         Icon(
-                            MiuixIcons.Refresh,
+                            PocketIcons.Refresh,
                             contentDescription = "重新生成随机种子",
                             modifier = Modifier.size(12.dp),
                             tint = scheme.primary
@@ -400,7 +402,7 @@ fun AgentAuxNumberWidget(
     modifier: Modifier = Modifier,
     onValueCommit: (Any) -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
+    val scheme = MaterialTheme.colorScheme
     val expectsInt = remember(node.value, node.min, node.max, node.key) {
         !com.comfyui.mobile.model.isStrengthKey(node.key) && (
             node.value is Int || node.value is Long ||
@@ -459,8 +461,8 @@ fun AgentAuxNumberWidget(
     ) {
             Text(
                 text = "${node.title} (#${node.nodeId})",
-                style = MiuixTheme.textStyles.footnote1,
-                color = scheme.onSurfaceVariantSummary
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
     )
             Text(
                 text = if (expectsInt) {
@@ -468,7 +470,7 @@ fun AgentAuxNumberWidget(
                 } else {
                     String.format("%.2f", sliderDraft)
                 },
-                style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                 color = scheme.primary
     )
         }
@@ -515,7 +517,7 @@ fun AgentAuxBooleanWidget(
     Card(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = 12.dp,
-        colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surface),
+        colors = CardDefaults.defaultColors(color = MaterialTheme.colorScheme.surface),
         onClick = { onCheckedChange(!node.value) }
     ) {
         Row(
@@ -527,7 +529,7 @@ fun AgentAuxBooleanWidget(
     ) {
             Text(
                 text = "${node.title} (#${node.nodeId})",
-                style = MiuixTheme.textStyles.body2,
+                style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
                     )
             Switch(
