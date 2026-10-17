@@ -65,4 +65,35 @@ class AgentSettingsFeedbackTest {
         assertEquals("max", vm.loadLlmProfiles().single { it.id == profile.id }.reasoningEffort)
         assertEquals("已保存并应用配置：模型", ShadowToast.getTextOfLatestToast())
     }
+
+    @Test fun localLibrarySettingsPersistAndShowConfirmation() {
+        val settings = com.comfyui.mobile.agent.AgentPromptSettings(false, com.comfyui.mobile.agent.AgentPromptFormat.ANIMA)
+        vm.setAgentPromptSettings(settings)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(settings, vm.agentPromptSettings.value)
+        assertEquals(settings, com.comfyui.mobile.agent.AgentPromptSettingsStore(vm.prefs).load())
+        assertEquals("已保存提示词格式与本地词库设置", ShadowToast.getTextOfLatestToast())
+    }
+
+    @Test fun customPersonaAndDrawRulesSurviveTheOfflineMigration() {
+        vm.prefs.edit().putBoolean("agent_offline_prompt_migrated", false)
+            .putString("agent_system_prompt", "我的自定义人设")
+            .putString("agent_draw_prompt", "我的自定义正反向规则").commit()
+        assertEquals("我的自定义人设", MainViewModelAgent.loadAgentSystemPrompt(vm))
+        assertEquals("我的自定义正反向规则", MainViewModelAgent.loadAgentDrawPrompt(vm))
+    }
+
+    @Test fun exactPreviousDefaultsUpgradeAndKeepLocalCopies() {
+        val previous = javaClass.classLoader!!.getResourceAsStream("agent-previous-rules.json")!!.bufferedReader().use {
+            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject
+        }
+        for (field in listOf("draw", "drawBeforeNegative")) {
+            val old = previous[field].asString
+            vm.prefs.edit().putBoolean("agent_offline_prompt_migrated", false)
+                .putString("agent_draw_prompt", old).putString("agent_system_prompt", previous["persona"].asString).commit()
+            assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
+            assertEquals(MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT, MainViewModelAgent.loadAgentSystemPrompt(vm))
+            assertEquals(old, vm.prefs.getString("agent_offline_previous_agent_draw_prompt", null))
+        }
+    }
 }

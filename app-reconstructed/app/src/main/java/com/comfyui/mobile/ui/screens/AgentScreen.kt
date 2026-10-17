@@ -4,6 +4,8 @@ import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.ui.screens.agent.AgentImagePreviewCard
 import com.comfyui.mobile.ui.screens.agent.AgentCardStatusFactory
 import com.comfyui.mobile.ui.screens.agent.AgentCapsuleBar
+import com.comfyui.mobile.ui.screens.agent.AgentPromptBindingPanel
+import com.comfyui.mobile.ui.screens.agent.AgentOutputPromptPanel
 import com.comfyui.mobile.ui.screens.agent.AgentChatPanel
 import com.comfyui.mobile.ui.screens.agent.AgentStyleAuxParamsDialog
 import com.comfyui.mobile.ui.screens.agent.AgentCharacterLoreDialog
@@ -104,7 +106,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val executingNodeName by viewModel.agentExecutingNodeName.collectAsState()
     val rhAppStatus by viewModel.rhAppStatus.collectAsState()
     val workflowLabel by viewModel.agentWorkflowLabel.collectAsState()
-    val lastPrompt by viewModel.agentLastExpandedPrompt.collectAsState()
+    val promptOutput by viewModel.agentPromptOutput.collectAsState()
+    val positiveBinding by viewModel.agentPositiveBinding.collectAsState()
+    val negativeBinding by viewModel.agentNegativeBinding.collectAsState()
     val savedFiles by viewModel.savedWorkflowFiles.collectAsState()
     val targetNodeId by viewModel.agentTargetNodeId.collectAsState()
     val agentArtistNodeId by viewModel.agentArtistNodeId.collectAsState()
@@ -344,7 +348,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 },
                 onRemoveAttachment = { viewModel.removeAgentAttachment(it) },
                 onStop = { viewModel.stopAgentGeneration() },
-                onRefreshTags = viewModel::refreshAgentTagCheck,
                 onSendMessage = { text ->
                     viewModel.sendAgentMessage(text)
                     input = TextFieldValue("")
@@ -461,7 +464,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
 
     OverlayDialog(
         show = showWorkflowSheet,
-        title = if (workflowSheetLevel == 1) "选择工作流" else "选择提示词节点",
+        title = if (workflowSheetLevel == 1) "选择工作流" else "设置正向 / 反向节点",
         onDismissRequest = {
             showWorkflowSheet = false
             workflowSheetLevel = 1
@@ -495,7 +498,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                     overflow = TextOverflow.Ellipsis
     )
                                 Text(
-                                    text = "提示词节点：${if (targetNodeId.isBlank()) "自动探测" else "#$targetNodeId"}",
+                                    text = "正向：${positiveBinding.label}\n反向：${negativeBinding.label}",
                                     style = MiuixTheme.textStyles.footnote1,
                                     color = scheme.primary
     )
@@ -629,215 +632,14 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     )
             }
         } else {
-            // === 第 2 级：选择提示词注入节点 ===
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(50))
-                        .background(scheme.surfaceContainerHigh)
-                        .clickable { workflowSheetLevel = 1 }
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-                    Icon(
-                        MiuixIcons.Back,
-                        contentDescription = "返回工作流",
-                        modifier = Modifier.size(12.dp),
-                        tint = scheme.primary
-    )
-                    Text(
-                        text = "返回工作流列表",
-                        style = MiuixTheme.textStyles.footnote1,
-                        color = scheme.primary
-    )
-                }
-
-                Text(
-                    text = "选择 AI 扩写后提示词写入的节点，使用组合器时请选择描述提示词节点。",
-                    style = MiuixTheme.textStyles.footnote1,
-                    color = scheme.onSurfaceVariantSummary
-    )
-
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 360.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-                    item(key = "auto") {
-                        val isChosen = targetNodeId.isBlank()
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(
-                                    if (isChosen) {
-                                        Modifier.border(
-                                            1.5.dp,
-                                            scheme.primary.copy(alpha = 0.5f),
-                                            RoundedCornerShape(16.dp)
-    )
-                                    } else Modifier
-                                ),
-                            cornerRadius = 16.dp,
-                            colors = CardDefaults.defaultColors(
-                                color = if (isChosen) {
-                                    scheme.secondaryContainer.copy(alpha = 0.7f)
-                                } else {
-                                    scheme.surfaceContainerHigh
-                                }
-    ),
-                            pressFeedbackType = PressFeedbackType.Tilt,
-                            showIndication = true,
-                            onClick = {
-                                viewModel.setAgentTargetNodeId("")
-                                showWorkflowSheet = false
-                                workflowSheetLevel = 1
-                            }
-    ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "自动探测",
-                                        style = MiuixTheme.textStyles.body1.copy(
-                                            fontWeight = if (isChosen) FontWeight.SemiBold else FontWeight.Medium
-    )
-    )
-                                    Text(
-                                        text = "智能匹配正向提示词 · 防断线保护",
-                                        style = MiuixTheme.textStyles.footnote1,
-                                        color = scheme.onSurfaceVariantSummary
-    )
-                                }
-                                if (isChosen) {
-                                    Icon(
-                                        MiuixIcons.Ok,
-                                        contentDescription = "已选择",
-                                        tint = scheme.primary,
-                                        modifier = Modifier.size(20.dp)
-    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (textNodes.isEmpty()) {
-                        item(key = "empty") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 16.dp),
-                                contentAlignment = Alignment.Center
-    ) {
-                                Text(
-                                    text = "当前工作流暂无可用文本节点，请先选择工作流",
-                                    style = MiuixTheme.textStyles.footnote1,
-                                    color = scheme.onSurfaceVariantSummary
-    )
-                            }
-                        }
-                    } else {
-                        items(textNodes, key = { "${it.nodeId}:${it.key}" }) { node ->
-                            val isChosen = targetNodeId == node.nodeId
-                            val previewText = node.text.trim().replace("\n", " ").take(45).ifBlank { "(空)" }
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(
-                                        if (isChosen) {
-                                            Modifier.border(
-                                                1.5.dp,
-                                                scheme.primary.copy(alpha = 0.5f),
-                                                RoundedCornerShape(16.dp)
-    )
-                                        } else Modifier
-                                    ),
-                                cornerRadius = 16.dp,
-                                colors = CardDefaults.defaultColors(
-                                    color = if (isChosen) {
-                                        scheme.secondaryContainer.copy(alpha = 0.7f)
-                                    } else {
-                                        scheme.surfaceContainerHigh
-                                    }
-    ),
-                                pressFeedbackType = PressFeedbackType.Tilt,
-                                showIndication = true,
-                                onClick = {
-                                    viewModel.setAgentTargetNodeId(node.nodeId)
-                                    showWorkflowSheet = false
-                                    workflowSheetLevel = 1
-                                }
-    ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = node.title,
-                                            style = MiuixTheme.textStyles.body1.copy(
-                                                fontWeight = if (isChosen) FontWeight.SemiBold else FontWeight.Medium
-    ),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-    )
-                                        Text(
-                                            text = "#${node.nodeId} · ${node.classType}",
-                                            style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
-                                            color = scheme.primary.copy(alpha = 0.8f)
-    )
-                                        Text(
-                                            text = previewText,
-                                            style = MiuixTheme.textStyles.footnote1,
-                                            color = scheme.onSurfaceVariantSummary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-    )
-                                    }
-                                    if (isChosen) {
-                                        Icon(
-                                            MiuixIcons.Ok,
-                                            contentDescription = "已选择",
-                                            tint = scheme.primary,
-                                            modifier = Modifier.size(20.dp)
-    )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-                    TextButton(
-                        modifier = Modifier.weight(1f),
-                        text = "返回工作流",
-                        onClick = { workflowSheetLevel = 1 }
-    )
-                    TextButton(
-                        modifier = Modifier.weight(1f),
-                        text = "完成",
-                        onClick = {
-                            showWorkflowSheet = false
-                            workflowSheetLevel = 1
-                        }
-    )
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                AgentPromptBindingPanel(positiveBinding, negativeBinding, textNodes, viewModel::setAgentPromptBinding)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(text = "返回工作流", modifier = Modifier.weight(1f), onClick = { workflowSheetLevel = 1 })
+                    TextButton(text = "完成", modifier = Modifier.weight(1f), onClick = {
+                        showWorkflowSheet = false
+                        workflowSheetLevel = 1
+                    })
                 }
             }
         }
@@ -848,31 +650,12 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         title = "出图提示词",
         onDismissRequest = { showPromptDialog = false }
     ) {
-        val promptText = if (lastPrompt.isBlank()) "暂无提示词，先发一句出图吧。" else lastPrompt
-        SelectionContainer {
-            Text(
-                text = promptText,
-                color = scheme.onSurface,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .verticalScroll(rememberScrollState())
-    )
+        AgentOutputPromptPanel(promptOutput) { label, text ->
+            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText(label, text))
+            Toast.makeText(context, "已复制$label", Toast.LENGTH_SHORT).show()
         }
-        Spacer(modifier = Modifier.height(12.dp))
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(
-                text = "复制",
-                onClick = {
-                    if (lastPrompt.isNotBlank()) {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        cm.setPrimaryClip(ClipData.newPlainText("prompt", lastPrompt))
-                        Toast.makeText(context, "已复制", Toast.LENGTH_SHORT).show()
-                    }
-                }
-    )
-            TextButton(text = "关闭", onClick = { showPromptDialog = false })
-        }
+        TextButton(text = "关闭", onClick = { showPromptDialog = false })
     }
 
     if (showImageViewer && displayMediaList.isNotEmpty()) {

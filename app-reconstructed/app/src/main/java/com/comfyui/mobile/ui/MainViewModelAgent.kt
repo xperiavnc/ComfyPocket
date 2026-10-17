@@ -5,6 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.comfyui.mobile.agent.AgentReply as AgentLlmResult
 import com.comfyui.mobile.agent.AgentMode
 import com.comfyui.mobile.agent.AgentReasoningEffort
+import com.comfyui.mobile.agent.AgentPromptBinding
+import com.comfyui.mobile.agent.AgentPromptBindingStore
+import com.comfyui.mobile.agent.AgentPromptBindings
+import com.comfyui.mobile.agent.AgentPromptOutput
+import com.comfyui.mobile.agent.PromptBindingMode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.update
 import com.comfyui.mobile.data.LlmClient
@@ -167,9 +172,28 @@ object MainViewModelAgent {
         editor.putBoolean("agent_prompt_v3_migrated", true).apply()
     }
 
+    private fun ensureOfflinePromptMigration(vm: MainViewModel) {
+        if (vm.prefs.getBoolean("agent_offline_prompt_migrated", false)) return
+        val editor = vm.prefs.edit()
+        // Only exact previous built-in defaults are upgraded; any user edits remain untouched.
+        for ((key, hashes) in mapOf(
+            "agent_draw_prompt" to setOf(
+                "56b2ec79f945c0271ea954adb5b4afffd6005cf4a273018da1ad829d9c471c15",
+                "31bfedcac7887ae389cf6e2aaeddb6901b4b112581af7eeb815e16b734bc916b"),
+            "agent_system_prompt" to setOf("2fc545f5b4e68054773a4befe8dcc2674a82e7b01718637140bcac743316942a")
+        )) {
+            val old = vm.prefs.getString(key, null) ?: continue
+            if (com.comfyui.mobile.agent.AgentPromptPolicy.fingerprint(old) in hashes) {
+                editor.putString("agent_offline_previous_$key", old).remove(key)
+            }
+        }
+        editor.putBoolean("agent_offline_prompt_migrated", true).apply()
+    }
+
     fun loadAgentSystemPrompt(vm: MainViewModel): String {
         ensurePromptSplitMigration(vm)
         ensurePromptV3Migration(vm)
+        ensureOfflinePromptMigration(vm)
         val saved = vm.prefs.getString("agent_system_prompt", null)?.takeIf { it.isNotBlank() }
         return saved ?: MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT
     }
@@ -177,6 +201,7 @@ object MainViewModelAgent {
     fun loadAgentDrawPrompt(vm: MainViewModel): String {
         ensurePromptSplitMigration(vm)
         ensurePromptV3Migration(vm)
+        ensureOfflinePromptMigration(vm)
         val saved = vm.prefs.getString("agent_draw_prompt", null)?.takeIf { it.isNotBlank() }
         return saved ?: MainViewModel.DEFAULT_AGENT_DRAW_PROMPT
     }
@@ -254,25 +279,71 @@ object MainViewModelAgent {
     }
 
     fun setAgentTargetNodeId(vm: MainViewModel, nodeId: String) {
-        invalidateContext(vm)
-        val trimmed = nodeId.trim()
-        vm._agentTargetNodeId.value = trimmed
-        val key = getAgentTargetNodePrefKey(vm)
-        if (key.isNotBlank()) {
-            if (trimmed.isBlank()) {
-                vm.prefs.edit().remove(key).apply()
-            } else {
-                vm.prefs.edit().putString(key, trimmed).apply()
-            }
+        val binding = if (nodeId.isBlank()) AgentPromptBinding() else {
+            val field = vm._agentEditableNodes.value.filterIsInstance<EditableNode.TextInput>()
+                .firstOrNull { it.nodeId == nodeId && it.options.isNullOrEmpty() }?.key
+                ?: return vm.showUserMessage("请先加载工作流并选择具体文本字段")
+            AgentPromptBinding(PromptBindingMode.EXPLICIT, nodeId.trim(), field)
         }
-        vm.addLog("Agent 提示词节点已设置为: ${if (trimmed.isBlank()) "自动" else "#$trimmed"}", LogType.INFO)
+        setPromptBinding(vm, false, binding)
     }
 
     fun readTargetNodeId(vm: MainViewModel, source: String, id: String): String {
-        val scoped = getAgentTargetNodePrefKey(vm, source, id)
-        return vm.prefs.getString(scoped, null)
-            ?: vm.prefs.getString("agent_target_node_${source}_${id}", "")
-            ?: ""
+        return loadPromptBinding(vm, false, source, id).let {
+            if (it.mode == PromptBindingMode.EXPLICIT) it.nodeId else ""
+        }
+    }
+
+    fun loadPromptBinding(vm: MainViewModel, negative: Boolean,
+        source: String = vm._agentWorkflowSource.value, id: String = vm._agentWorkflowId.value
+    ): AgentPromptBinding = AgentPromptBindingStore(vm.prefs).load(scope(vm), source, id, negative)
+
+    private fun reloadPromptBindings(vm: MainViewModel, source: String, id: String) {
+        vm._agentPositiveBinding.value = loadPromptBinding(vm, false, source, id)
+        vm._agentNegativeBinding.value = loadPromptBinding(vm, true, source, id)
+        vm._agentTargetNodeId.value = readTargetNodeId(vm, source, id)
+    }
+
+    fun setPromptBinding(vm: MainViewModel, negative: Boolean, value: AgentPromptBinding) {
+        try {
+            val graph = vm.agentWorkflow.orEmpty()
+            val target = value.explicitTarget(graph)
+            val other = if (negative) vm._agentPositiveBinding.value else vm._agentNegativeBinding.value
+            val otherTarget = runCatching { other.explicitTarget(graph) }.getOrNull()
+            require(target == null || target != otherTarget) { "正反向提示词不可绑定同一字段" }
+            require(vm._agentWorkflowId.value.isNotBlank()) { "请先选择工作流" }
+            AgentPromptBindingStore(vm.prefs).save(scope(vm), vm._agentWorkflowSource.value,
+                vm._agentWorkflowId.value, negative, value)
+            invalidateContext(vm)
+            if (negative) vm._agentNegativeBinding.value = value else {
+                vm._agentPositiveBinding.value = value
+                vm._agentTargetNodeId.value = if (value.mode == PromptBindingMode.EXPLICIT) value.nodeId else ""
+            }
+            vm.showUserMessage("已保存${if (negative) "反向" else "正向"}节点：${value.label}")
+        } catch (e: IllegalArgumentException) {
+            vm.showUserMessage(e.message ?: "请重新选择文本字段")
+        }
+    }
+
+    fun loadPromptOutput(vm: MainViewModel): AgentPromptOutput {
+        val raw = readScopedString(vm, "agent_prompt_output")
+        val parsed = raw?.let { runCatching {
+            val json = com.google.gson.JsonParser.parseString(it).asJsonObject
+            fun string(key: String): String? = json[key]?.takeIf {
+                it.isJsonPrimitive && it.asJsonPrimitive.isString
+            }?.asString
+            string("positive")?.let { AgentPromptOutput(it, string("negative"), string("negativeStatus")) }
+        }.getOrNull() }
+        if (parsed != null) return parsed
+        return AgentPromptOutput(sanitizeThinkingContent(
+            readScopedString(vm, "agent_last_prompt", "agent_last_prompt").orEmpty()))
+    }
+
+    internal fun savePromptOutput(vm: MainViewModel, output: AgentPromptOutput) {
+        vm._agentPromptOutput.value = output
+        vm._agentLastExpandedPrompt.value = output.positive
+        vm.prefs.edit().putString(scopedPref("agent_prompt_output", vm), vm.gson.toJson(output))
+            .putString(scopedPref("agent_last_prompt", vm), output.positive).apply()
     }
 
     fun getAgentArtistNodePrefKey(vm: MainViewModel, source: String = vm._agentWorkflowSource.value, id: String = vm._agentWorkflowId.value): String {
@@ -646,13 +717,12 @@ object MainViewModelAgent {
             vm._agentWorkflowSource.value = source
             vm._agentWorkflowId.value = id
             vm._agentWorkflowLabel.value = label
-            vm._agentTargetNodeId.value = readTargetNodeId(vm, source, id)
+            reloadPromptBindings(vm, source, id)
             vm._agentArtistNodeId.value = readArtistNodeId(vm, source, id)
             vm._agentAuxNodeKeys.value = loadAgentAuxNodes(vm, source, id)
             vm._agentMessages.value = loadAgentMessages(vm)
-            vm._agentLastExpandedPrompt.value = sanitizeThinkingContent(
-                readScopedString(vm, "agent_last_prompt", "agent_last_prompt").orEmpty()
-            )
+            vm._agentPromptOutput.value = loadPromptOutput(vm)
+            vm._agentLastExpandedPrompt.value = vm._agentPromptOutput.value.positive
             vm._agentLatestGenerationList.value = loadAgentMediaList(vm)
             vm.agentRunPromptIds.clear()
             vm.agentRunPromptIds.addAll(loadRunPromptIds(vm))
@@ -771,46 +841,11 @@ object MainViewModelAgent {
         vm.prefs.edit().putString("agent_system_prompt", v).apply()
     }
 
-    fun setDanbooruSettings(vm: MainViewModel, value: com.comfyui.mobile.danbooru.DanbooruSettings) {
-        try {
-            val settings = value.validated()
-            invalidateContext(vm)
-            com.comfyui.mobile.danbooru.DanbooruSettingsStore(vm.prefs).save(settings)
-            vm._agentDanbooruSettings.value = settings
-            vm.showUserMessage("已保存提示词格式与 Danbooru 设置")
-        } catch (e: IllegalArgumentException) {
-            vm.showUserMessage(e.message ?: "请检查 HTTP 代理地址")
-        }
-    }
-
-    /** Dictionary-only refresh. Never revises a prompt or submits another workflow. */
-    fun refreshTagCheck(vm: MainViewModel, messageId: String) {
-        if (vm.agentBusy.value) { vm.showUserMessage("请等本轮完成后刷新"); return }
-        val message = vm._agentMessages.value.firstOrNull { it.id == messageId } ?: return
-        val previous = message.tagCheck ?: return
-        if (message.tagCheckingOrigin != null) return
-        val version = vm.agentSession.contextVersion()
-        val turnId = vm.agentSession.state.value.turn?.id
-        val settings = vm._agentDanbooruSettings.value
-        fun valid() = vm.agentSession.contextVersion() == version &&
-            vm.agentSession.state.value.turn?.id == turnId && !vm.agentBusy.value
-        updateAgentMessage(vm, messageId, persist = false) { it.copy(tagCheckingOrigin = previous.origin) }
-        vm.viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val report = vm.danbooruRepository.lookup(previous.items.map { it.query }, 3,
-                    previous.origin, settings, refresh = true)
-                withContext(Dispatchers.Main) {
-                    if (valid()) updateAgentMessage(vm, messageId, persist = true) {
-                        it.copy(tagCheck = report, tagCheckingOrigin = null)
-                    }
-                }
-            } finally {
-                withContext(kotlinx.coroutines.NonCancellable + Dispatchers.Main) {
-                    // Clear only this refresh marker, even if a new turn has started.
-                    updateAgentMessage(vm, messageId, persist = false) { it.copy(tagCheckingOrigin = null) }
-                }
-            }
-        }
+    fun setPromptSettings(vm: MainViewModel, value: com.comfyui.mobile.agent.AgentPromptSettings) {
+        invalidateContext(vm)
+        com.comfyui.mobile.agent.AgentPromptSettingsStore(vm.prefs).save(value)
+        vm._agentPromptSettings.value = value
+        vm.showUserMessage("已保存提示词格式与本地词库设置")
     }
 
     fun resetAgentSystemPrompt(vm: MainViewModel) {
@@ -834,7 +869,7 @@ object MainViewModelAgent {
         vm._agentWorkflowSource.value = source
         vm._agentWorkflowId.value = id
         vm._agentWorkflowLabel.value = cleanLabel
-        vm._agentTargetNodeId.value = readTargetNodeId(vm, source, id)
+        reloadPromptBindings(vm, source, id)
         vm._agentArtistNodeId.value = readArtistNodeId(vm, source, id)
         vm._agentAuxNodeKeys.value = loadAgentAuxNodes(vm, source, id)
         vm.prefs.edit()
@@ -856,9 +891,11 @@ object MainViewModelAgent {
         invalidateContext(vm)
         vm._agentMessages.value = emptyList()
         vm._agentLastExpandedPrompt.value = ""
+        vm._agentPromptOutput.value = AgentPromptOutput()
         vm.clearAgentAttachments()
         vm.prefs.edit()
             .remove(scopedPref("agent_last_prompt", vm))
+            .putString(scopedPref("agent_prompt_output", vm), vm.gson.toJson(AgentPromptOutput()))
             .remove(scopedPref("agent_messages", vm))
             .apply()
         runCatching {
@@ -894,36 +931,8 @@ object MainViewModelAgent {
 
     fun findPrimaryPositivePromptTarget(vm: MainViewModel): Pair<String, String>? {
         val workflow = vm.agentWorkflow ?: return null
-        val customNodeId = vm._agentTargetNodeId.value.trim()
-
-        if (customNodeId.isNotBlank()) {
-            val matchedEditable = vm._agentEditableNodes.value
-                .filterIsInstance<EditableNode.TextInput>()
-                .firstOrNull { it.nodeId == customNodeId }
-            if (matchedEditable != null) {
-                return matchedEditable.nodeId to matchedEditable.key
-            }
-
-            val nodeData = workflow[customNodeId] as? Map<*, *>
-            if (nodeData != null) {
-                val inputs = nodeData["inputs"] as? Map<*, *>
-                if (inputs != null) {
-                    val preferredKeys = listOf("text", "text_g", "text_l", "string", "value")
-                    val targetKey = preferredKeys.firstOrNull { k ->
-                        val v = inputs[k]
-                        v is String || (v != null && v !is List<*>)
-                    } ?: inputs.entries.firstOrNull {
-                        val v = it.value
-                        v is String || (v != null && v !is List<*>)
-                    }?.key?.toString()
-
-                    if (targetKey != null) {
-                        return customNodeId to targetKey
-                    }
-                }
-            }
-            vm.addLog("Agent: 用户指定节点 #$customNodeId 未找到文本输入槽，回退为自动推断", LogType.WARNING)
-        }
+        val binding = vm._agentPositiveBinding.value
+        if (binding.mode == PromptBindingMode.EXPLICIT) return binding.explicitTarget(workflow)
 
         com.comfyui.mobile.agent.AgentPromptTargets.positive(workflow).firstOrNull()?.let { return it }
         val negativeFields = com.comfyui.mobile.agent.AgentPromptTargets.negative(workflow).toSet()
@@ -948,7 +957,7 @@ object MainViewModelAgent {
                 if (value is List<*> && value.size == 2 && value[0] is String && value[1] is Number) {
                     continue
                 }
-                val text = (value as? String).orEmpty()
+                val text = value as? String ?: continue
 
                 var score = 0
                 val t = title.lowercase()
@@ -978,6 +987,9 @@ object MainViewModelAgent {
         val pick = sorted.first()
         return pick.nodeId to pick.key
     }
+
+    internal fun negativePromptTargets(vm: MainViewModel, positive: Pair<String, String>?): List<Pair<String, String>> =
+        AgentPromptBindings.negativeTargets(vm.agentWorkflow.orEmpty(), vm._agentNegativeBinding.value, positive)
 
     suspend fun ensureAgentWorkflowLoaded(
         vm: MainViewModel, silent: Boolean = false,
@@ -1095,8 +1107,7 @@ object MainViewModelAgent {
         currentNegativePrompt: String? = null,
         onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null,
         checkCurrent: suspend () -> Unit = {},
-        onTagChecking: suspend (com.comfyui.mobile.danbooru.TagCheckOrigin) -> Unit = {},
-        onTagReport: suspend (com.comfyui.mobile.danbooru.DanbooruCheckReport) -> Unit = {}
+        onLocalTagReport: suspend (com.comfyui.mobile.taglib.LocalTagReport) -> Unit = {}
     ): Result<AgentLlmResult> {
         val persona = settings.persona.ifBlank { MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT }
         val drawRules = settings.drawRules.ifBlank { MainViewModel.DEFAULT_AGENT_DRAW_PROMPT }
@@ -1165,23 +1176,33 @@ object MainViewModelAgent {
             LogType.INFO
         )
 
-        val source = com.comfyui.mobile.agent.AgentTagGeneration { currentMessages, tools ->
-            if (tools == null && onProgress != null) {
+        return try {
+            if (settings.tagSettings.useLocalLibrary) {
+                val report = try {
+                    vm.localTagLibrary.forRequest(userText)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    com.comfyui.mobile.taglib.LocalTagReport(error = "本地词库读取失败")
+                }
+                checkCurrent()
+                onLocalTagReport(report)
+                // Candidate data precedes the current user request, which remains authoritative.
+                messages.add(messages.lastIndex,
+                    com.comfyui.mobile.network.ChatMessageDto("user", vm.localTagLibrary.context(report)))
+            }
+            checkCurrent()
+            val output = if (onProgress != null) {
                 vm.llmClient.chatCompletionsStream(
-                    settings.baseUrl, settings.apiKey, settings.model, currentMessages,
+                    settings.baseUrl, settings.apiKey, settings.model, messages,
                     images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
                     onProgress = onProgress).getOrThrow()
             } else {
                 vm.llmClient.chatCompletions(
-                    settings.baseUrl, settings.apiKey, settings.model, currentMessages,
-                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
-                    tools = tools).getOrThrow()
+                    settings.baseUrl, settings.apiKey, settings.model, messages,
+                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort).getOrThrow()
             }
-        }
-        return try {
-            val output = com.comfyui.mobile.agent.AgentDanbooruPipeline(vm.danbooruRepository).run(
-                messages, settings.tagSettings, source, checkCurrent, onTagChecking, onTagReport,
-                protectedWords = matchedLores.flatMap { it.triggerWords.split(',').map(String::trim) })
+            checkCurrent()
             Result.success(parseAgentLlmReply(vm, output.content, output.reasoning,
                 userText = userText, previousPrompt = settings.lastPrompt,
                 promptFormat = settings.tagSettings.promptFormat))

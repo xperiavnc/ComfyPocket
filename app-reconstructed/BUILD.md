@@ -24,7 +24,7 @@ Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中�
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.5-agent-negative`，版本号为 `7`，Agent 改动说明见 `AGENT.md`。
+当前构建版本名为 `0.0.6-agent-local-tags`，版本号为 `8`，Agent 改动说明见 `AGENT.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 
@@ -57,3 +57,5 @@ gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plai
 - 构建和 JVM 单元测试不等于真机端到端验证。本轮不连接实际生成服务、不自动安装 APK。
 - Python 桥接插件不打入 APK；需作为服务端插件单独部署。
 - `local.properties`、构建缓存、测试产物和 Python 缓存不纳入源码分发包。
+
+内置离线词库为必要应用资源，随 APK 打包；重建与来源范围见 `TAG_LIBRARY.md`。不再依赖 Danbooru 联网查词。

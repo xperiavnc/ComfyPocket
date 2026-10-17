@@ -2733,15 +2733,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     )
     val llmReasoningEffort = _llmReasoningEffort.asStateFlow()
 
-    internal val _agentDanbooruSettings = MutableStateFlow(com.comfyui.mobile.danbooru.DanbooruSettingsStore(prefs).load())
-    val agentDanbooruSettings = _agentDanbooruSettings.asStateFlow()
-    internal var danbooruRepository = com.comfyui.mobile.danbooru.DanbooruRepository(
-        com.comfyui.mobile.danbooru.DanbooruCache(File(application.cacheDir, "danbooru-v1")))
+    internal val _agentPromptSettings = MutableStateFlow(com.comfyui.mobile.agent.AgentPromptSettingsStore(prefs).load())
+    val agentPromptSettings = _agentPromptSettings.asStateFlow()
+    internal val localTagLibrary = com.comfyui.mobile.taglib.LocalTagLibrary(application)
 
-    fun setAgentDanbooruSettings(value: com.comfyui.mobile.danbooru.DanbooruSettings) =
-        MainViewModelAgent.setDanbooruSettings(this, value)
+    fun setAgentPromptSettings(value: com.comfyui.mobile.agent.AgentPromptSettings) =
+        MainViewModelAgent.setPromptSettings(this, value)
 
-    fun refreshAgentTagCheck(messageId: String) = MainViewModelAgent.refreshTagCheck(this, messageId)
+    suspend fun searchLocalTags(query: String, kind: String) = localTagLibrary.search(query, kind)
 
     internal val _agentSystemPrompt = MutableStateFlow(MainViewModelAgent.loadAgentSystemPrompt(this))
     val agentSystemPrompt = _agentSystemPrompt.asStateFlow()
@@ -2801,9 +2800,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     internal val _agentLastExpandedPrompt = MutableStateFlow(
-        MainViewModelAgent.sanitizeThinkingContent(prefs.getString("agent_last_prompt", "") ?: "")
+        MainViewModelAgent.loadPromptOutput(this).positive
     )
     val agentLastExpandedPrompt = _agentLastExpandedPrompt.asStateFlow()
+    internal val _agentPromptOutput = MutableStateFlow(MainViewModelAgent.loadPromptOutput(this))
+    val agentPromptOutput = _agentPromptOutput.asStateFlow()
 
     val agentRunPromptIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>().also {
         it.addAll(MainViewModelAgent.loadRunPromptIds(this))
@@ -2857,12 +2858,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         MainViewModelAgent.removeFavoriteArtist(this, artist)
 
     internal val _agentTargetNodeId = MutableStateFlow(
-        prefs.getString(
-            "agent_target_node_${prefs.getString("agent_wf_source", "") ?: ""}_${prefs.getString("agent_wf_id", "") ?: ""}",
-            ""
-        ) ?: ""
+        MainViewModelAgent.readTargetNodeId(this, _agentWorkflowSource.value, _agentWorkflowId.value)
     )
     val agentTargetNodeId = _agentTargetNodeId.asStateFlow()
+    internal val _agentPositiveBinding = MutableStateFlow(MainViewModelAgent.loadPromptBinding(this, false))
+    val agentPositiveBinding = _agentPositiveBinding.asStateFlow()
+    internal val _agentNegativeBinding = MutableStateFlow(MainViewModelAgent.loadPromptBinding(this, true))
+    val agentNegativeBinding = _agentNegativeBinding.asStateFlow()
+
+    fun setAgentPromptBinding(negative: Boolean, binding: com.comfyui.mobile.agent.AgentPromptBinding) =
+        MainViewModelAgent.setPromptBinding(this, negative, binding)
 
     fun setAgentTargetNodeId(nodeId: String) =
         MainViewModelAgent.setAgentTargetNodeId(this, nodeId)

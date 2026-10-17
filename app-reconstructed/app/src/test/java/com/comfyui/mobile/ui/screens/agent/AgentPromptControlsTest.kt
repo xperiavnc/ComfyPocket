@@ -10,8 +10,16 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.hasSetTextAction
 import com.comfyui.mobile.agent.AgentPromptFormat
-import com.comfyui.mobile.danbooru.*
+import com.comfyui.mobile.agent.AgentPromptSettings
+import com.comfyui.mobile.agent.AgentPromptBinding
+import com.comfyui.mobile.agent.AgentPromptOutput
+import com.comfyui.mobile.agent.PromptBindingMode
+import com.comfyui.mobile.model.EditableNode
+import com.comfyui.mobile.taglib.LocalTagEntry
+import com.comfyui.mobile.taglib.LocalTagReport
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -31,38 +39,32 @@ class AgentPromptControlsTest {
     @get:Rule val compose = createEmptyComposeRule()
     @Test fun selectsPromptFormatAndSavesTheActualDraft() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        var saved: DanbooruSettings? = null
+        var saved: AgentPromptSettings? = null
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
                 setContent { MiuixTheme {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-                        AgentPromptNetworkSettings(DanbooruSettings()) { saved = it }
+                        AgentLocalTagSettings(AgentPromptSettings(), search = { _, _ -> emptyList() }) { saved = it }
                     }
                 } }
             })
             compose.waitForIdle()
             compose.onNodeWithText("Anima 混合").performClick()
-            compose.onNodeWithText("兼容核对").performScrollTo().performClick()
-            compose.onNodeWithText("保存提示词与联网设置").performScrollTo().performClick()
+            compose.onNodeWithText("保存提示词与词库设置").performScrollTo().performClick()
             assertEquals(AgentPromptFormat.ANIMA, saved!!.promptFormat)
-            assertEquals(TagCallMode.COMPAT, saved!!.callMode)
-            assertTrue(saved!!.enabled)
+            assertTrue(saved!!.useLocalLibrary)
         } finally { controller.pause().stop().destroy() }
     }
-    @Test fun showsFailureOriginAndExpandableResultsWithoutHidingUnknownTerms() {
+    @Test fun localReportIsExpandableAndDoesNotPretendToBeAModelTool() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        val report = DanbooruCheckReport(TagCheckOrigin.APP_COMPAT,
-            listOf(DanbooruQueryResult("custom_trigger", DanbooruApiResult(LookupStatus.TIMEOUT))), 1)
-        var refreshed = false
+        val report = LocalTagReport(listOf(LocalTagEntry("blue hair", "蓝发", "hair", "颜色", "tag", "", "", "蓝发", true)))
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { MiuixTheme { DanbooruCheckPanel(report, null, onRefresh = { refreshed = true }) } }
+                setContent { MiuixTheme { LocalTagReportPanel(report) } }
             })
             compose.waitForIdle()
-            compose.onNodeWithText("App 兼容核对 · 联网核对未完成，已保留原始提示词  详情").performClick()
-            compose.onNodeWithText("custom_trigger · 查询超时").assertExists()
-            compose.onNodeWithText("刷新核对（不重新出图）").performClick()
-            assertTrue(refreshed)
+            compose.onNodeWithText("本地词库命中 1 项 · 无联网查询  详情").performClick()
+            compose.onNodeWithText("blue hair · 蓝发").assertExists()
         } finally { controller.pause().stop().destroy() }
     }
 
@@ -81,6 +83,110 @@ class AgentPromptControlsTest {
             compose.onNodeWithText("反向提示词").assertExists()
             compose.onNodeWithText("blurry, extra limbs").assertExists()
             compose.onNodeWithText("已写入工作流反向输入（1 项）").assertExists()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun outputDialogShowsBothPromptsAndCopiesSeparatelyOrTogether() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val copied = mutableListOf<Pair<String, String>>()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    AgentOutputPromptPanel(AgentPromptOutput("cat, rain", "blurry", "已写入反向")) { label, text ->
+                        copied += label to text
+                    }
+                } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("cat, rain").assertExists()
+            compose.onNodeWithText("blurry").assertExists()
+            compose.onNodeWithText("复制正向").performClick()
+            compose.onNodeWithText("复制反向").performClick()
+            compose.onNodeWithText("复制两组").performClick()
+            assertEquals("正向提示词" to "cat, rain", copied[0])
+            assertEquals("反向提示词" to "blurry", copied[1])
+            assertEquals("正向提示词：\ncat, rain\n\n反向提示词：\nblurry", copied[2].second)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun bindingTabsPassDirectionAndExactFieldWithoutClosing() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val selected = mutableListOf<Pair<Boolean, AgentPromptBinding>>()
+        val nodes = listOf(
+            EditableNode.TextInput("1", "主体", "Inline", text = "cat", key = "draw"),
+            EditableNode.TextInput("1", "排除", "Inline", text = "blurry", key = "avoid")
+        )
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    AgentPromptBindingPanel(AgentPromptBinding(), AgentPromptBinding(), nodes) { negative, binding ->
+                        selected += negative to binding
+                    }
+                } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("#1:draw · 主体").performClick()
+            compose.onNodeWithText("反向节点").performClick()
+            compose.onNodeWithText("#1:avoid · 排除").performClick()
+            compose.onNodeWithText("保留工作流反向原值").performClick()
+            assertEquals(false to AgentPromptBinding(PromptBindingMode.EXPLICIT, "1", "draw"), selected[0])
+            assertEquals(true to AgentPromptBinding(PromptBindingMode.EXPLICIT, "1", "avoid"), selected[1])
+            assertEquals(PromptBindingMode.KEEP, selected[2].second.mode)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun manualLookupUsesTheSelectedVocabularyKindWithoutCallingTheAgent() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val queries = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        AgentLocalTagSettings(AgentPromptSettings(), search = { query, kind ->
+                            queries += query to kind
+                            listOf(LocalTagEntry("hatsune_miku", "初音未来", "character_names", "vocaloid",
+                                "character", "hatsune_miku", "blue hair", query, true))
+                        }, onSave = {})
+                    }
+                } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("角色").performScrollTo().performClick()
+            compose.onNode(hasSetTextAction()).performScrollTo().performTextInput("初音未来")
+            compose.waitUntil(timeoutMillis = 5000) { queries.any { it == "初音未来" to "character" } }
+            compose.waitForIdle()
+            compose.onNodeWithText("hatsune_miku · 初音未来").assertExists()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    fun dualOutputAndBindingPanelsHaveSeparateAndroidLayout() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val view = ComposeView(controller.get())
+        try {
+            controller.get().setContentView(view)
+            view.setContent { MiuixTheme {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    AgentOutputPromptPanel(AgentPromptOutput("cat, blue hair, rainy street",
+                        "blurry, extra limbs", "已写入工作流反向输入（1 项）")) { _, _ -> }
+                    AgentPromptBindingPanel(
+                        AgentPromptBinding(PromptBindingMode.EXPLICIT, "1", "text"),
+                        AgentPromptBinding(PromptBindingMode.EXPLICIT, "2", "text"),
+                        listOf(EditableNode.TextInput("1", "主体", "CLIPTextEncode", text = "cat", key = "text"),
+                            EditableNode.TextInput("2", "排除", "CLIPTextEncode", text = "blurry", key = "text"))
+                    ) { _, _ -> }
+                }
+            } }
+            compose.waitForIdle()
+            compose.onNodeWithText("正向提示词").assertExists()
+            compose.onNodeWithText("反向提示词").assertExists()
+            compose.onNodeWithText("反向节点").assertExists()
+            val positive = compose.onNodeWithText("正向提示词").fetchSemanticsNode().boundsInRoot
+            val negative = compose.onNodeWithText("反向提示词").fetchSemanticsNode().boundsInRoot
+            val binding = compose.onNodeWithText("反向节点").fetchSemanticsNode().boundsInRoot
+            assertTrue(positive.width > 0f)
+            assertTrue(positive.bottom < negative.top)
+            assertTrue(negative.bottom < binding.top)
         } finally { controller.pause().stop().destroy() }
     }
 }

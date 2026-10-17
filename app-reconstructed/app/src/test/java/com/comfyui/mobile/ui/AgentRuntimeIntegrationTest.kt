@@ -7,6 +7,10 @@ import android.net.Uri
 import android.graphics.Bitmap
 import androidx.lifecycle.ViewModelStore
 import com.comfyui.mobile.agent.AgentPhase
+import com.comfyui.mobile.agent.AgentPromptBinding
+import com.comfyui.mobile.agent.AgentPromptBindingStore
+import com.comfyui.mobile.agent.AgentPromptSettings
+import com.comfyui.mobile.agent.PromptBindingMode
 import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.model.LlmProfile
 import com.comfyui.mobile.model.AgentAttachment
@@ -49,7 +53,6 @@ class AgentRuntimeIntegrationTest {
     private val promptBodies = CopyOnWriteArrayList<String>()
     private val uploadBodies = CopyOnWriteArrayList<String>()
     private val gson = Gson()
-    private val tagResponses = LinkedBlockingQueue<MockResponse>()
     private val tagRequests = CopyOnWriteArrayList<RecordedRequest>()
 
     private fun event(text: String) = "data: " + gson.toJson(mapOf(
@@ -75,7 +78,7 @@ class AgentRuntimeIntegrationTest {
                 }
                 "/tags.json", "/tag_aliases.json", "/wiki_pages/cat.json" -> {
                     tagRequests += request
-                    tagResponses.poll(5, TimeUnit.SECONDS) ?: MockResponse().setResponseCode(500)
+                    MockResponse().setResponseCode(410)
                 }
                 "/prompt" -> {
                     promptBodies += request.body.readUtf8()
@@ -91,7 +94,7 @@ class AgentRuntimeIntegrationTest {
         }
         server.start()
         vm = MainViewModel(app)
-        vm._agentDanbooruSettings.value = com.comfyui.mobile.danbooru.DanbooruSettings(enabled = false)
+        vm._agentPromptSettings.value = AgentPromptSettings(useLocalLibrary = false)
         store = ViewModelStore().apply { put("agent", vm) }
         vm._servers.value = emptyList()
         vm._currentServerId.value = ""
@@ -414,91 +417,124 @@ class AgentRuntimeIntegrationTest {
         assertTrue(promptBodies.isEmpty())
     }
 
-    private fun enableTags(compat: Boolean = false) {
-        vm._agentDanbooruSettings.value = com.comfyui.mobile.danbooru.DanbooruSettings(
-            callMode = if (compat) com.comfyui.mobile.danbooru.TagCallMode.COMPAT else com.comfyui.mobile.danbooru.TagCallMode.AUTO)
-        vm.danbooruRepository = com.comfyui.mobile.danbooru.DanbooruRepository(
-            com.comfyui.mobile.danbooru.DanbooruCache(File(app.cacheDir, "integration-tags").apply { deleteRecursively() }),
-            server.url("/"), intervalMillis = 0)
+    @Test fun offlineCandidatesReachTheSingleModelRequestAndBothOutputs() {
+        withNegativeWorkflow()
+        vm._agentPromptSettings.value = AgentPromptSettings()
+        responses += success("""{"reply":"好","prompt":"blue hair, my_trigger","negative_prompt":"blurry, bad anatomy","should_draw":true}""")
+        vm.sendAgentMessage("画蓝发人物，不要模糊，保留 my_trigger")
+        awaitDone()
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertTrue(tagRequests.isEmpty())
+        val body = JsonParser.parseString(llmBodies.single()).asJsonObject
+        assertFalse(body.has("tools"))
+        val messages = body["messages"].asJsonArray
+        assertTrue(messages.any { it.asJsonObject["content"].asString.contains("离线词库候选") })
+        assertTrue(messages.any { it.asJsonObject["content"].asString.contains("blue hair") })
+        assertTrue(messages.last().asJsonObject["content"].asString.startsWith("画蓝发人物"))
+        assertTrue(vm.agentMessages.value.last().localTagReport!!.entries.any { it.name == "blue hair" })
+        assertEquals("blue hair, my_trigger", vm.agentPromptOutput.value.positive)
+        assertEquals("blurry, bad anatomy", vm.agentPromptOutput.value.negative)
+        assertEquals(vm.agentPromptOutput.value, MainViewModelAgent.loadPromptOutput(vm))
+        assertEquals("blurry, bad anatomy", submittedNegative())
     }
-    private fun tagSuccess() {
-        tagResponses += MockResponse().setBody("""[{"name":"cat","category":0,"post_count":10}]""")
-        tagResponses += MockResponse().setBody("""{"title":"cat","body":"A domestic cat."}""")
-    }
-    private fun nativeDraft() = MockResponse().setBody(gson.toJson(mapOf("choices" to listOf(mapOf(
-        "finish_reason" to "tool_calls", "message" to mapOf(
-            "role" to "assistant",
-            "content" to """{"reply":"好","prompt":"cat, my_trigger","should_draw":true}""",
-            "tool_calls" to listOf(mapOf("id" to "tag-1", "type" to "function",
-                "function" to mapOf("name" to "search_danbooru_tags", "arguments" to """{"queries":["cat"],"limit":3}""")))
-        )
-    )))))
 
-    @Test fun nativeTagsReviseBeforeOneWorkflowSubmissionAndRefreshNeverResubmits() {
-        enableTags()
-        tagSuccess()
-        responses += nativeDraft()
-        responses += success("""{"reply":"好了","prompt":"cat, sitting","should_draw":true}""")
+    @Test fun disabledLocalLookupAddsNoCandidatesAndNoReport() {
+        responses += success("""{"reply":"好","prompt":"blue hair","negative_prompt":"blurry","should_draw":true}""")
+        vm.sendAgentMessage("画蓝发人物")
+        awaitDone()
+        assertEquals(1, llmBodies.size)
+        assertFalse(llmBodies.single().contains("离线词库候选"))
+        assertNull(vm.agentMessages.value.last().localTagReport)
+        assertTrue(tagRequests.isEmpty())
+    }
+
+    @Test fun localReadFailurePreservesCustomPromptAndStillOnlyCallsModelOnce() {
+        vm._agentPromptSettings.value = AgentPromptSettings()
+        val manifest = app.assets.open("tag-library/manifest.json").bufferedReader().use {
+            JsonParser.parseString(it.readText()).asJsonObject
+        }
+        val target = File(app.noBackupFilesDir, "tag-library/catalogue-" + manifest["sha256"].asString.take(16) + ".db")
+        target.parentFile!!.mkdirs()
+        target.writeBytes(ByteArray(manifest["bytes"].asInt))
+        try {
+            responses += success("""{"reply":"好","prompt":"blue hair, __my_trigger__","negative_prompt":"blurry","should_draw":true}""")
+            vm.sendAgentMessage("画蓝发人物，保留 __my_trigger__")
+            awaitDone()
+            assertEquals(1, llmBodies.size)
+            assertEquals(1, promptBodies.size)
+            assertEquals("blue hair, __my_trigger__", graphText())
+            assertNotNull(vm.agentMessages.value.last().localTagReport!!.error)
+        } finally { target.delete() }
+    }
+
+    private fun installBinding(negative: Boolean, binding: AgentPromptBinding) {
+        AgentPromptBindingStore(vm.prefs).save(MainViewModelAgent.scope(vm), vm._agentWorkflowSource.value,
+            vm._agentWorkflowId.value, negative, binding)
+        if (negative) vm._agentNegativeBinding.value = binding else vm._agentPositiveBinding.value = binding
+    }
+
+    @Test fun explicitNegativeFieldIsUsedByReferenceAndRealSubmission() {
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
+            """{"1":{"class_type":"CLIPTextEncode","inputs":{"text":"before"}},"9":{"class_type":"CustomText","inputs":{"avoid":"fixture_embedding, blurry","unrelated":"keep"}}}""")
+        installBinding(true, AgentPromptBinding(PromptBindingMode.EXPLICIT, "9", "avoid"))
+        assertEquals("fixture_embedding, blurry", AgentWorkflowPromptContext.negative(vm, vm.agentSession.contextVersion()))
+        assertNull(vm.agentWorkflow)
+        responses += success("""{"reply":"好","prompt":"cat","negative_prompt":"fixture_embedding, extra limbs","should_draw":true}""")
         vm.sendAgentMessage("画猫")
         awaitDone()
-        assertEquals(2, llmBodies.size)
-        assertEquals(1, promptBodies.size)
-        assertEquals(2, tagRequests.size)
-        assertTrue(tagRequests.all { it.method == "GET" })
-        val report = vm.agentMessages.value.last().tagCheck!!
-        assertEquals(com.comfyui.mobile.danbooru.TagCheckOrigin.MODEL_TOOL, report.origin)
-        assertTrue(graphText().toString().contains("my_trigger"))
-        val first = JsonParser.parseString(llmBodies.first()).asJsonObject
-        assertEquals("search_danbooru_tags", first["tools"].asJsonArray[0].asJsonObject["function"].asJsonObject["name"].asString)
-        val second = JsonParser.parseString(llmBodies.last()).asJsonObject
-        assertFalse(second.has("tools"))
-        assertTrue(second["messages"].asJsonArray.any { it.asJsonObject["role"].asString == "tool" })
-        tagSuccess()
-        vm.refreshAgentTagCheck(vm.agentMessages.value.last().id)
-        pumpUntil { tagRequests.size == 4 && vm.agentMessages.value.last().tagCheckingOrigin == null }
-        assertEquals(2, llmBodies.size)
-        assertEquals(1, promptBodies.size)
-        assertTrue(vm.agentMessages.value.last().tagCheck!!.refreshed)
+        val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        assertEquals("fixture_embedding, extra limbs", graph["9"].asJsonObject["inputs"].asJsonObject["avoid"].asString)
+        assertEquals("keep", graph["9"].asJsonObject["inputs"].asJsonObject["unrelated"].asString)
+        assertEquals("fixture_embedding, extra limbs", vm.agentPromptOutput.value.negative)
     }
 
-    @Test fun compatibilityTagsUseSseAndPersistAnAccurateOrigin() {
-        enableTags(compat = true)
-        tagSuccess()
-        responses += success("""{"reply":"好","prompt":"cat, rain","should_draw":true,"tag_queries":["cat"]}""")
-        responses += success("""{"reply":"好了","prompt":"cat, rain","should_draw":true}""")
+    @Test fun twoFieldsInOneNodeRemainIndependentInTheActualWorkflow() {
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
+            """{"1":{"class_type":"InlinePrompt","inputs":{"draw":"old positive","avoid":"old negative"}}}""")
+        installBinding(false, AgentPromptBinding(PromptBindingMode.EXPLICIT, "1", "draw"))
+        installBinding(true, AgentPromptBinding(PromptBindingMode.EXPLICIT, "1", "avoid"))
+        responses += success("""{"reply":"好","prompt":"cat, rain","negative_prompt":"blurry","should_draw":true}""")
         vm.sendAgentMessage("画猫")
         awaitDone()
-        assertEquals(2, llmBodies.size)
-        assertEquals(1, promptBodies.size)
-        assertEquals(com.comfyui.mobile.danbooru.TagCheckOrigin.APP_COMPAT, vm.agentMessages.value.last().tagCheck!!.origin)
-        assertTrue(llmBodies.all { !JsonParser.parseString(it).asJsonObject.has("tools") })
-        assertTrue(vm.prefs.getString(MainViewModelAgent.scopedPref("agent_messages", vm), "")!!.contains("APP_COMPAT"))
+        val inputs = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject["1"].asJsonObject["inputs"].asJsonObject
+        assertEquals("cat, rain", inputs["draw"].asString)
+        assertEquals("blurry", inputs["avoid"].asString)
     }
 
-    @Test fun stoppingDuringTagLookupCancelsTheQueryAndNeverSubmitsOrRevises() {
-        enableTags(compat = true)
-        responses += success("""{"reply":"好","prompt":"cat","should_draw":true,"tag_queries":["cat"]}""")
-        tagResponses += MockResponse().setBody("[]").setBodyDelay(2, TimeUnit.SECONDS)
+    @Test fun invalidExplicitNegativeStopsBeforePatchOrSubmit() {
+        withNegativeWorkflow()
+        installBinding(true, AgentPromptBinding(PromptBindingMode.EXPLICIT, "missing", "text"))
+        responses += success("""{"reply":"好","prompt":"cat","negative_prompt":"blurry","should_draw":true}""")
         vm.sendAgentMessage("画猫")
-        pumpUntil { tagRequests.size == 1 }
-        vm.stopAgentGeneration()
-        pumpUntil { !vm.agentBusy.value }
-        assertEquals(AgentPhase.STOPPED, vm.agentSessionState.value.turn!!.phase)
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("before", graphText())
         assertTrue(promptBodies.isEmpty())
-        assertEquals(1, llmBodies.size)
-        assertNull(vm.agentMessages.value.last().tagCheckingOrigin)
+        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("已失效"))
     }
 
-    @Test fun failedTagLookupKeepsDraftAndQueuesOnlyOnce() {
-        enableTags(compat = true)
-        responses += success("""{"reply":"好","prompt":"cat, my_trigger","should_draw":true,"tag_queries":["cat"]}""")
-        tagResponses += MockResponse().setResponseCode(503)
+    @Test fun keepSettingKeepsOriginalWhileShowingGeneratedNegativeHonestly() {
+        withNegativeWorkflow()
+        installBinding(true, AgentPromptBinding(PromptBindingMode.KEEP))
+        responses += success("""{"reply":"好","prompt":"cat","negative_prompt":"new negative","should_draw":true}""")
         vm.sendAgentMessage("画猫")
         awaitDone()
-        assertEquals(1, llmBodies.size)
-        assertEquals(1, promptBodies.size)
-        assertEquals("cat, my_trigger", graphText())
-        assertTrue(vm.agentMessages.value.last().tagCheck!!.incomplete)
+        assertEquals("template_embedding, (blurry:1.2)", submittedNegative())
+        assertEquals("new negative", vm.agentPromptOutput.value.negative)
+        assertTrue(vm.agentPromptOutput.value.negativeStatus!!.contains("保留工作流反向原值"))
+    }
+
+    @Test fun omittedNegativeOutputShowsRetainedOriginalAndClearChatClearsPair() {
+        withNegativeWorkflow()
+        responses += success("""{"reply":"好","prompt":"cat","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals("template_embedding, (blurry:1.2)", vm.agentPromptOutput.value.negative)
+        vm.clearAgentChat()
+        assertEquals("", vm.agentPromptOutput.value.positive)
+        assertNull(vm.agentPromptOutput.value.negative)
+        assertEquals("", MainViewModelAgent.loadPromptOutput(vm).positive)
     }
 
     @Test fun llmSettingsAreFrozenAtSendRatherThanReadAfterLaunch() {

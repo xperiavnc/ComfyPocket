@@ -34,7 +34,7 @@ internal class AgentLlmSettings(
     val drawRules: String,
     val lores: List<CharacterLore>,
     val lastPrompt: String,
-    val tagSettings: com.comfyui.mobile.danbooru.DanbooruSettings = com.comfyui.mobile.danbooru.DanbooruSettings()
+    val tagSettings: AgentPromptSettings = AgentPromptSettings()
 ) {
     companion object {
         fun capture(vm: MainViewModel) = AgentLlmSettings(
@@ -46,7 +46,7 @@ internal class AgentLlmSettings(
                     it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()
                 }?.expandedPrompt.orEmpty()
             },
-            vm._agentDanbooruSettings.value
+            vm._agentPromptSettings.value
         )
     }
 }
@@ -64,7 +64,6 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             it.copy(
                 content = partial ?: reason,
                 isThinking = false,
-                tagCheckingOrigin = null,
                 errorMessage = if (submitting) {
                     "$reason；服务端已接收的任务可能继续运行"
                 } else reason
@@ -105,21 +104,13 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                             currentNegativePrompt = negativeContext,
                             onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) },
                             checkCurrent = { session.requireCurrent(turn) },
-                            onTagChecking = { origin ->
+                            onLocalTagReport = { report ->
                                 withContext(Dispatchers.Main) {
                                     session.requireCurrent(turn)
                                     MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = false) {
-                                        it.copy(tagCheckingOrigin = origin)
+                                        it.copy(localTagReport = report)
                                     }
-                                }
-                            },
-                            onTagReport = { report ->
-                                withContext(Dispatchers.Main) {
-                                    session.requireCurrent(turn)
-                                    MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = false) {
-                                        it.copy(tagCheck = report, tagCheckingOrigin = null)
-                                    }
-                                    vm.addLog("Agent ${report.origin.title}: ${report.summary}；HTTP ${report.networkRequests}/3", LogType.INFO)
+                                    vm.addLog("Agent ${report.summary}", LogType.INFO)
                                 }
                             }
                         ).getOrThrow()
@@ -154,7 +145,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     expandedPrompt = reply.prompt.takeIf(String::isNotBlank),
                                     expandedNegativePrompt = reply.negativePrompt,
                                     thinkingContent = reply.thinking.takeIf(String::isNotBlank),
-                                    isThinking = false, errorMessage = null, tagCheckingOrigin = null
+                                    isThinking = false, errorMessage = null
                                 )
                             }
                         }
@@ -182,7 +173,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                             val hasReply = it.content.isNotBlank() && it.content != "✨深度求索中..."
                             it.copy(
                                 content = if (hasReply) it.content else message,
-                                errorMessage = message, isThinking = false, tagCheckingOrigin = null
+                                errorMessage = message, isThinking = false
                             )
                         }
                         vm.addLog("Agent 本轮失败: ${if (e is LlmException) e.errorType else e.javaClass.simpleName}", LogType.ERROR)
@@ -255,11 +246,15 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
 
         override suspend fun patchPrompt(prompt: String, negativePrompt: String?) = withContext(Dispatchers.Main) {
             session.requireCurrent(turn)
-            val target = MainViewModelAgent.findPrimaryPositivePromptTarget(vm)
-                ?: throw AgentExecutionException("模板中找不到提示词输入，请在工作流设置选择注入节点。")
-            val negativeTargets = if (negativePrompt != null) {
-                AgentPromptTargets.negative(vm.agentWorkflow.orEmpty(), target)
-            } else emptyList()
+            val (target, configuredNegative) = try {
+                val positive = MainViewModelAgent.findPrimaryPositivePromptTarget(vm)
+                    ?: throw AgentExecutionException("模板中找不到提示词输入，请在工作流设置选择注入节点。")
+                // Validate the binding even when an old model response omits negative_prompt.
+                positive to MainViewModelAgent.negativePromptTargets(vm, positive)
+            } catch (e: IllegalArgumentException) {
+                throw AgentExecutionException(e.message ?: "提示词绑定已失效，请重新设置")
+            }
+            val negativeTargets = if (negativePrompt != null) configuredNegative else emptyList()
             val snapshot = workflowSnapshot(listOf(target) + negativeTargets)
             tools.inspectWorkflow.execute(snapshot).getOrElse {
                 throw AgentExecutionException("工作流检查失败：${it.message}")
@@ -276,6 +271,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             MainViewModelAgent.parseAgentEditableNodes(vm, patch.workflow)
             MainViewModelAgent.persistAgentWorkflowParams(vm)
             val negativeStatus = when {
+                vm._agentNegativeBinding.value.mode == PromptBindingMode.KEEP ->
+                    "按设置保留工作流反向原值；生成的反向仅供查看"
                 negativePrompt == null -> "模型未返回反向提示词，已保留工作流原值"
                 negativeTargets.isEmpty() -> "未写入：工作流没有可识别的独立反向输入，已保留原配置"
                 negativePrompt.isEmpty() -> "已清空工作流反向输入（${negativeTargets.size} 项）"
@@ -284,6 +281,11 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = true) {
                 it.copy(negativePromptStatus = negativeStatus)
             }
+            val effectiveTargets = if (vm._agentNegativeBinding.value.mode == PromptBindingMode.KEEP) {
+                AgentPromptTargets.negative(patch.workflow, target)
+            } else configuredNegative
+            MainViewModelAgent.savePromptOutput(vm, AgentPromptOutput(
+                prompt, negativePrompt ?: AgentPromptBindings.text(patch.workflow, effectiveTargets), negativeStatus))
             vm.addLog("Agent 反向提示词：$negativeStatus", LogType.INFO)
             vm.addLog("Agent patch_workflow 已校验并修改 ${patch.diff.size} 个字段", LogType.INFO)
         }
@@ -325,8 +327,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
 
         override suspend fun promptApplied(prompt: String) = withContext(Dispatchers.Main) {
             session.requireCurrent(turn)
-            vm._agentLastExpandedPrompt.value = prompt
-            vm.prefs.edit().putString(MainViewModelAgent.scopedPref("agent_last_prompt", vm), prompt).apply()
+            // patchPrompt saved both fields atomically; never overwrite that pair with positive only.
+            check(vm._agentPromptOutput.value.positive == prompt)
         }
 
         override suspend fun submit(): String = withContext(Dispatchers.Main) {

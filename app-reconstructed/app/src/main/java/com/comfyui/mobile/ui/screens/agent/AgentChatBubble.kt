@@ -64,7 +64,7 @@ fun FrostedChip(
 }
 
 @Composable
-fun AgentBubble(msg: AgentChatMessage, refreshEnabled: Boolean = true, onRefreshTags: () -> Unit = {}) {
+fun AgentBubble(msg: AgentChatMessage) {
     val scheme = MiuixTheme.colorScheme
     val isUser = msg.role == "user"
     val bubbleColor = if (isUser) {
@@ -194,8 +194,8 @@ fun AgentBubble(msg: AgentChatMessage, refreshEnabled: Boolean = true, onRefresh
                 if (!isUser) {
                     AgentPromptDetails(msg.expandedPrompt, msg.expandedNegativePrompt, msg.negativePromptStatus)
                 }
-                if (!isUser && (msg.tagCheck != null || msg.tagCheckingOrigin != null)) {
-                    DanbooruCheckPanel(msg.tagCheck, msg.tagCheckingOrigin, refreshEnabled, onRefreshTags)
+                if (!isUser && msg.localTagReport != null) {
+                    LocalTagReportPanel(msg.localTagReport)
                 }
 
                 // 提交出图异常提示（若有），独立渲染在下方，绝不冲掉正文对话

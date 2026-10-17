@@ -14,8 +14,7 @@ data class AgentChatMessage(
     val errorMessage: String? = null,
     /** Nullable: older persisted JSON has no field (Gson skips Kotlin defaults). */
     val attachments: List<AgentAttachment>? = null,
-    val tagCheck: com.comfyui.mobile.danbooru.DanbooruCheckReport? = null,
-    val tagCheckingOrigin: com.comfyui.mobile.danbooru.TagCheckOrigin? = null,
+    val localTagReport: com.comfyui.mobile.taglib.LocalTagReport? = null,
     /** Nullable for older conversations and responses that omitted the negative field. */
     val expandedNegativePrompt: String? = null,
     val negativePromptStatus: String? = null

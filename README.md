@@ -11,6 +11,7 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
 - `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
 - `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
+- `app-reconstructed/TAG_LIBRARY.md`：内置词库来源、查询边界与可复现构建方式。
 - `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
 
 ## Civitai 集市
@@ -49,17 +50,19 @@ cd app-reconstructed
 
 ## 当前验证状态
 
-- `0.0.5-agent-negative`（versionCode 7）：Agent 同时编写正向与反向提示词，对话可展开分别查看；
-  自动识别工作流反向输入，遗漏字段保留原配置，显式空字符串清空；修正“反向提示词”被误认为反推而阻止出图。
-- `0.0.4-agent-prompts`（versionCode 6）：统一 CPU 进度条颜色；拆分人设、分镜与输出契约，
-  增加 Tags / Anima 混合 / 自然语言三种格式，以及可选独立代理的 Danbooru 标签核对。
-  查询详情和刷新位于 Agent 对话；更新本版仅需安装 APK，不必更新 Bridge。
+- `0.0.6-agent-local-tags`（versionCode 8）：撤掉 Danbooru 联网查词，内置 13,358 个普通词、
+  34,122 个角色条目，支持中英文/别名搜索。绘图前离线取候选，不增加模型修订轮次。
+  Agent 主动编写正向和反向；工作流可分别选择精确文本字段；“出图提示词”同时显示、
+  分别复制和成对保存两组词，明确实际写入状态。用户自定义人设与分镜规则保留。
+- 保留此前的 CPU 进度条同色、提示词职责分离、Tags / Anima 混合 / 自然语言格式、
+  反向缺失保留原值和显式空字符串清空行为；更新本版仅需 APK，不必更新 Bridge。
 
 - `0.0.3-agent-media-monitor`（versionCode 5）修复生成通知静默、Agent 设置保存反馈、
   分享和画廊的原图缓存复用；主页新增 CPU / 内存预览，配套 Bridge 2.1，详见 `app-reconstructed/AGENT.md`。
 - `0.0.2-agent-core`（versionCode 4）落地 Agent 实例级会话、分步执行和工作流工具；
   思考强度包括极高 `xhigh` 和 `max`，随模型配置保存，详见 `app-reconstructed/AGENT.md`。
-- 当前 Android 构建成功，317 项 JVM/Android 页面测试通过；上批另有 3 项 Bridge CPU/内存采样测试。Bridge Python、
+- 当前 Android 构建成功，320 项 JVM/Android 页面测试通过（基线 317 项，删除旧联网功能专属测试并增加离线及双向回归）。
+  上批另有 3 项 Bridge CPU/内存采样测试。Bridge Python、
   设置 GUI 与本地浏览器的独立测试说明见插件文档，本批未改动插件。
 - 主 ViewModel 首轮从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、
   参数持久化、日志和缓存管理五个组件。

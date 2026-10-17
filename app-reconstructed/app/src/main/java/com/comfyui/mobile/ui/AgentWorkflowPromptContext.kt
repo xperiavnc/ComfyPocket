@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui
 
 import com.comfyui.mobile.agent.AgentPromptTargets
+import com.comfyui.mobile.agent.AgentPromptBindings
+import com.comfyui.mobile.agent.PromptBindingMode
 import com.google.gson.reflect.TypeToken
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -30,7 +32,16 @@ internal object AgentWorkflowPromptContext {
             val graph = vm.sanitizeNumbers(raw) as Map<String, Any>
             val params = MainViewModelAgent.loadAgentWorkflowParams(vm, source, id, fallback).toMutableMap()
             val snapshot = vm.applyParamOverridesToWorkflow(graph, params).first
-            if (vm.agentSession.contextVersion() != expectedVersion) null else AgentPromptTargets.negativeContext(snapshot)
+            if (vm.agentSession.contextVersion() != expectedVersion) null else {
+                val positive = MainViewModelAgent.loadPromptBinding(vm, false, source, id).let {
+                    it.explicitTarget(snapshot) ?: AgentPromptTargets.positive(snapshot).firstOrNull()
+                }
+                val binding = MainViewModelAgent.loadPromptBinding(vm, true, source, id)
+                val targets = if (binding.mode == PromptBindingMode.KEEP) {
+                    AgentPromptTargets.negative(snapshot, positive)
+                } else AgentPromptBindings.negativeTargets(snapshot, binding, positive)
+                AgentPromptBindings.text(snapshot, targets)?.take(6000)
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
