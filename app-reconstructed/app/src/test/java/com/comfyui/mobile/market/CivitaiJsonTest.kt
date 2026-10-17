@@ -33,6 +33,17 @@ class CivitaiJsonTest {
         assertNull(url.queryParameter("token"))
     }
 
+    @Test fun krea2FilterUsesCanonicalApiValue() {
+        for ((type, apiType) in listOf("LORA" to "LORA", "CHECKPOINT" to "Checkpoint")) {
+            val url = CivitaiJson.searchUrl(
+                MarketQuery(type = type, baseModel = "Krea 2"), 1, null, CivitaiSettings()
+            )
+            assertEquals(listOf("Krea 2"), url.queryParameterValues("baseModels"))
+            assertEquals(apiType, url.queryParameter("types"))
+            assertNull(url.queryParameter("query"))
+        }
+    }
+
     @Test fun parsesOfficialShapeAndNullableFields() {
         val result = CivitaiJson.page("""
             {"items":[{"id":1,"name":"A","creator":null,"description":null,

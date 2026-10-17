@@ -269,16 +269,6 @@ fun ModelHubScreen(
                             .fillMaxSize()
                             .padding(horizontal = 16.dp)
                     ) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                if (marketSettings.mode == MarketConnectionMode.DIRECT)
-                                    "手机直连" + if (marketSettings.proxyEnabled) " · HTTP 代理" else ""
-                                else "电脑桥接",
-                                style = MiuixTheme.textStyles.footnote1,
-                                color = scheme.onSecondaryContainer, modifier = Modifier.weight(1f)
-                            )
-                            TextButton(text = "连接设置", onClick = { showMarketSettings = true })
-                        }
                         ModelBrowserTypeTabs(
                             selectedType = selectedType,
                             onTypeSelected = {

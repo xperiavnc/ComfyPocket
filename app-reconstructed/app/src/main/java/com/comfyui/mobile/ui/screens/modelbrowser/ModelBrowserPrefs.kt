@@ -25,7 +25,7 @@ val ALL_BASE_MODEL_GROUPS = listOf(
     ),
     BaseModelGroup(
         categoryName = "🎨 主流生图 (SD / Flux)",
-        items = listOf("SDXL", "Flux", "SD 1.5", "SD 3.5", "Kolors", "Stable Cascade")
+        items = listOf("SDXL", "Flux", "Krea 2", "SD 1.5", "SD 3.5", "Kolors", "Stable Cascade")
     ),
     BaseModelGroup(
         categoryName = "🎬 视频模型",
@@ -79,6 +79,9 @@ fun getBaseModelAliases(tag: String): List<String> {
         )
         t.equals("SD 1.5", ignoreCase = true) || t.equals("1.5", ignoreCase = true) -> listOf(
             "SD 1.5", "sd 1.5", "SD1.5", "sd1.5", "SD 1.5 LCM", "SD 1.4", "v1-5", "1.5", "SD 1.x", "sd 1.x"
+        )
+        t.equals("Krea 2", ignoreCase = true) || t.equals("Krea2", ignoreCase = true) -> listOf(
+            "Krea 2", "krea 2", "KREA 2", "Krea2", "krea2", "KREA2"
         )
         t.equals("Flux", ignoreCase = true) -> listOf(
             "F1基础 D", "F1基础 S", "F1基础-Kontext", "F1基础-Krea", "Flux2-Klein-4B", "Flux2-Klein-9B",
