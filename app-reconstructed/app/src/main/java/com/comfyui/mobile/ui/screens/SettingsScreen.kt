@@ -2,6 +2,9 @@ package com.comfyui.mobile.ui.screens
 
 import android.content.Intent
 import android.os.Build
+import com.comfyui.mobile.diagnostics.NavigationDiagnostics
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import kotlinx.coroutines.launch
@@ -195,6 +198,23 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     }
 
     val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var exportingDiagnostics by remember { mutableStateOf(false) }
+    val diagnosticExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) scope.launch {
+            exportingDiagnostics = true
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val report = NavigationDiagnostics.report(context)
+                    val output = checkNotNull(context.contentResolver.openOutputStream(uri))
+                    output.bufferedWriter(Charsets.UTF_8).use { it.write(report) }
+                }
+            }
+            exportingDiagnostics = false
+            viewModel.showUserMessage(if (result.isSuccess) "返回诊断已导出" else "诊断导出失败，请重试")
+        }
+    }
 
     fun shareBackup() {
         try {
@@ -410,6 +430,19 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     },
                     onClick = { navController.navigate("console") }
     )
+            }
+
+            Card {
+                ArrowPreference(
+                    title = "导出返回/退出诊断",
+                    summary = if (exportingDiagnostics) "正在导出…" else "返回路径、崩溃类型与系统退出原因，不含 Key",
+                    onClick = {
+                        if (!exportingDiagnostics) diagnosticExportLauncher.launch(
+                            "ComfyPocket-return-diagnostic-" +
+                                SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + ".txt"
+                        )
+                    }
+                )
             }
 
             // 6. 关于应用

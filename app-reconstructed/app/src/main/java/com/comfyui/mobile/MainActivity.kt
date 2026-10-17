@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -46,6 +48,11 @@ import coil.decode.VideoFrameDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import com.comfyui.mobile.data.AppModule
+import com.comfyui.mobile.diagnostics.NavigationDiagnostics
+import androidx.navigation.NavController
+import androidx.navigationevent.NavigationEventTransitionState
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.ui.rememberAppHaptics
 import com.comfyui.mobile.ui.screens.AboutScreen
@@ -99,8 +106,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        NavigationDiagnostics.start(this)
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            NavigationDiagnostics.recordCrash(throwable)
             android.util.Log.e("ComfyCrash", "FATAL UNCAUGHT EXCEPTION", throwable)
             val sw = java.io.StringWriter()
             throwable.printStackTrace(java.io.PrintWriter(sw))
@@ -201,11 +210,47 @@ class MainActivity : ComponentActivity() {
             setContentView(sv)
         }
     }
+
+    override fun onStop() {
+        NavigationDiagnostics.record(
+            NavigationDiagnostics.Event.ACTIVITY_STOPPED,
+            finishing = isFinishing, changingConfiguration = isChangingConfigurations
+        )
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        NavigationDiagnostics.record(
+            NavigationDiagnostics.Event.ACTIVITY_DESTROYED,
+            finishing = isFinishing, changingConfiguration = isChangingConfigurations
+        )
+        super.onDestroy()
+    }
 }
 
 @Composable
 fun MainScreen(viewModel: MainViewModel) {
     val navController = rememberNavController()
+    // Observe only: keep handler ownership, the navigation stack and animations unchanged.
+    DisposableEffect(navController) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+            NavigationDiagnostics.record(
+                NavigationDiagnostics.Event.DESTINATION_CHANGED, destination.route
+            )
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
+    val navigationEvents = LocalNavigationEventDispatcherOwner.current?.navigationEventDispatcher
+    LaunchedEffect(navigationEvents) {
+        navigationEvents?.transitionState
+            ?.map { it is NavigationEventTransitionState.InProgress }
+            ?.distinctUntilChanged()
+            ?.collect { inProgress ->
+                NavigationDiagnostics.record(if (inProgress)
+                    NavigationDiagnostics.Event.GESTURE_STARTED else NavigationDiagnostics.Event.GESTURE_IDLE)
+            }
+    }
     val items = listOf(
         Screen.Dashboard,
         Screen.Control,

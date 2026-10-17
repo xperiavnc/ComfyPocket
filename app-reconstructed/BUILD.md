@@ -8,7 +8,7 @@ Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中�
 
 | 项目 | 版本 / 值 |
 | --- | --- |
-| Java | 17 |
+| Java | APK 编译目标 17；本地 Android/Compose 集成测试 JVM 21 |
 | Gradle Wrapper | 9.4.1，配置了官方分发包 SHA-256 |
 | Android Gradle Plugin | 9.2.1 |
 | Kotlin / Compose Compiler | 2.4.0，使用 AGP 内置 Kotlin |
@@ -24,7 +24,7 @@ Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中�
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-版本名设为 `0.0.0-reconstructed`，版本号设为 `1`。
+当前诊断构建版本名为 `0.0.1-return-diagnostic`，版本号为 `2`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 
@@ -33,6 +33,9 @@ Kotlin、Python、Manifest 和资源内容保持原样；先前检视报告中�
 准备 JDK 17、Android SDK 和已接受的 SDK 许可，设置 `JAVA_HOME`、`ANDROID_HOME`。
 SDK 需要 API 37.0 平台；Gradle 会按 Android 插件要求使用相应构建工具。
 也可以在未纳入分发包的 `local.properties` 中填写本机 `sdk.dir`。
+本地 Android/Compose 集成测试另需已安装或配置给 Gradle 的 JDK 21；
+Miuix 的 Android 类以 Java 21 编译，在 JVM 17 测试进程中加载会报类版本错误。
+`:app:assembleDebug` 的编译目标不变，测试任务单独使用 Java 21 toolchain。
 
 ```powershell
 # 在解压后的工程根目录执行：

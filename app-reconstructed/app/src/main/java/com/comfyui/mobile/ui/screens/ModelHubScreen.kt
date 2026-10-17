@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -68,6 +69,7 @@ import com.comfyui.mobile.model.CivitaiFileItem
 import com.comfyui.mobile.model.CivitaiVersionItem
 import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.Screen
+import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import com.comfyui.mobile.ui.navigation.MarketBackNavigationGate
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserFilterChipBar
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserManageFilterDialog
@@ -153,7 +155,8 @@ fun ModelHubScreen(
     var detailError by remember { mutableStateOf<String?>(null) }
     var detailAttempt by remember { mutableIntStateOf(0) }
     val backNavigation = remember { MarketBackNavigationGate() }
-    fun returnFromMarket() {
+    fun returnFromMarket(source: NavigationDiagnostics.Event) {
+        NavigationDiagnostics.record(source, navController.currentDestination?.route)
         backNavigation.leave(
             isCurrentMarket = navController.currentDestination?.route == "model_hub",
             pop = { navController.popBackStack() },
@@ -169,7 +172,12 @@ fun ModelHubScreen(
     // Miuix keeps ownership while a dialog is open, so one back dismisses only that dialog.
     BackHandler(enabled = !showManageFilterDialog && !showMarketSettings &&
         !showDownloadQueue && selectedModelDetail == null) {
-        returnFromMarket()
+        returnFromMarket(NavigationDiagnostics.Event.MARKET_BACK_SYSTEM)
+    }
+    DisposableEffect(Unit) {
+        onDispose {
+            NavigationDiagnostics.record(NavigationDiagnostics.Event.MARKET_PAGE_DISPOSED)
+        }
     }
 
     fun resolveImageUrl(rawUrl: String?): String? {
@@ -240,7 +248,7 @@ fun ModelHubScreen(
                 color = scheme.background,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
-                    IconButton(onClick = { returnFromMarket() }) {
+                    IconButton(onClick = { returnFromMarket(NavigationDiagnostics.Event.MARKET_BACK_TOOLBAR) }) {
                         Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 },

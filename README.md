@@ -23,7 +23,8 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 
 ## 构建
 
-需要 JDK 17、Android SDK 和已接受的 SDK 许可，设置 `JAVA_HOME`、
+需要 JDK 17、Android SDK 和已接受的 SDK 许可；本地 Android/Compose 页面测试
+另需安装 JDK 21（测试任务使用独立 toolchain）。设置 `JAVA_HOME`、
 `ANDROID_HOME`。工程使用 Gradle Wrapper；Android 平台为 API 37.0，
 应用最低支持 Android 13（API 33）。
 
@@ -47,12 +48,14 @@ cd app-reconstructed
 
 ## 当前验证状态
 
-- Android 构建成功，137 项 JVM、44 项 Bridge Python、10 项设置 GUI Node 测试通过
-  （共 191 项）；另完成本地浏览器烟测，测试命令见各模块文档。
+- 当前 Android 构建成功，168 项 JVM/Android 页面测试通过；Bridge Python、
+  设置 GUI 与本地浏览器的独立测试说明见插件文档，本批未改动插件。
 - 主 ViewModel 从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、
   参数持久化、日志和缓存管理五个组件。
 - 本地补丁回放和回滚演练通过；APK v2 签名校验通过。
 - 使用调试签名，尚未做真机 UI 或真实生成服务端到端测试。
+- `0.0.1-return-diagnostic` 是集市返回故障的诊断包，不代表故障已修复；
+  复现后可从“设置 → 导出返回/退出诊断”保存报告，流程和验证边界见 `app-reconstructed/MARKET.md`。
 - 原有常规 ComfyUI 连接的证书策略未改；Civitai 直连使用独立正常 TLS 客户端。
   Bridge 原生下载重新验证文件与注册目录，图片代理使用精确域名边界。
 
