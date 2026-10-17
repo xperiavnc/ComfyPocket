@@ -75,3 +75,29 @@ native crash、ANR、低内存及用户退出。系统历史可能包含旧记�
 覆盖完成/取消返回、工具栏返回与重入、弹窗优先及后台恢复。
 使用 legacy graphics，因为测试运行库的 Skia 不支持 Miuix 使用的 AGSL `layout(color)`；
 这类测试不验证手机 GPU、系统手势驱动或厂商 ROM，仍需真机退出记录。
+
+## 集市返回时 TLS 清理崩溃修复（2026-10-17）
+
+`0.0.1-market-return-fix`（versionCode 3）针对诊断确认的 Java 崩溃：
+页面已经返回首页，但随后 `MarketViewModel.onCleared()` 同步调用连接池清理，
+Conscrypt 关闭 TLS 连接时发送数据，触发 `NetworkOnMainThreadException`。
+这不是同一次手势退栈两次；本批不改返回门控、预测式返回、底栏或切换动画。
+诊断原件和构建证据仅留本地，不提交仓库。
+
+- 资源清理统一由独立的进程级 IO 工作线程执行，不依赖已经取消的 `viewModelScope`。
+- 关闭图片加载器、取消请求、关闭本集市客户端的调度器并等待其结束，
+  然后驱逐连接池；不关闭跨页面共享的磁盘图片缓存。
+- 保存代理/Key 会立即替换客户端，旧客户端后台回收；最终关闭会等待此前的轮换清理。
+  重复关闭复用同一完成结果；已经关闭的 Repository 不再接受设置变更或新直连请求。
+- 单项清理失败仍继续处理其余资源，并记录固定失败事件，不记录异常消息或凭据。
+  `MARKET_REPOSITORY_CLOSED` 只在所有清理完成且成功后记录，失败则记录
+  `MARKET_REPOSITORY_CLOSE_FAILED`，不把“已排队”等同于“已关闭”。
+- 新增 10 项回归：真实回环 HTTPS 建连并复用后，从 Android 主线程触发关闭或设置轮换；
+  还覆盖已取消 ViewModel scope、关闭幂等性、连续轮换、运行/排队请求取消和清理异常隔离。
+  原版本在两项暖连接回归中抛出同一 `NetworkOnMainThreadException`，修复后通过。
+
+测试在 Robolectric API 35 上使用真实 HTTPS 连接。桌面 TLS 不具有 Android Conscrypt
+的主线程网络检查，所以测试仅在已暖连接的 close 句柄增加该检查；证书校验仍开启，
+测试证书只对回环地址信任。它验证了清理线程与生命周期，但不是手机原生 TLS、
+手势驱动或厂商 ROM 的端到端验收。安装后应先加载集市图片，再手势返回并反复进出，
+同时检查保存代理/Key 和导出诊断的关闭完成事件。

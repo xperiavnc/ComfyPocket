@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.comfyui.mobile.data.AppModule
-import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import com.comfyui.mobile.model.CivitaiModelItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -46,9 +45,8 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
         repository.details(model, versionId, refresh)
 
     override fun onCleared() {
-        NavigationDiagnostics.record(NavigationDiagnostics.Event.MARKET_REPOSITORY_CLOSING)
+        // The repository's IO cleanup must survive the already-cancelled viewModelScope.
         repository.close()
-        NavigationDiagnostics.record(NavigationDiagnostics.Event.MARKET_REPOSITORY_CLOSED)
         super.onCleared()
     }
 }

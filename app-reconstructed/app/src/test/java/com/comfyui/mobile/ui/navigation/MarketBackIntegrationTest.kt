@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import com.comfyui.mobile.MainActivity
+import com.comfyui.mobile.BuildConfig
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
@@ -82,6 +83,10 @@ class MarketBackIntegrationTest {
             activity.onBackPressedDispatcher.onBackPressed()
         }
         assertDashboard()
+        // Resource release is intentionally asynchronous and outlives the NavHost entry.
+        compose.waitUntil(timeoutMillis = 10_000) {
+            "MARKET_REPOSITORY_CLOSED" in NavigationDiagnostics.report(activity)
+        }
         val trace = NavigationDiagnostics.report(activity).substringAfterLast("SESSION_STARTED")
         assertEquals(1, trace.lineSequence().count { " MARKET_BACK_SYSTEM " in it })
         assertTrue(trace.contains("DESTINATION_CHANGED") && trace.contains("route=dashboard"))
@@ -170,6 +175,6 @@ class MarketBackIntegrationTest {
         assertTrue("MARKET_BACK_TOOLBAR" in report)
         assertTrue("DESTINATION_CHANGED" in report)
         assertTrue("route=dashboard" in report)
-        assertTrue("0.0.1-return-diagnostic" in report)
+        assertTrue(BuildConfig.VERSION_NAME in report)
     }
 }
