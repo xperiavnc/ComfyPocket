@@ -5,7 +5,7 @@ package com.comfyui.mobile.ui.navigation
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -23,12 +23,15 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.Alignment
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -38,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -57,6 +61,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
+import kotlin.math.roundToInt
 
 internal val pocketTabs = listOf(Screen.Dashboard, Screen.Control, Screen.Agent, Screen.AiApps, Screen.Gallery)
 internal val pocketSecondaryRoutes = listOf(
@@ -108,35 +113,45 @@ private fun PocketNavigationItems(
     )
     val selectedIndex = pocketTabs.indexOfFirst { it.route == route }.coerceAtLeast(0)
     val layoutDirection = LocalLayoutDirection.current
+    val density = LocalDensity.current
+    var barCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     BoxWithConstraints(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth().onPlaced { barCoordinates = it }
     ) {
+        // NavigationBarItem places icons above the bar's vertical center, with labels below.
+        // Anchor to the actual placed icon slots so font scale, insets and RTL share one geometry.
+        val iconBounds = remember(maxWidth, layoutDirection, density.density, density.fontScale) {
+            mutableStateMapOf<Int, Rect>()
+        }
         val itemWidth = maxWidth / pocketTabs.size
         val indicatorWidth = minOf(64.dp, (itemWidth - 16.dp).coerceAtLeast(0.dp))
-        val physicalIndex = if (layoutDirection == LayoutDirection.Rtl) {
-            pocketTabs.lastIndex - selectedIndex
-        } else {
-            selectedIndex
+        iconBounds[selectedIndex]?.let { icon ->
+            key(maxWidth, layoutDirection, density.density, density.fontScale) {
+                val widthPx = with(density) { indicatorWidth.toPx() }
+                val heightPx = with(density) { 32.dp.toPx() }
+                val indicatorX = animateFloatAsState(
+                    targetValue = icon.center.x - widthPx / 2,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    label = "pocket-navigation-indicator"
+                )
+                Box(
+                    modifier = Modifier
+                        // Coordinates already include RTL; never mirror this physical origin again.
+                        .align(AbsoluteAlignment.TopLeft)
+                        .absoluteOffset {
+                            IntOffset(indicatorX.value.roundToInt(), (icon.center.y - heightPx / 2).roundToInt())
+                        }
+                        .width(indicatorWidth)
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.secondaryContainer)
+                        .testTag("pocket-navigation-indicator")
+                )
+            }
         }
-        val targetOffset = itemWidth * physicalIndex + (itemWidth - indicatorWidth) / 2
-        val indicatorOffset by animateDpAsState(
-            targetValue = targetOffset,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "pocket-navigation-indicator"
-        )
-        Box(
-            modifier = Modifier
-                .absoluteOffset(x = indicatorOffset)
-                .width(indicatorWidth)
-                .height(32.dp)
-                .align(Alignment.CenterStart)
-                .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-                .testTag("pocket-navigation-indicator")
-        )
         Row(Modifier.fillMaxWidth()) {
             pocketTabs.forEachIndexed { index, tab ->
                 NavigationBarItem(
@@ -153,8 +168,14 @@ private fun PocketNavigationItems(
                     colors = NavigationBarItemDefaults.colors(
                         indicatorColor = Color.Transparent
                     ),
-                    icon = { Icon(icons[index], null) },
-                    label = { Text(tab.label, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    icon = { Icon(icons[index], null, Modifier.testTag("pocket-tab-icon-$index")
+                        .onPlaced { placedIcon ->
+                            barCoordinates?.takeIf { it.isAttached }?.let { bar ->
+                                iconBounds[index] = bar.localBoundingBoxOf(placedIcon, clipBounds = false)
+                            }
+                        }) },
+                    label = { Text(tab.label, Modifier.testTag("pocket-tab-label-$index"),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis) }
                 )
             }
         }
