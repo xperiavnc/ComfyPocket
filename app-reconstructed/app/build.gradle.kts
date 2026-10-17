@@ -84,6 +84,10 @@ dependencies {
     implementation("org.jetbrains.compose.foundation:foundation:1.11.1")
     implementation("org.jetbrains.compose.animation:animation:1.11.1")
 
+    // P0/P1: isolated Material sample; keep the existing Compose line and Miuix screens.
+    implementation("androidx.compose.material3:material3:1.4.0")
+    implementation("androidx.compose.material:material-icons-core:1.7.8")
+
     implementation("top.yukonga.miuix.kmp:miuix-ui:0.9.3")
     implementation("top.yukonga.miuix.kmp:miuix-preference:0.9.3")
     implementation("top.yukonga.miuix.kmp:miuix-icons:0.9.3")
