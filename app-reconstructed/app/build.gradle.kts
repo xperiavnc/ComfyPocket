@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 18
-        versionName = "0.0.16-material-p4"
+        versionCode = 19
+        versionName = "0.0.17-material-p5"
     }
 
     buildFeatures {
@@ -57,8 +57,8 @@ kotlin {
     }
 }
 
-// Miuix's Android classes target Java 21. APK desugaring still targets Java 17,
-// but local Android/Compose integration tests must load those classes on a 21 JVM.
+// APK desugaring targets Java 17; Robolectric integration tests use the local
+// Java 21 toolchain for the API 36 test runtime.
 tasks.withType<Test>().configureEach {
     // Robolectric API 36 FileDescriptor support on the Java 21 test runtime.
     jvmArgs("--add-exports=java.base/jdk.internal.access=ALL-UNNAMED")
@@ -76,7 +76,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.5")
     implementation("androidx.navigationevent:navigationevent-compose:1.1.2")
 
-    // Match Miuix 0.9.3's Compose Multiplatform line; Android variants resolve
+    // Keep the existing Compose Multiplatform line; Android variants resolve
     // to the corresponding AndroidX Compose artifacts through Gradle metadata.
     implementation("org.jetbrains.compose.runtime:runtime:1.11.1")
     implementation("org.jetbrains.compose.ui:ui:1.11.1")
@@ -84,14 +84,9 @@ dependencies {
     implementation("org.jetbrains.compose.foundation:foundation:1.11.1")
     implementation("org.jetbrains.compose.animation:animation:1.11.1")
 
-    // P0/P1: isolated Material sample; keep the existing Compose line and Miuix screens.
+    // Material 3 powers the full application shell and migrated screens.
     implementation("androidx.compose.material3:material3:1.4.0")
     implementation("androidx.compose.material:material-icons-core:1.7.8")
-
-    implementation("top.yukonga.miuix.kmp:miuix-ui:0.9.3")
-    implementation("top.yukonga.miuix.kmp:miuix-preference:0.9.3")
-    implementation("top.yukonga.miuix.kmp:miuix-icons:0.9.3")
-    implementation("top.yukonga.miuix.kmp:miuix-blur:0.9.3")
 
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("io.coil-kt:coil-gif:2.7.0")

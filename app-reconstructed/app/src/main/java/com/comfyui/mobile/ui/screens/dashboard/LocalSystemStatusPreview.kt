@@ -18,7 +18,7 @@ import androidx.compose.material3.MaterialTheme
 internal fun LocalSystemStatusPreview(
     stats: SystemMonitorData,
     contentColor: Color,
-    progressColor: Color = Color(0xFF3482FF)
+    progressColor: Color = MaterialTheme.colorScheme.primary
 ) {
     if (!stats.deviceName.isNullOrBlank()) {
         InfoRow("GPU 设备", stats.deviceName, contentColor)

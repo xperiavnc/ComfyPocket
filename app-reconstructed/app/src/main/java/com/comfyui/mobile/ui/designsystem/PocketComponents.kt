@@ -190,6 +190,50 @@ fun PocketListRow(
     }
 }
 
+@Composable
+fun PocketArrowPreference(
+    title: String,
+    summary: String? = null,
+    startAction: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit = {}
+) = PocketListRow(title, summary, onClick = onClick, startAction = startAction)
+
+@Composable
+fun PocketSwitchPreference(
+    title: String,
+    summary: String? = null,
+    startAction: (@Composable () -> Unit)? = null,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) = PocketListRow(title, summary, startAction = startAction, onClick = { onCheckedChange(!checked) },
+    endActions = { Switch(checked = checked, onCheckedChange = onCheckedChange) })
+
+@Composable
+fun PocketSliderPreference(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    onValueChangeFinished: () -> Unit = {},
+    title: String,
+    summary: String? = null,
+    valueText: String? = null,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    steps: Int = 0,
+    showKeyPoints: Boolean = false,
+    keyPoints: List<Float> = emptyList(),
+    hapticEffect: Any? = null,
+    startAction: (@Composable () -> Unit)? = null
+) {
+    Column(Modifier.fillMaxWidth()) {
+        PocketListRow(title, summary, startAction = startAction, onClick = {})
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Slider(value, onValueChange, valueRange = valueRange, steps = steps,
+                onValueChangeFinished = onValueChangeFinished, modifier = Modifier.weight(1f))
+            valueText?.let { Text(it, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary) }
+        }
+    }
+}
+
 data class PocketProgressColors(val foreground: Color, val background: Color)
 object PocketProgressDefaults {
     @Composable fun progressIndicatorColors(

@@ -50,9 +50,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
 
-
-
-
 import androidx.compose.material3.MaterialTheme
 import kotlin.random.Random
 
@@ -506,7 +503,7 @@ fun AgentAuxNumberWidget(
 
 /**
  * 布尔开关组件：
- * 整行点击卡片切换，带有 Miuix Switch 开关。
+ * 整行点击卡片切换，带有 Material Switch 开关。
  */
 @Composable
 fun AgentAuxBooleanWidget(

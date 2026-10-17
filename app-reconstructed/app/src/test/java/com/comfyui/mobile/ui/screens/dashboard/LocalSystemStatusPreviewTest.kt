@@ -20,7 +20,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
-import top.yukonga.miuix.kmp.theme.MiuixTheme
+import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
+import androidx.compose.material3.MaterialTheme
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -39,13 +40,13 @@ class LocalSystemStatusPreviewTest {
         try {
             view = ComposeView(activity).apply {
                 setContent {
-                    MiuixTheme {
-                        expected = MiuixTheme.colorScheme.primary
-                        Column(Modifier.background(MiuixTheme.colorScheme.surface)) {
+                    PocketMaterialTheme {
+                        expected = MaterialTheme.colorScheme.primary
+                        Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                             LocalSystemStatusPreview(SystemMonitorData(
                                 isCrystools = false, cpuUtil = 50f, cpuAvailable = true,
                                 ramUsed = 50f, ramTotal = 100f, ramAvailable = true,
-                                vramUsed = 50f, vramTotal = 100f), MiuixTheme.colorScheme.onSurface)
+                                vramUsed = 50f, vramTotal = 100f), MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -80,11 +81,11 @@ class LocalSystemStatusPreviewTest {
         try {
             activity.setContentView(ComposeView(activity).apply {
                 setContent {
-                    MiuixTheme {
+                    PocketMaterialTheme {
                         LocalSystemStatusPreview(SystemMonitorData(
                             cpuUtil = 26.5f, cpuAvailable = true, isCrystools = false,
                             ramUsed = 12f * 1024 * 1024 * 1024, ramTotal = 32f * 1024 * 1024 * 1024,
-                            ramAvailable = true), MiuixTheme.colorScheme.onSurface)
+                            ramAvailable = true), MaterialTheme.colorScheme.onSurface)
                     }
                 }
             })
@@ -102,11 +103,11 @@ class LocalSystemStatusPreviewTest {
         try {
             activity.setContentView(ComposeView(activity).apply {
                 setContent {
-                    MiuixTheme {
+                    PocketMaterialTheme {
                         LocalSystemStatusPreview(SystemMonitorData(
                             isCrystools = false, ramAvailable = true, ramUsed = 1f, ramTotal = 4f,
                             vramTotal = 0f
-                        ), MiuixTheme.colorScheme.onSurface)
+                        ), MaterialTheme.colorScheme.onSurface)
                     }
                 }
             })

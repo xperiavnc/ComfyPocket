@@ -1,9 +1,9 @@
 package com.comfyui.mobile.ui.theme
 
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
-import top.yukonga.miuix.kmp.theme.Colors
-import top.yukonga.miuix.kmp.theme.darkColorScheme
-import top.yukonga.miuix.kmp.theme.lightColorScheme
 
 /** Fixed brand palette ids (no Monet / wallpaper extraction). */
 object ThemePaletteIds {
@@ -32,8 +32,8 @@ data class ThemePalette(
     val summary: String,
     val previewLight: Color,
     val previewDark: Color,
-    val lightColors: Colors,
-    val darkColors: Colors
+    val lightColors: ColorScheme,
+    val darkColors: ColorScheme
 )
 
 // --- comfy_blue: cleaner brand blue, softer contrast ---
@@ -46,8 +46,6 @@ private val ComfyBlueLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF1C1F26),
-    secondaryVariant = Color(0xFFF2F4F8),
-    onSecondaryVariant = Color(0xFF1C1F26),
     tertiaryContainer = Color(0xFFE8F0FF),
     onTertiaryContainer = Color(0xFF2A56B0),
     background = Color(0xFFF6F7FA),
@@ -59,7 +57,6 @@ private val ComfyBlueLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFE6EAF2),
     surfaceContainerHighest = Color(0xFFD9DEE9),
     outline = Color(0xFFC2C9D6),
-    dividerLine = Color(0xFFD7DCE6),
     error = Color(0xFFE5484D)
 )
 
@@ -72,8 +69,6 @@ private val ComfyBlueDark = darkColorScheme(
     onSecondary = Color(0xFF141820),
     secondaryContainer = Color(0xFF1A2030),
     onSecondaryContainer = Color(0xFFE8EEF7),
-    secondaryVariant = Color(0xFF222A3A),
-    onSecondaryVariant = Color(0xFFE8EEF7),
     tertiaryContainer = Color(0xFF263552),
     onTertiaryContainer = Color(0xFFB4CBFF),
     background = Color(0xFF0E1117),
@@ -85,7 +80,6 @@ private val ComfyBlueDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF222B3C),
     surfaceContainerHighest = Color(0xFF2C364A),
     outline = Color(0xFF3A455A),
-    dividerLine = Color(0xFF222A3A),
     error = Color(0xFFFF6B6B)
 )
 
@@ -99,8 +93,6 @@ private val JadeTealLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF1A2422),
-    secondaryVariant = Color(0xFFEFF6F4),
-    onSecondaryVariant = Color(0xFF1A2422),
     tertiaryContainer = Color(0xFFD5F5E8),
     onTertiaryContainer = Color(0xFF0B5C4C),
     background = Color(0xFFF4F8F7),
@@ -112,7 +104,6 @@ private val JadeTealLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFDDE8E4),
     surfaceContainerHighest = Color(0xFFCEDCD7),
     outline = Color(0xFFB2C5BF),
-    dividerLine = Color(0xFFD1DED9),
     error = Color(0xFFE5484D)
 )
 
@@ -125,8 +116,6 @@ private val JadeTealDark = darkColorScheme(
     onSecondary = Color(0xFF0F1A18),
     secondaryContainer = Color(0xFF162420),
     onSecondaryContainer = Color(0xFFE6F2EF),
-    secondaryVariant = Color(0xFF1E2E2A),
-    onSecondaryVariant = Color(0xFFE6F2EF),
     tertiaryContainer = Color(0xFF1F3F38),
     onTertiaryContainer = Color(0xFFA8E6D8),
     background = Color(0xFF0E1211),
@@ -138,7 +127,6 @@ private val JadeTealDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF212E2A),
     surfaceContainerHighest = Color(0xFF2B3A35),
     outline = Color(0xFF3A4A45),
-    dividerLine = Color(0xFF222E2A),
     error = Color(0xFFFF6B6B)
 )
 
@@ -152,8 +140,6 @@ private val DuskVioletLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF1E1A26),
-    secondaryVariant = Color(0xFFF4F1F8),
-    onSecondaryVariant = Color(0xFF1E1A26),
     tertiaryContainer = Color(0xFFF0E7FF),
     onTertiaryContainer = Color(0xFF4C2FA8),
     background = Color(0xFFF7F5FA),
@@ -165,7 +151,6 @@ private val DuskVioletLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFE8E3F0),
     surfaceContainerHighest = Color(0xFFDBD4E6),
     outline = Color(0xFFC5BDCF),
-    dividerLine = Color(0xFFD8D2E0),
     error = Color(0xFFE5484D)
 )
 
@@ -178,8 +163,6 @@ private val DuskVioletDark = darkColorScheme(
     onSecondary = Color(0xFF16121E),
     secondaryContainer = Color(0xFF1C1828),
     onSecondaryContainer = Color(0xFFF0EBF8),
-    secondaryVariant = Color(0xFF262033),
-    onSecondaryVariant = Color(0xFFF0EBF8),
     tertiaryContainer = Color(0xFF32284A),
     onTertiaryContainer = Color(0xFFD2C4FF),
     background = Color(0xFF100E16),
@@ -191,7 +174,6 @@ private val DuskVioletDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF242030),
     surfaceContainerHighest = Color(0xFF302B3E),
     outline = Color(0xFF3F3850),
-    dividerLine = Color(0xFF262033),
     error = Color(0xFFFF6B6B)
 )
 
@@ -205,8 +187,6 @@ private val GraphiteAmberLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF1C1A16),
-    secondaryVariant = Color(0xFFF5F3EF),
-    onSecondaryVariant = Color(0xFF1C1A16),
     tertiaryContainer = Color(0xFFFFF0D6),
     onTertiaryContainer = Color(0xFF8A5500),
     background = Color(0xFFF7F6F3),
@@ -218,7 +198,6 @@ private val GraphiteAmberLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFE8E4DC),
     surfaceContainerHighest = Color(0xFFDBD6CC),
     outline = Color(0xFFC5BDB0),
-    dividerLine = Color(0xFFD8D2C8),
     error = Color(0xFFE5484D)
 )
 
@@ -231,8 +210,6 @@ private val GraphiteAmberDark = darkColorScheme(
     onSecondary = Color(0xFF161410),
     secondaryContainer = Color(0xFF1C1A16),
     onSecondaryContainer = Color(0xFFF2EEE6),
-    secondaryVariant = Color(0xFF27241F),
-    onSecondaryVariant = Color(0xFFF2EEE6),
     tertiaryContainer = Color(0xFF3A3220),
     onTertiaryContainer = Color(0xFFF0C878),
     background = Color(0xFF100F0D),
@@ -244,7 +221,6 @@ private val GraphiteAmberDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF25221D),
     surfaceContainerHighest = Color(0xFF322E28),
     outline = Color(0xFF433E36),
-    dividerLine = Color(0xFF27241F),
     error = Color(0xFFFF6B6B)
 )
 
@@ -258,8 +234,6 @@ private val WarmRoseLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF24181C),
-    secondaryVariant = Color(0xFFF8F0F3),
-    onSecondaryVariant = Color(0xFF24181C),
     tertiaryContainer = Color(0xFFFFE8EF),
     onTertiaryContainer = Color(0xFF9A2F52),
     background = Color(0xFFFAF5F7),
@@ -271,7 +245,6 @@ private val WarmRoseLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFF0E2E7),
     surfaceContainerHighest = Color(0xFFE4D2D9),
     outline = Color(0xFFCFB8C1),
-    dividerLine = Color(0xFFE2D4DA),
     error = Color(0xFFE5484D)
 )
 
@@ -284,8 +257,6 @@ private val WarmRoseDark = darkColorScheme(
     onSecondary = Color(0xFF1A1216),
     secondaryContainer = Color(0xFF241820),
     onSecondaryContainer = Color(0xFFF8EEF2),
-    secondaryVariant = Color(0xFF2E2228),
-    onSecondaryVariant = Color(0xFFF8EEF2),
     tertiaryContainer = Color(0xFF3E2530),
     onTertiaryContainer = Color(0xFFFFC2D4),
     background = Color(0xFF130E11),
@@ -297,7 +268,6 @@ private val WarmRoseDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF281F24),
     surfaceContainerHighest = Color(0xFF352930),
     outline = Color(0xFF4A3A42),
-    dividerLine = Color(0xFF2E2228),
     error = Color(0xFFFF6B6B)
 )
 
@@ -311,8 +281,6 @@ private val OceanCyanLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF172028),
-    secondaryVariant = Color(0xFFEEF5F8),
-    onSecondaryVariant = Color(0xFF172028),
     tertiaryContainer = Color(0xFFD6F2FA),
     onTertiaryContainer = Color(0xFF0A6A88),
     background = Color(0xFFF3F8FA),
@@ -324,7 +292,6 @@ private val OceanCyanLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFDCE8EE),
     surfaceContainerHighest = Color(0xFFCDDBE4),
     outline = Color(0xFFB0C2CC),
-    dividerLine = Color(0xFFD0DCE4),
     error = Color(0xFFE5484D)
 )
 
@@ -337,8 +304,6 @@ private val OceanCyanDark = darkColorScheme(
     onSecondary = Color(0xFF0E161C),
     secondaryContainer = Color(0xFF162028),
     onSecondaryContainer = Color(0xFFE6F2F8),
-    secondaryVariant = Color(0xFF1E2C36),
-    onSecondaryVariant = Color(0xFFE6F2F8),
     tertiaryContainer = Color(0xFF1F3A48),
     onTertiaryContainer = Color(0xFFA8DFF2),
     background = Color(0xFF0C1115),
@@ -350,7 +315,6 @@ private val OceanCyanDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF1E2830),
     surfaceContainerHighest = Color(0xFF283440),
     outline = Color(0xFF3A4A55),
-    dividerLine = Color(0xFF222E36),
     error = Color(0xFFFF6B6B)
 )
 
@@ -364,8 +328,6 @@ private val ForestOliveLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF1C2018),
-    secondaryVariant = Color(0xFFF2F4EC),
-    onSecondaryVariant = Color(0xFF1C2018),
     tertiaryContainer = Color(0xFFE8F0D4),
     onTertiaryContainer = Color(0xFF3F5A22),
     background = Color(0xFFF6F7F2),
@@ -377,7 +339,6 @@ private val ForestOliveLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFE4E8DA),
     surfaceContainerHighest = Color(0xFFD6DCCA),
     outline = Color(0xFFB8C0AA),
-    dividerLine = Color(0xFFD4DBC8),
     error = Color(0xFFE5484D)
 )
 
@@ -390,8 +351,6 @@ private val ForestOliveDark = darkColorScheme(
     onSecondary = Color(0xFF141810),
     secondaryContainer = Color(0xFF1A1E16),
     onSecondaryContainer = Color(0xFFEEF2E6),
-    secondaryVariant = Color(0xFF262A20),
-    onSecondaryVariant = Color(0xFFEEF2E6),
     tertiaryContainer = Color(0xFF2E3820),
     onTertiaryContainer = Color(0xFFC4DCA0),
     background = Color(0xFF0F110D),
@@ -403,7 +362,6 @@ private val ForestOliveDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF21261C),
     surfaceContainerHighest = Color(0xFF2C3226),
     outline = Color(0xFF3E4536),
-    dividerLine = Color(0xFF262A20),
     error = Color(0xFFFF6B6B)
 )
 
@@ -417,8 +375,6 @@ private val CoralSandLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFFFFFFF),
     onSecondaryContainer = Color(0xFF241C18),
-    secondaryVariant = Color(0xFFF8F2EE),
-    onSecondaryVariant = Color(0xFF241C18),
     tertiaryContainer = Color(0xFFFFEBE2),
     onTertiaryContainer = Color(0xFFA04830),
     background = Color(0xFFFAF6F3),
@@ -430,7 +386,6 @@ private val CoralSandLight = lightColorScheme(
     surfaceContainerHigh = Color(0xFFEFE4DC),
     surfaceContainerHighest = Color(0xFFE2D4CA),
     outline = Color(0xFFCDBAB0),
-    dividerLine = Color(0xFFE2D6CE),
     error = Color(0xFFE5484D)
 )
 
@@ -443,8 +398,6 @@ private val CoralSandDark = darkColorScheme(
     onSecondary = Color(0xFF181410),
     secondaryContainer = Color(0xFF1E1A16),
     onSecondaryContainer = Color(0xFFF6EEE8),
-    secondaryVariant = Color(0xFF2A2420),
-    onSecondaryVariant = Color(0xFFF6EEE8),
     tertiaryContainer = Color(0xFF3A2A22),
     onTertiaryContainer = Color(0xFFF0C0B0),
     background = Color(0xFF12100E),
@@ -456,7 +409,6 @@ private val CoralSandDark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF25201C),
     surfaceContainerHighest = Color(0xFF322C26),
     outline = Color(0xFF463C36),
-    dividerLine = Color(0xFF2A2420),
     error = Color(0xFFFF6B6B)
 )
 

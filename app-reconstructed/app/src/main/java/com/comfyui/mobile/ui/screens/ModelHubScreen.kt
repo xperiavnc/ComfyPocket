@@ -94,7 +94,6 @@ import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
 import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
 import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
 
-
 import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
 import androidx.compose.material3.MaterialTheme
 
@@ -162,7 +161,7 @@ fun ModelHubScreen(
         )
     }
     // Leaf-level handler overrides NavHost's predictive pop only on this page.
-    // Miuix keeps ownership while a dialog is open, so one back dismisses only that dialog.
+        // The Material dialog keeps ownership while it is open, so one back dismisses only that dialog.
     BackHandler(enabled = !showManageFilterDialog && !showMarketSettings &&
         !showDownloadQueue && selectedModelDetail == null) {
         returnFromMarket(NavigationDiagnostics.Event.MARKET_BACK_SYSTEM)

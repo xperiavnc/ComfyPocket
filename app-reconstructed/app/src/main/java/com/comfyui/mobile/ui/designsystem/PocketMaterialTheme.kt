@@ -27,13 +27,14 @@ private val DarkColors = darkColorScheme(
     surfaceContainerHigh = Color(0xFF282C35), outline = Color(0xFF8E96A8)
 )
 
-/** No Miuix composition locals or old theme preferences cross this boundary. */
+/** No legacy composition locals or old theme preferences cross this boundary. */
 @Composable
 fun PocketMaterialTheme(
     dark: Boolean = isSystemInDarkTheme(), dynamicColor: Boolean = false,
+    colorScheme: ColorScheme? = null,
     content: @Composable () -> Unit
 ) {
-    val colors = when {
+    val colors = colorScheme ?: when {
         dynamicColor && dark -> dynamicDarkColorScheme(LocalContext.current)
         dynamicColor -> dynamicLightColorScheme(LocalContext.current)
         dark -> DarkColors

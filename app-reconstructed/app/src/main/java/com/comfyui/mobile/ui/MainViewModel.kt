@@ -751,14 +751,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun setThemePalette(paletteId: String) =
         MainViewModelTheme.setThemePalette(this, paletteId)
 
-    internal val _isLiquidGlassEnabled = MutableStateFlow(
-        prefs.getBoolean("liquid_glass_enabled", false)
-    )
-    val isLiquidGlassEnabled = _isLiquidGlassEnabled.asStateFlow()
-
-    fun toggleLiquidGlass(enable: Boolean) =
-        MainViewModelTheme.toggleLiquidGlass(this, enable)
-
     /** Live Update chip: show numeric percent (default on). */
     internal val _liveUpdateShowPercent = MutableStateFlow(
         prefs.getBoolean("live_update_show_percent", true)
