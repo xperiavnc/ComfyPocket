@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.0.28-models-agent"
+        versionCode = 31
+        versionName = "0.0.29-negative-prompts"
     }
 
     buildFeatures {

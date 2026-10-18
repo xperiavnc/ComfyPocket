@@ -234,6 +234,56 @@ class AgentRuntimeIntegrationTest {
         assertTrue(promptBodies.isEmpty())
     }
 
+    @Test fun conflictingWeightedNegativeStopsBeforeChangingPromptFieldsOrSubmitting() {
+        withNegativeWorkflow()
+        responses += success("""{"reply":"好了","prompt":"cat, (red eyes:1.2), soft focus","negative_prompt":"blurry, red_eyes","should_draw":true}""")
+        vm.sendAgentMessage("画红眼睛的猫，柔焦风格")
+        awaitDone()
+        println("NEGATIVE_CONFLICT phase=${vm.agentSessionState.value.turn!!.phase} submissions=${promptBodies.size} positive=${graphText()}")
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("before", graphText())
+        assertTrue(promptBodies.isEmpty())
+        val message = vm.agentMessages.value.last()
+        assertTrue(message.errorMessage!!.contains("正反向提示词包含相同标签"))
+        assertTrue(message.errorMessage.contains("red_eyes"))
+        assertEquals("blurry, red_eyes", message.expandedNegativePrompt)
+    }
+
+    @Test fun keepOriginalBindingDoesNotBlockAnUnusedConflictingGeneratedNegative() {
+        withNegativeWorkflow()
+        installBinding(true, AgentPromptBinding(PromptBindingMode.KEEP))
+        responses += success("""{"reply":"好","prompt":"cat","negative_prompt":"cat","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("template_embedding, (blurry:1.2)", submittedNegative())
+        assertEquals("cat", vm.agentMessages.value.last().expandedNegativePrompt)
+    }
+
+    @Test fun generationReceivesObservedModelFactsAndDoesNotDemandFillingANegativeTemplate() {
+        withNegativeWorkflow()
+        val file = File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json")
+        val graph = JsonParser.parseString(file.readText()).asJsonObject
+        graph.add("4", JsonParser.parseString(
+            """{"class_type":"CheckpointLoaderSimple","inputs":{"ckpt_name":"my-model.safetensors"}}"""
+        ))
+        file.writeText(graph.toString())
+        responses += success("""{"reply":"好","prompt":"cat","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画猫，清空反向")
+        awaitDone()
+        val request = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
+        val system = request.first().asJsonObject["content"].asString
+        val modelReference = request.firstOrNull {
+            it.asJsonObject["content"].asString.contains("my-model.safetensors")
+        }?.asJsonObject?.get("content")?.asString
+        println("NEGATIVE_MODEL_CONTEXT present=${modelReference != null} emptyAllowed=${system.contains("字段必填不等于内容必须非空")}")
+        assertNotNull(modelReference)
+        assertTrue(modelReference!!.contains("仅作事实参考"))
+        assertTrue(system.contains("字段必填不等于内容必须非空"))
+        assertFalse(system.contains("你需要主动编写完整 negative_prompt"))
+        assertEquals("", submittedNegative())
+    }
+
     @Test fun chatUsesMaxAndDoubleTapIsReservedSynchronously() {
         vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
         vm._llmReasoningEffort.value = AgentReasoningEffort.MAX

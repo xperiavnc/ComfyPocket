@@ -115,4 +115,18 @@ class AgentSettingsFeedbackTest {
         assertEquals("我自己改的人设", MainViewModelAgent.loadAgentSystemPrompt(vm))
         assertEquals("我自己改的分镜", MainViewModelAgent.loadAgentDrawPrompt(vm))
     }
+
+    @Test fun negativeRulesUpgradeExactPreviousDefaultAndPreserveUserEdits() {
+        val previous = javaClass.classLoader!!.getResourceAsStream("agent-pre-negative-rules.json")!!.bufferedReader().use {
+            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject["defaultDrawRules"].asString
+        }
+        vm.prefs.edit().putBoolean("agent_negative_prompt_v1_migrated", false)
+            .putString("agent_draw_prompt", previous).commit()
+        assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
+        assertEquals(previous, vm.prefs.getString("agent_negative_previous_agent_draw_prompt", null))
+        vm.prefs.edit().putBoolean("agent_negative_prompt_v1_migrated", false)
+            .putString("agent_draw_prompt", "$previous\n我自己补充的规则").commit()
+        assertEquals("$previous\n我自己补充的规则", MainViewModelAgent.loadAgentDrawPrompt(vm))
+        assertEquals(previous, vm.prefs.getString("agent_negative_previous_agent_draw_prompt", null))
+    }
 }

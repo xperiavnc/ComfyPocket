@@ -95,13 +95,14 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     if (mode == AgentMode.CHAT) {
                         generateChat(turn, settings, prior + user, progress)
                     } else {
-                        val negativeContext = AgentWorkflowPromptContext.negative(vm, version)
+                        val workflowContext = AgentWorkflowPromptContext.capture(vm, version)
                         session.requireCurrent(turn)
                         MainViewModelAgent.expandPromptWithLlm(
                             vm, text, prior,
                             attachments.filter { it.isImage }.mapNotNull(MainViewModelAgent::imageDataUrl),
                             settings = settings, requestId = turn.id,
-                            currentNegativePrompt = negativeContext,
+                            currentNegativePrompt = workflowContext.negativePrompt,
+                            workflowModelFacts = workflowContext.modelFacts,
                             onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) },
                             checkCurrent = { session.requireCurrent(turn) },
                             onLocalTagReport = { report ->
@@ -255,6 +256,15 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 throw AgentExecutionException(e.message ?: "提示词绑定已失效，请重新设置")
             }
             val negativeTargets = if (negativePrompt != null) configuredNegative else emptyList()
+            if (negativeTargets.isNotEmpty()) {
+                val conflicts = AgentNegativePromptPolicy.conflicts(prompt, negativePrompt)
+                if (conflicts.isNotEmpty()) {
+                    throw AgentExecutionException(
+                        "正反向提示词包含相同标签（${conflicts.take(5).joinToString("、")}），" +
+                            "请调整后重试；本轮未改写提示词或提交出图。"
+                    )
+                }
+            }
             val snapshot = workflowSnapshot(listOf(target) + negativeTargets)
             tools.inspectWorkflow.execute(snapshot).getOrElse {
                 throw AgentExecutionException("工作流检查失败：${it.message}")
