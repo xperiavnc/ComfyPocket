@@ -2,27 +2,39 @@ package com.comfyui.mobile.ui.screens.danbooru
 
 import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.comfyui.mobile.danbooru.*
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
+import com.comfyui.mobile.ui.navigation.PocketDestination
+import com.comfyui.mobile.ui.navigation.pocketPageEnter
+import com.comfyui.mobile.ui.navigation.pocketPageExit
 import kotlinx.coroutines.flow.distinctUntilChanged
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+
+/** Freeze the outgoing detail's tags/image while Back clears the live ViewModel. */
+private data class DanbooruPageSnapshot(val detail: Boolean, val state: DanbooruState)
 
 @Composable
 fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker: @Composable () -> Unit) {
@@ -63,6 +75,8 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
     val keyboard = LocalSoftwareKeyboardController.current
     val clearance = LocalFloatingNavClearance.current
     val scope = runtime.settings.namespace()
+    val page = DanbooruPageSnapshot(vm.hasDetail, state)
+    val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val latestState by rememberUpdatedState(state)
     LaunchedEffect(grid, vm) {
         snapshotFlow {
@@ -86,28 +100,42 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
             IconButton(onClick = vm::showSettings) { Icon(MiuixIcons.Settings, contentDescription = "Danbooru 设置") }
         }
     }) { padding ->
-        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).padding(horizontal = 20.dp)) {
-            if (vm.hasDetail) {
-                DanbooruDetailScreen(state, runtime, vm, Modifier.weight(1f).padding(bottom = clearance))
-            } else {
+        AnimatedContent(
+            targetState = page,
+            contentKey = { it.detail },
+            modifier = Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).clipToBounds(),
+            transitionSpec = {
+                val pop = !targetState.detail
+                (pocketPageEnter(pop, rtl) togetherWith pocketPageExit(pop, rtl)).using(null)
+            },
+            label = "danbooru-list-detail"
+        ) { snapshot ->
+          PocketDestination(active = snapshot.detail == page.detail) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)
+                .testTag(if (snapshot.detail) "danbooru-detail-page" else "danbooru-browse-page")) {
+              if (snapshot.detail) {
+                DanbooruDetailScreen(snapshot.state, runtime, vm, Modifier.weight(1f).padding(bottom = clearance))
+              } else {
                 sourcePicker()
-                DanbooruBrowseControls(input, { input = it }, state.query,
+                DanbooruBrowseControls(input, { input = it }, snapshot.state.query,
                     onSearch = { keyboard?.hide(); vm.search(input) },
                     onSort = { keyboard?.hide(); vm.sort(input, it) },
                     onFilter = { vm.filter(input, it) },
                     onPeriod = { vm.rankingPeriod(input, it) }, onDate = vm::rankingDate)
-                if (state.loading && state.posts.isEmpty()) {
+                if (snapshot.state.loading && snapshot.state.posts.isEmpty()) {
                     Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                } else if (state.error != null && state.posts.isEmpty()) {
-                    Feedback(state.error!!, "重试", vm::refresh)
-                } else if (state.posts.isEmpty()) {
-                    Feedback(if (state.ended) "没有找到图片，试试其他标签或日期" else "正在准备画廊", "重新加载", vm::refresh)
+                } else if (snapshot.state.error != null && snapshot.state.posts.isEmpty()) {
+                    Feedback(snapshot.state.error, "重试", vm::refresh)
+                } else if (snapshot.state.posts.isEmpty()) {
+                    Feedback(if (snapshot.state.ended) "没有找到图片，试试其他标签或日期" else "正在准备画廊", "重新加载", vm::refresh)
                 } else {
-                    state.error?.let { Feedback("$it；当前图片已保留", "重新刷新", vm::refresh) }
-                    DanbooruGalleryGrid(state, grid, runtime.imageLoader, scope, clearance, Modifier.weight(1f),
+                    snapshot.state.error?.let { Feedback("$it；当前图片已保留", "重新刷新", vm::refresh) }
+                    DanbooruGalleryGrid(snapshot.state, grid, runtime.imageLoader, scope, clearance, Modifier.weight(1f),
                         vm::open, vm::previous, vm::retry, { vm.loadNext() }, vm::refresh)
                 }
+              }
             }
+          }
         }
         if (state.settingsOpen) DanbooruSettingsDialog(vm.settings, state, vm::closeSettings, vm::save, vm::test, vm::logout, vm::clearCache)
     }

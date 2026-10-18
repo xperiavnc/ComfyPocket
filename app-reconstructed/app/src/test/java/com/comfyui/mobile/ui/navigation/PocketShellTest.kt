@@ -28,6 +28,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.comfyui.mobile.Screen
 import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
+import com.comfyui.mobile.ui.theme.BottomBarStyle
 import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.*
 import org.junit.Rule
@@ -45,12 +46,13 @@ class PocketShellTest {
     private lateinit var nav: NavHostController
     private var leafBacks = 0
     private var selections = 0
+    private val barStyle = mutableStateOf(BottomBarStyle.MATERIAL)
 
     @Composable private fun Fixture() {
         val controller = rememberNavController()
         SideEffect { nav = controller }
         PocketMaterialTheme(false) {
-            PocketNavigationShell(controller, messages, { selections++ }) { entry ->
+            PocketNavigationShell(controller, messages, { selections++ }, bottomBarStyle = barStyle.value) { entry ->
                 val route = entry.destination.route.orEmpty()
                 var input by rememberSaveable { mutableStateOf("") }
                 var panel by rememberSaveable { mutableStateOf(false) }
@@ -122,6 +124,26 @@ class PocketShellTest {
             assertFalse(activity.get().isFinishing)
             tab(2)
             compose.onNodeWithTag("fixture-input").assertTextContains("Agent 未发送草稿")
+        } finally { activity.pause().stop().destroy() }
+    }
+
+    @Test fun changingBarStyleDoesNotNavigateOrResetDraftAndListPosition() {
+        val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        try {
+            host(activity.get()); tab(2)
+            compose.onNodeWithTag("fixture-input").performTextInput("共享页面状态")
+            compose.onNodeWithTag("fixture-list").performScrollToIndex(29)
+            val entryId = nav.currentBackStackEntry!!.id
+            val callbacks = selections
+            for (style in listOf(BottomBarStyle.CLASSIC, BottomBarStyle.MATERIAL)) {
+                compose.runOnIdle { barStyle.value = style }
+                compose.waitForIdle()
+                assertEquals(entryId, nav.currentBackStackEntry!!.id)
+                assertEquals(callbacks, selections)
+                compose.onNodeWithTag("fixture-input").assertTextContains("共享页面状态")
+                compose.onNodeWithTag("fixture-row-29").assertIsDisplayed()
+                compose.onNodeWithTag("pocket-tab-2").assertIsSelected()
+            }
         } finally { activity.pause().stop().destroy() }
     }
 
@@ -285,16 +307,16 @@ class PocketShellTest {
         } finally { activity.pause().stop().destroy() }
     }
 
-    @Test fun motionMatchesSampleDistancesDirectionAndRtl() {
-        assertEquals(PocketRouteMotion(12, -12, 180, true),
-            pocketRouteMotion(Screen.Dashboard.route, Screen.Gallery.route, false, false))
-        assertEquals(PocketRouteMotion(-12, 12, 180, true),
-            pocketRouteMotion(Screen.Gallery.route, Screen.Agent.route, false, false))
-        assertEquals(PocketRouteMotion(32, -8, 220, false),
-            pocketRouteMotion(Screen.Agent.route, "agent_settings", false, false))
-        assertEquals(PocketRouteMotion(-8, 32, 180, false),
-            pocketRouteMotion("agent_settings", Screen.Agent.route, true, false))
-        assertEquals(PocketRouteMotion(8, -32, 180, false),
-            pocketRouteMotion("agent_settings", Screen.Agent.route, true, true))
+    @Test fun bothBarsUseOriginalWidthBasedPageMotionInBothDirections() {
+        val forward = pocketPageMotion(pop = false)
+        val back = pocketPageMotion(pop = true)
+        assertEquals(280, forward.durationMillis)
+        assertEquals(220, forward.exitFadeMillis)
+        assertEquals(200, forward.enterOffset(1000))
+        assertEquals(-125, forward.exitOffset(1000))
+        assertEquals(-125, back.enterOffset(1000))
+        assertEquals(200, back.exitOffset(1000))
+        assertEquals(-200, pocketPageMotion(false, rtl = true).enterOffset(1000))
+        assertEquals(125, pocketPageMotion(true, rtl = true).enterOffset(1000))
     }
 }

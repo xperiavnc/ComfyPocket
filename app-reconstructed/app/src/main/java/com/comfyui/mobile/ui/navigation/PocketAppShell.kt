@@ -3,15 +3,9 @@
 package com.comfyui.mobile.ui.navigation
 
 import androidx.activity.compose.PredictiveBackHandler
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,6 +50,8 @@ import com.comfyui.mobile.R
 import com.comfyui.mobile.Screen
 import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
+import com.comfyui.mobile.ui.theme.BottomBarStyle
+import com.comfyui.mobile.ui.theme.ThemePaletteIds
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -77,22 +73,6 @@ internal fun NavHostController.selectPocketTab(route: String) {
         popUpTo(graph.findStartDestination().id) { saveState = true }
         launchSingleTop = true
         restoreState = true
-    }
-}
-
-internal data class PocketRouteMotion(val enter: Int, val exit: Int, val duration: Int, val tab: Boolean)
-
-internal fun pocketRouteMotion(from: String?, to: String?, pop: Boolean, rtl: Boolean): PocketRouteMotion {
-    val a = pocketTabs.indexOfFirst { it.route == from }
-    val b = pocketTabs.indexOfFirst { it.route == to }
-    val sign = if (rtl) -1 else 1
-    return when {
-        a >= 0 && b >= 0 -> {
-            val direction = sign * if (b < a) -1 else 1
-            PocketRouteMotion(direction * 12, -direction * 12, 180, true)
-        }
-        pop -> PocketRouteMotion(-sign * 8, sign * 32, 180, false)
-        else -> PocketRouteMotion(sign * 32, -sign * 8, 220, false)
     }
 }
 
@@ -183,14 +163,17 @@ private fun PocketNavigationItems(
 }
 
 /**
- * Formal Material shell; content retains its own top app bar until its P3/P4/P5 migration.
- * Shell owns horizontal/bottom/IME insets. Legacy pages still own their status-bar inset.
+ * Both bar styles share the original page transitions and the same navigation stacks.
+ * Shell owns horizontal/bottom/IME insets. Pages still own their status-bar inset.
  */
 @Composable
 internal fun PocketNavigationShell(
     navController: NavHostController = rememberNavController(),
     messages: Flow<String> = remember { emptyFlow() },
     onTabSelected: () -> Unit = {},
+    bottomBarStyle: BottomBarStyle = BottomBarStyle.MATERIAL,
+    darkTheme: Boolean = false,
+    paletteId: String = ThemePaletteIds.DEFAULT,
     content: @Composable (NavBackStackEntry) -> Unit
 ) {
     val entry by navController.currentBackStackEntryAsState()
@@ -230,16 +213,22 @@ internal fun PocketNavigationShell(
                     else NavigationDiagnostics.Event.GESTURE_IDLE)
             }
     }
-    val density = LocalDensity.current
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    // No floating overlay and no obsolete phantom clearance on secondary pages.
-    CompositionLocalProvider(LocalFloatingNavClearance provides 0.dp) {
+    val floating = showBar && bottomBarStyle == BottomBarStyle.CLASSIC
+    val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
+    val bottomGap = if (bottomInset > 0.dp) 4.dp else 24.dp
+    // The content already consumes the system bottom inset. Reserve only the
+    // capsule and its gap, and only while it is actually visible.
+    val floatingClearance = if (floating) 52.dp + 10.dp + bottomGap else 0.dp
+    CompositionLocalProvider(LocalFloatingNavClearance provides floatingClearance) {
         Scaffold(
             modifier = Modifier.fillMaxSize().imePadding().testTag("pocket-shell"),
             contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-            snackbarHost = { SnackbarHost(snackbar, Modifier.testTag("pocket-feedback")) },
+            snackbarHost = {
+                SnackbarHost(snackbar, Modifier.padding(bottom = floatingClearance).testTag("pocket-feedback"))
+            },
             bottomBar = {
-                if (showBar) NavigationBar(
+                if (showBar && !floating) NavigationBar(
                     modifier = Modifier.testTag("pocket-navigation"),
                     windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
                 ) {
@@ -247,36 +236,15 @@ internal fun PocketNavigationShell(
                 }
             }
         ) { padding ->
-            Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
+            Box(Modifier.fillMaxSize()) {
+              Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
                 .clipToBounds().testTag("pocket-content")) {
                 NavHost(
                     navController, startDestination = Screen.Dashboard.route,
-                    enterTransition = {
-                        val motion = pocketRouteMotion(initialState.destination.route, targetState.destination.route, false, rtl)
-                        fadeIn(tween(if (motion.tab) 140 else 160, if (motion.tab) 40 else 60)) +
-                            slideInHorizontally(tween(motion.duration, easing = FastOutSlowInEasing)) {
-                                with(density) { motion.enter.dp.roundToPx() }
-                            }
-                    },
-                    exitTransition = {
-                        val motion = pocketRouteMotion(initialState.destination.route, targetState.destination.route, false, rtl)
-                        fadeOut(tween(if (motion.tab) 60 else 80)) +
-                            slideOutHorizontally(tween(motion.duration, easing = FastOutSlowInEasing)) {
-                                with(density) { motion.exit.dp.roundToPx() }
-                            }
-                    },
-                    popEnterTransition = {
-                        val motion = pocketRouteMotion(initialState.destination.route, targetState.destination.route, true, rtl)
-                        fadeIn(tween(140, 40)) + slideInHorizontally(tween(motion.duration, easing = FastOutSlowInEasing)) {
-                            with(density) { motion.enter.dp.roundToPx() }
-                        }
-                    },
-                    popExitTransition = {
-                        val motion = pocketRouteMotion(initialState.destination.route, targetState.destination.route, true, rtl)
-                        fadeOut(tween(60)) + slideOutHorizontally(tween(motion.duration, easing = FastOutSlowInEasing)) {
-                            with(density) { motion.exit.dp.roundToPx() }
-                        }
-                    }
+                    enterTransition = { pocketPageEnter(pop = false, rtl = rtl) },
+                    exitTransition = { pocketPageExit(pop = false, rtl = rtl) },
+                    popEnterTransition = { pocketPageEnter(pop = true, rtl = rtl) },
+                    popExitTransition = { pocketPageExit(pop = true, rtl = rtl) }
                 ) {
                     (pocketTabs.map { it.route } + pocketSecondaryRoutes).forEach { destination ->
                         composable(destination) { backStack ->
@@ -294,6 +262,22 @@ internal fun PocketNavigationShell(
                         }
                     }
                 }
+              }
+              if (floating) {
+                  PocketClassicNavigation(
+                      route, darkTheme, paletteId, bottomGap,
+                      onItemClick = { index ->
+                          val tab = pocketTabs[index]
+                          if (navController.currentDestination?.route != tab.route) {
+                              focus.clearFocus()
+                              keyboard?.hide()
+                              onTabSelected()
+                              navController.selectPocketTab(tab.route)
+                          }
+                      },
+                      modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+                  )
+              }
             }
         }
     }

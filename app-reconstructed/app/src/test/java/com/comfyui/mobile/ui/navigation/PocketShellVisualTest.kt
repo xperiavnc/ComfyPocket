@@ -16,6 +16,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.rememberNavController
 import com.comfyui.mobile.ui.theme.ThemePaletteIds
+import com.comfyui.mobile.ui.theme.BottomBarStyle
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -39,11 +40,13 @@ class PocketShellVisualTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val view = ComposeView(controller.get())
         val dark = mutableStateOf(false)
+        val barStyle = mutableStateOf(BottomBarStyle.MATERIAL)
         try {
             controller.get().setContentView(view.apply { setContent {
                 PocketAppTheme(dark.value, ThemePaletteIds.COMFY_BLUE) {
                     val nav = rememberNavController()
-                    PocketNavigationShell(nav) { entry ->
+                    PocketNavigationShell(nav, bottomBarStyle = barStyle.value, darkTheme = dark.value,
+                        paletteId = ThemePaletteIds.COMFY_BLUE) { entry ->
                         val tab = pocketTabs.firstOrNull { it.route == entry.destination.route }
                         Column(Modifier.fillMaxSize()) {
                             TopAppBar(title = { Text(tab?.label ?: "二级页面") })
@@ -77,6 +80,11 @@ class PocketShellVisualTest {
             compose.onNodeWithTag("pocket-tab-4").performClick(); compose.waitForIdle()
             compose.runOnIdle { dark.value = true }; compose.waitForIdle()
             save("shell-gallery-dark")
+            compose.runOnIdle { barStyle.value = BottomBarStyle.CLASSIC }; compose.waitForIdle()
+            save("shell-classic-gallery-dark")
+            compose.runOnIdle { dark.value = false }; compose.waitForIdle()
+            save("shell-classic-gallery-light")
+            compose.runOnIdle { barStyle.value = BottomBarStyle.MATERIAL; dark.value = true }; compose.waitForIdle()
             val bar = compose.onNodeWithTag("pocket-navigation").fetchSemanticsNode().boundsInRoot
             compose.mainClock.autoAdvance = false
             compose.onNodeWithTag("pocket-tab-2").performClick(); compose.waitForIdle()

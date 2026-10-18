@@ -18,6 +18,7 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 internal fun PocketApp(viewModel: MainViewModel) {
     val mode by viewModel.themeMode.collectAsState()
     val palette by viewModel.themePaletteId.collectAsState()
+    val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val dark = when (mode) {
         MainViewModel.THEME_FOLLOW_SYSTEM -> isSystemInDarkTheme()
         MainViewModel.THEME_LIGHT -> false
@@ -26,7 +27,10 @@ internal fun PocketApp(viewModel: MainViewModel) {
     val nav = rememberNavController()
     val haptics = rememberAppHaptics()
     PocketAppTheme(dark, palette) {
-        PocketNavigationShell(nav, viewModel.userMessage, haptics::tick) { entry ->
+        PocketNavigationShell(
+            nav, viewModel.userMessage, haptics::tick,
+            bottomBarStyle = bottomBarStyle, darkTheme = dark, paletteId = palette
+        ) { entry ->
             // A deliberate migration boundary: old screens get only their original theme.
             // Material navigation and feedback are siblings, never children of MiuixTheme.
             ComfyControllerTheme(dark, palette, manageSystemBars = false) {

@@ -74,7 +74,8 @@ class PocketAppIntegrationTest {
             compose.onNodeWithText("主题色板").assertExists()
             compose.runOnIdle { controller.get().onBackPressedDispatcher.onBackPressed() }
             compose.waitForIdle()
-            compose.onNodeWithText("Material 预览").assertExists()
+            compose.onNodeWithText("Material 预览").assertDoesNotExist()
+            compose.onNodeWithText("主题与外观").assertExists()
             compose.onNodeWithTag("pocket-navigation").assertDoesNotExist()
             compose.onNodeWithContentDescription("返回").performClick()
             compose.waitForIdle()

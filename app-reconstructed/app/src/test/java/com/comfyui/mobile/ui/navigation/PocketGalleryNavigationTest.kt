@@ -55,7 +55,7 @@ class PocketGalleryNavigationTest {
             when (method.name) {
                 in values -> values.getValue(method.name)
                 "mediaKey" -> (args!![0] as MediaOutput).filename
-                "previewUrl" -> "android.resource://${app.packageName}/${R.drawable.material_sample_forest}"
+                "previewUrl" -> "android.resource://${app.packageName}/${R.drawable.ic_launcher_foreground}"
                 "refreshLocalMedia", "checkLatestHistory" -> Unit
                 "setGallerySource" -> { source.value = args!![0] as String; Unit }
                 "equals" -> proxy === args?.get(0)

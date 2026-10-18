@@ -96,18 +96,17 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     // 界面外观概要（二级页面详细配置）
     val themeMode by viewModel.themeMode.collectAsState()
     val themePaletteId by viewModel.themePaletteId.collectAsState()
-    val isLiquidGlassEnabled by viewModel.isLiquidGlassEnabled.collectAsState()
+    val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val systemDark = isSystemInDarkTheme()
 
-    val themeSummary = remember(themeMode, themePaletteId, isLiquidGlassEnabled, systemDark) {
+    val themeSummary = remember(themeMode, themePaletteId, bottomBarStyle, systemDark) {
         val modeStr = when (themeMode) {
             MainViewModel.THEME_FOLLOW_SYSTEM -> "跟随系统 (${if (systemDark) "深色" else "浅色"})"
             MainViewModel.THEME_LIGHT -> "浅色模式"
             else -> "深色模式"
         }
         val paletteName = com.comfyui.mobile.ui.theme.themePaletteById(themePaletteId).displayName
-        val glass = if (isLiquidGlassEnabled) " · 液态玻璃" else ""
-        "$modeStr · $paletteName$glass"
+        "$modeStr · $paletteName · ${bottomBarStyle.title}"
     }
 
     // Agent 状态
@@ -299,13 +298,6 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     },
                     onClick = { navController.navigate("theme") }
     )
-                ArrowPreference(
-                    title = "Material 预览",
-                    summary = "独立样板 · 正式应用已接入 P2 导航外壳",
-                    onClick = {
-                        context.startActivity(Intent(context, com.comfyui.mobile.ui.material.MaterialSampleActivity::class.java))
-                    }
-                )
             }
 
             // 3. 智能助手 Agent

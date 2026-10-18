@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui
 
 import com.comfyui.mobile.ui.theme.ThemePaletteIds
+import com.comfyui.mobile.ui.theme.BottomBarStyle
 
 object MainViewModelTheme {
 
@@ -32,6 +33,12 @@ object MainViewModelTheme {
     fun toggleLiquidGlass(vm: MainViewModel, enable: Boolean) {
         vm._isLiquidGlassEnabled.value = enable
         vm.prefs.edit().putBoolean("liquid_glass_enabled", enable).apply()
+    }
+
+    fun setBottomBarStyle(vm: MainViewModel, style: BottomBarStyle) {
+        if (vm._bottomBarStyle.value == style) return
+        vm._bottomBarStyle.value = style
+        vm.prefs.edit().putString(BottomBarStyle.PREFERENCE_KEY, style.id).apply()
     }
 
     fun setLiveUpdateShowPercent(vm: MainViewModel, enable: Boolean) {

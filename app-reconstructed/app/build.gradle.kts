@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 20
-        versionName = "0.0.18-p2-restored"
+        versionCode = 21
+        versionName = "0.0.19-navigation-styles"
     }
 
     buildFeatures {
@@ -84,7 +84,7 @@ dependencies {
     implementation("org.jetbrains.compose.foundation:foundation:1.11.1")
     implementation("org.jetbrains.compose.animation:animation:1.11.1")
 
-    // P0/P1: isolated Material sample; keep the existing Compose line and Miuix screens.
+    // Production Material navigation/feedback; legacy business screens retain Miuix.
     implementation("androidx.compose.material3:material3:1.4.0")
     implementation("androidx.compose.material:material-icons-core:1.7.8")
 

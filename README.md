@@ -11,7 +11,7 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
 - `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
 - `app-reconstructed/DANBOORU_GALLERY_PLAN.md`：Danbooru 原生画廊的实施记录、账号/代理操作与验证边界。
-- `app-reconstructed/MATERIAL.md`：Material P0／P1 样板入口、演示状态与迁移边界。
+- `app-reconstructed/MATERIAL.md`：两种底栏风格、老版页面动画、预览移除与历史迁移说明。
 - `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
 - `app-reconstructed/TAG_LIBRARY.md`：内置词库来源、查询边界与可复现构建方式。
 - `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
@@ -52,6 +52,18 @@ cd app-reconstructed
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
 
 ## 当前验证状态
+
+- `0.0.19-navigation-styles`（versionCode 21）：在 **设置 → 主题与外观 → 底栏风格**
+  提供「标准底栏 / 经典悬浮」两种样式，立即生效并记住选择，页面与返回栈共用。
+  两种底栏统一复用老版 280ms 横向滑动与淡入淡出；Danbooru 点按查看标签、返回列表也加入同套动画。
+  删除 Material 预览入口、独立 Activity、演示页面及资源。
+  debug APK 构建成功，432 项回归全部通过（0 失败 / 错误 / 跳过）。
+  P3–P5 保持回退状态，不改业务协议、词库或生成/媒体缓存逻辑。验证边界见 `app-reconstructed/MATERIAL.md`。
+
+- `0.0.18-p2-restored`（versionCode 20）：通过新的回退提交取消 P3–P5，保留 P2 外壳与底栏对齐修复，
+  源码恢复到 `2b29c4b`，仅提高 APK 发布版本号；构建及 448 项回归通过。
+
+以下为历史版本记录；Material 预览在当前版本中已删除：
 
 - `0.0.11-material-motion`（versionCode 13）：为 **Material 预览**补充可中断的 Tab 内容切换、
   详情／设置进入与返回、全屏图淡入淡出。底栏固定，重复点击不刷新，不改原 Miuix 外壳。

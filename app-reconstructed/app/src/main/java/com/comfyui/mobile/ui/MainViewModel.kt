@@ -751,6 +751,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun setThemePalette(paletteId: String) =
         MainViewModelTheme.setThemePalette(this, paletteId)
 
+    internal val _bottomBarStyle = MutableStateFlow(
+        com.comfyui.mobile.ui.theme.BottomBarStyle.fromId(
+            prefs.getString(com.comfyui.mobile.ui.theme.BottomBarStyle.PREFERENCE_KEY, null)
+        )
+    )
+    val bottomBarStyle = _bottomBarStyle.asStateFlow()
+
+    fun setBottomBarStyle(style: com.comfyui.mobile.ui.theme.BottomBarStyle) =
+        MainViewModelTheme.setBottomBarStyle(this, style)
+
     internal val _isLiquidGlassEnabled = MutableStateFlow(
         prefs.getBoolean("liquid_glass_enabled", false)
     )

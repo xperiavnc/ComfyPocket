@@ -233,4 +233,46 @@ class DanbooruUiTest {
             assertFalse(controller.get().isFinishing)
         } finally { controller.pause().stop().destroy() }
     }
+
+    @Test fun tappingToViewTagsAndReturningAnimateWithoutResettingTheGridOrAnimatingSelection() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val vm = DanbooruViewModel(SavedStateHandle(), Service(post))
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
+                DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) {}
+            } } })
+            compose.waitForIdle()
+            compose.onNodeWithTag("danbooru-grid").performScrollToIndex(14)
+            compose.waitForIdle()
+            val scroll = vm.scrollIndex to vm.scrollOffset
+            val restingX = compose.onNodeWithTag("danbooru-browse-page").fetchSemanticsNode().positionInRoot.x
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithTag("danbooru-image-15").performClick()
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(80)
+            val enteringX = compose.onNodeWithTag("danbooru-detail-page").fetchSemanticsNode().positionInRoot.x
+            assertTrue("Detail must slide in, not appear immediately at rest", enteringX > restingX + 1)
+            compose.mainClock.advanceTimeBy(400)
+            compose.onNodeWithTag("danbooru-detail-page").assertExists()
+            assertEquals(restingX, compose.onNodeWithTag("danbooru-detail-page").fetchSemanticsNode().positionInRoot.x, 1f)
+            compose.runOnIdle { vm.select("cloud") }
+            compose.mainClock.advanceTimeBy(80)
+            assertEquals("Tag multi-selection must not restart a page transition", restingX,
+                compose.onNodeWithTag("danbooru-detail-page").fetchSemanticsNode().positionInRoot.x, 1f)
+            compose.runOnIdle { vm.clearSelection(); vm.back() }
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(80)
+            assertTrue("Browse page must slide back from the left",
+                compose.onNodeWithTag("danbooru-browse-page").fetchSemanticsNode().positionInRoot.x < restingX - 1)
+            compose.mainClock.advanceTimeBy(400)
+            compose.mainClock.autoAdvance = true
+            compose.waitForIdle()
+            compose.onNodeWithTag("danbooru-detail-page").assertDoesNotExist()
+            assertEquals(scroll, vm.scrollIndex to vm.scrollOffset)
+            assertFalse(controller.get().isFinishing)
+        } finally {
+            compose.mainClock.autoAdvance = true
+            controller.pause().stop().destroy()
+        }
+    }
 }

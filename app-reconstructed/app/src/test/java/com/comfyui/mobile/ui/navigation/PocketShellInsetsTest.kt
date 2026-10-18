@@ -14,6 +14,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.ViewModelProvider
 import com.comfyui.mobile.MainActivity
 import com.comfyui.mobile.ui.MainViewModel
+import com.comfyui.mobile.ui.theme.BottomBarStyle
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
@@ -25,7 +26,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
-import java.io.File
+import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
@@ -36,6 +37,8 @@ import java.io.File
 class PocketShellInsetsTest {
     @get:Rule val compose = createEmptyComposeRule()
     @Before fun offlineDefaults() {
+        // Robolectric creates a new Application, but AndroidX's static factory outlives it.
+        ReflectionHelpers.setStaticField(ViewModelProvider.AndroidViewModelFactory::class.java, "_instance", null)
         RuntimeEnvironment.getApplication().getSharedPreferences("comfy_prefs", Context.MODE_PRIVATE)
             .edit().clear().putInt("theme_mode", MainViewModel.THEME_LIGHT).commit()
     }
@@ -113,6 +116,60 @@ class PocketShellInsetsTest {
             val bar = compose.onNodeWithTag("pocket-navigation").fetchSemanticsNode().boundsInRoot
             assertTrue(send.bottom <= bar.top)
             compose.onNodeWithContentDescription("发送").assertIsDisplayed()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun classicCapsuleReservesOnlyItsVisibleHeightAndKeyboardInsetsAreNotDoubled() {
+        RuntimeEnvironment.getApplication().getSharedPreferences("comfy_prefs", Context.MODE_PRIVATE)
+            .edit().putString(BottomBarStyle.PREFERENCE_KEY, "classic").commit()
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup().visible()
+        try {
+            compose.waitForIdle()
+            val vm = ViewModelProvider(controller.get())[MainViewModel::class.java]
+            assertSame(controller.get().application, vm.getApplication<android.app.Application>())
+            assertEquals(BottomBarStyle.CLASSIC, vm.bottomBarStyle.value)
+            compose.onNodeWithTag("pocket-tab-2").performClick(); compose.waitForIdle()
+            applyInsets(controller.get(), side = 32)
+            val capsule = compose.onNodeWithTag("pocket-classic-navigation").fetchSemanticsNode().boundsInRoot
+            val send = compose.onNodeWithContentDescription("发送").fetchSemanticsNode().boundsInRoot
+            assertTrue("Agent input must remain above the floating capsule", send.bottom <= capsule.top + 1)
+            val fullBottom = compose.onNodeWithTag("pocket-shell").fetchSemanticsNode().boundsInRoot.bottom
+            applyInsets(controller.get(), ime = 600, side = 32)
+            compose.onNodeWithTag("pocket-navigation").assertDoesNotExist()
+            val content = compose.onNodeWithTag("pocket-content").fetchSemanticsNode().boundsInRoot
+            val lifted = compose.onNodeWithContentDescription("发送").fetchSemanticsNode().boundsInRoot
+            assertEquals(600f, fullBottom - content.bottom, 1f)
+            assertTrue(content.bottom - lifted.bottom < 100f)
+            applyInsets(controller.get(), side = 32)
+            compose.onNodeWithTag("pocket-classic-navigation").assertIsDisplayed()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h540dp-xhdpi")
+    fun compactClassicCapsuleAtMaximumUiScaleKeepsFiveUsableTabsAndAgentInputVisible() {
+        RuntimeEnvironment.getApplication().getSharedPreferences("comfy_prefs", Context.MODE_PRIVATE)
+            .edit().putString(BottomBarStyle.PREFERENCE_KEY, "classic")
+            .putFloat("ui_density_scale", 1.3f).commit()
+        val controller = Robolectric.buildActivity(MainActivity::class.java)
+        val resources = controller.get().resources
+        resources.updateConfiguration(Configuration(resources.configuration).apply { fontScale = 1.5f }, resources.displayMetrics)
+        controller.setup().visible()
+        try {
+            compose.waitForIdle()
+            compose.onNodeWithTag("pocket-classic-navigation").assertIsDisplayed()
+            val pxPerScaledDp = resources.displayMetrics.density * 1.3f
+            (0..4).forEach { index ->
+                val bounds = compose.onNodeWithTag("pocket-tab-$index").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+                assertTrue("Tab $index retains a 48dp target at maximum UI scale", bounds.width >= 48f * pxPerScaledDp - 1f)
+                compose.onNodeWithTag("pocket-tab-$index").performTouchInput { click() }
+                compose.waitForIdle()
+                compose.onNodeWithTag("pocket-tab-$index").assertIsSelected()
+            }
+            compose.onNodeWithTag("pocket-tab-2").performClick()
+            val send = compose.onNodeWithContentDescription("发送").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            val capsule = compose.onNodeWithTag("pocket-classic-navigation").fetchSemanticsNode().boundsInRoot
+            assertTrue("Agent controls stay above the classic capsule", send.bottom <= capsule.top + 1)
         } finally { controller.pause().stop().destroy() }
     }
 }

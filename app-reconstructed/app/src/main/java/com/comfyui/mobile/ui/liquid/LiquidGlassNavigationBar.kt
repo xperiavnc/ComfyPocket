@@ -53,6 +53,7 @@ import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
@@ -63,6 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastFirstOrNull
 import androidx.compose.ui.util.lerp as floatLerp
@@ -163,6 +165,8 @@ fun IosLiquidGlassNavigationBar(
     isBlurActive: Boolean,
     isDark: Boolean,
     modifier: Modifier = Modifier,
+    bottomPaddingOverride: Dp? = null,
+    horizontalPadding: Dp = 44.dp,
     badge: (Int) -> (@Composable () -> Unit)? = { null }
     ) {
     val pillShape = remember { CircleShape }
@@ -267,7 +271,8 @@ fun IosLiquidGlassNavigationBar(
     val pillHighlight = rememberGravityRotatedHighlight(iosIndicatorSpecular, extraDegrees = 90f)
 
     val navBarBottomPadding = WindowInsets.navigationBars.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()
-    val bottomPaddingValue = if (navBarBottomPadding != 0.dp) 4.dp + navBarBottomPadding else 24.dp
+    val bottomPaddingValue = bottomPaddingOverride
+        ?: if (navBarBottomPadding != 0.dp) 4.dp + navBarBottomPadding else 24.dp
     val padPx = with(density) { 4.dp.toPx() }
 
     val navigationGestureModifier = Modifier.pointerInput(tabsCount, isLtr) {
@@ -342,7 +347,7 @@ fun IosLiquidGlassNavigationBar(
     Column(modifier = modifier.fillMaxWidth()) {
         Box(
             modifier = Modifier
-                .padding(bottom = bottomPaddingValue, start = 44.dp, end = 44.dp)
+                .padding(bottom = bottomPaddingValue, start = horizontalPadding, end = horizontalPadding)
                 .fillMaxWidth(),
             contentAlignment = Alignment.CenterStart
     ) {
@@ -464,6 +469,7 @@ fun IosLiquidGlassNavigationBar(
     )
                         .height(44.dp)
                         .width(tabWidthDp)
+                        .testTag("pocket-classic-indicator")
     )
             }
 
@@ -488,6 +494,7 @@ fun IosLiquidGlassNavigationBar(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .testTag("pocket-tab-$index")
                             .graphicsLayer {
                                 scaleX = itemScale
                                 scaleY = itemScale

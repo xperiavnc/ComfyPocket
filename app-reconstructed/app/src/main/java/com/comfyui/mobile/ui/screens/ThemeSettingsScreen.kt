@@ -52,6 +52,7 @@ import com.comfyui.mobile.ui.rememberAppHaptics
 import com.comfyui.mobile.ui.theme.ThemePalette
 import com.comfyui.mobile.ui.theme.ThemePalettes
 import com.comfyui.mobile.ui.theme.themePaletteById
+import com.comfyui.mobile.ui.screens.theme.BottomBarStylePicker
 import kotlin.math.roundToInt
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -77,6 +78,7 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) {
     val themeMode by viewModel.themeMode.collectAsState()
     val themePaletteId by viewModel.themePaletteId.collectAsState()
+    val bottomBarStyle by viewModel.bottomBarStyle.collectAsState()
     val liveUpdateShowPercent by viewModel.liveUpdateShowPercent.collectAsState()
     val uiScale by viewModel.uiScale.collectAsState()
     val haptics = rememberAppHaptics()
@@ -157,7 +159,13 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 }
             }
 
-            // 2. Fixed palettes — collapsed by default; expand to pick from swatch grid
+            BottomBarStylePicker(bottomBarStyle) { style ->
+                haptics.tick()
+                viewModel.setBottomBarStyle(style)
+                viewModel.showUserMessage("底栏风格已切换：${style.title}")
+            }
+
+            // Fixed palettes — collapsed by default; expand to pick from swatch grid
             var palettePickerExpanded by remember { mutableStateOf(false) }
             val currentPalette = remember(themePaletteId) { themePaletteById(themePaletteId) }
             Card(
