@@ -34,7 +34,8 @@ internal class AgentLlmSettings(
     val drawRules: String,
     val lores: List<CharacterLore>,
     val lastPrompt: String,
-    val tagSettings: AgentPromptSettings = AgentPromptSettings()
+    val tagSettings: AgentPromptSettings = AgentPromptSettings(),
+    val generationLimits: AgentGenerationLimits = AgentGenerationLimits()
 ) {
     companion object {
         fun capture(vm: MainViewModel) = AgentLlmSettings(
@@ -46,7 +47,9 @@ internal class AgentLlmSettings(
                     it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()
                 }?.expandedPrompt.orEmpty()
             },
-            vm._agentPromptSettings.value
+            vm._agentPromptSettings.value,
+            vm._llmProfiles.value.firstOrNull { it.id == vm._currentLlmProfileId.value }
+                ?.generationLimits ?: AgentGenerationLimits()
         )
     }
 }
@@ -199,21 +202,31 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
     ): AgentReply {
         val history = allMessages.filter {
             (it.role == "user" || it.role == "assistant") && !it.isThinking && it.errorMessage == null
-        }.takeLast(20)
-        val messages = listOf(ChatMessageDto("system", settings.persona.trim())) + history.map {
-            ChatMessageDto(it.role, if (it.role == "user") MainViewModelAgent.chatText(it) else it.content)
-        }
-        val images = mutableMapOf<Int, List<String>>()
+        }.takeLast(201)
+        val imagesById = mutableMapOf<String, List<String>>()
         var budget = 8
         for (i in history.indices.reversed()) {
             if (budget <= 0) break
             val urls = history[i].attachments.orEmpty().filter { it.isImage }.take(budget)
                 .mapNotNull(MainViewModelAgent::imageDataUrl)
-            if (urls.isNotEmpty()) { images[i + 1] = urls; budget -= urls.size }
+            if (urls.isNotEmpty()) { imagesById[history[i].id] = urls; budget -= urls.size }
         }
+        fun context(message: AgentChatMessage) = AgentContextMessage(
+            ChatMessageDto(message.role, if (message.role == "user") MainViewModelAgent.chatText(message) else message.content),
+            imagesById[message.id].orEmpty())
+        val selected = AgentContextBudget.fit(
+            AgentContextMessage(ChatMessageDto("system", settings.persona.trim())),
+            history.dropLast(1).map(::context), listOf(context(history.last())),
+            settings.generationLimits, defaultHistoryMessages = 19)
+        vm.addLog("Agent 上下文：保守估算 ${selected.estimatedInputTokens} tokens，裁剪 ${selected.removedMessages} 条历史", LogType.INFO)
+        val messages = selected.messages.map { it.message }
+        val images = selected.messages.mapIndexedNotNull { index, item ->
+            item.images.takeIf { it.isNotEmpty() }?.let { index to it }
+        }.toMap()
         val output = vm.llmClient.chatCompletionsStream(
             settings.baseUrl, settings.apiKey, settings.model, messages, messageImages = images,
             requestId = turn.id, reasoningEffort = settings.effort,
+            generationLimits = settings.generationLimits,
             onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) }
         ).getOrThrow()
         return AgentReply(output.content, thinking = output.reasoning.orEmpty())

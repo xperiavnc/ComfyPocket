@@ -880,11 +880,15 @@ class ComfyRepository private constructor() {
         page: Int = 1,
         cursor: String? = null,
         limit: Int = 20,
-        sort: String? = null
+        sort: String? = null,
+        username: String? = null,
+        period: String? = null,
+        nsfw: Boolean? = null,
+        ids: String? = null
     ): Result<com.comfyui.mobile.model.CivitaiSearchPageData> {
         return try {
             ensureApi()
-            val response = api?.searchCivitai(query, type, baseModel, page, cursor, limit, sort)
+            val response = api?.searchCivitai(query, type, baseModel, page, cursor, limit, sort, username, period, nsfw, ids)
             if (response?.isSuccessful == true) {
                 val body = response.body()
                 if (body?.data != null) {

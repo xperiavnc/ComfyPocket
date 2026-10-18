@@ -203,4 +203,88 @@ class MarketCatalogControllerTest {
         assertTrue(catalog.state.value.error.orEmpty().contains("未找到"))
         assertFalse(catalog.state.value.loading)
     }
+
+    @Test fun authorSortAndPeriodAreSubmittedTogetherAndRetainedForPagination() = runTest {
+        val requests = mutableListOf<MarketQuery>()
+        val catalog = MarketCatalogController(this) { query, page, _, _ ->
+            requests += query
+            if (page == 1) result(1, cursor = "author-next") else result(2)
+        }
+        catalog.author(" creator ")
+        catalog.ordering(MarketSort.LIKES, MarketPeriod.MONTH)
+        advanceUntilIdle()
+        catalog.author("unsent-draft")
+        catalog.load(reset = false); advanceUntilIdle()
+        assertEquals(2, requests.size)
+        assertEquals(requests[0], requests[1])
+        assertEquals("creator", requests[0].author)
+        assertEquals(MarketSort.LIKES, requests[0].sort)
+        assertEquals(MarketPeriod.MONTH, requests[0].period)
+        assertNull(catalog.state.value.notice)
+    }
+
+    @Test fun textSearchOrderingMergesPagesAndExplainsItsLoadedOnlyBoundary() = runTest {
+        val catalog = MarketCatalogController(this) { _, page, _, _ ->
+            val items = if (page == 1) listOf(
+                CivitaiModelItem(id = 1, name = "first", downloadCount = 10),
+                CivitaiModelItem(id = 2, name = "second", downloadCount = 90))
+            else listOf(CivitaiModelItem(id = 3, name = "third", downloadCount = 50))
+            MarketSearchResult(CivitaiSearchPageData(items = items,
+                nextCursor = if (page == 1) "more" else null))
+        }
+        catalog.keyword("sample"); catalog.ordering(MarketSort.DOWNLOADS)
+        advanceUntilIdle()
+        assertEquals(listOf(2L, 1L), catalog.state.value.items.map { it.id })
+        assertTrue(catalog.state.value.notice.orEmpty().contains("仅覆盖已加载结果"))
+        catalog.load(reset = false); advanceUntilIdle()
+        assertEquals(listOf(2L, 3L, 1L), catalog.state.value.items.map { it.id })
+        assertFalse(catalog.state.value.hasNextPage)
+    }
+
+    @Test fun loadedTextMatchesCanBeOrderedByDateAndLikesWithoutChangingDefaultRelevance() = runTest {
+        val catalog = MarketCatalogController(this) { _, _, _, _ ->
+            MarketSearchResult(CivitaiSearchPageData(items = listOf(
+                CivitaiModelItem(id = 1, name = "a", thumbsUpCount = 30, publishedAt = "2026-10-01"),
+                CivitaiModelItem(id = 2, name = "b", thumbsUpCount = 10, publishedAt = "2026-10-17"))))
+        }
+        catalog.keyword("sample"); catalog.ordering(MarketSort.NEWEST); advanceUntilIdle()
+        assertEquals(listOf(2L, 1L), catalog.state.value.items.map { it.id })
+        catalog.ordering(MarketSort.LIKES); advanceUntilIdle()
+        assertEquals(listOf(1L, 2L), catalog.state.value.items.map { it.id })
+        catalog.ordering(MarketSort.DEFAULT); advanceUntilIdle()
+        assertEquals(listOf(1L, 2L), catalog.state.value.items.map { it.id })
+        assertNull(catalog.state.value.notice)
+    }
+
+    @Test fun modelIdLookupClearsStaleCategoryAndAuthorButPreservesContentSettingsInRepository() = runTest {
+        val requests = mutableListOf<MarketQuery>()
+        val catalog = MarketCatalogController(this) { query, _, _, _ ->
+            requests += query
+            result(123)
+        }
+        catalog.filter(type = "LORA", baseModel = "SDXL"); advanceUntilIdle()
+        catalog.author("wrong-author")
+        catalog.keyword("https://civitai.com/models/123/sample")
+        catalog.load(); advanceUntilIdle()
+        assertEquals("ALL", requests.last().type)
+        assertEquals("全部", requests.last().baseModel)
+        assertEquals("", requests.last().author)
+        assertEquals(listOf(123L), catalog.state.value.items.map { it.id })
+    }
+
+    @Test fun clearFiltersRetainsKeywordAndOrderingAndStartsAtFirstPage() = runTest {
+        val requests = mutableListOf<Triple<MarketQuery, Int, String?>>()
+        val catalog = MarketCatalogController(this) { query, page, cursor, _ ->
+            requests += Triple(query, page, cursor); result(1, cursor = "next")
+        }
+        catalog.keyword("keep-name")
+        catalog.filter(type = "LORA", baseModel = "SDXL"); advanceUntilIdle()
+        catalog.author("author")
+        catalog.ordering(MarketSort.LIKES, MarketPeriod.YEAR); advanceUntilIdle()
+        catalog.clearFilters(); advanceUntilIdle()
+        val (query, page, cursor) = requests.last()
+        assertEquals(MarketQuery("keep-name", sort = MarketSort.LIKES, period = MarketPeriod.YEAR), query)
+        assertEquals(1, page)
+        assertNull(cursor)
+    }
 }

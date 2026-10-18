@@ -1,0 +1,59 @@
+package com.comfyui.mobile.agent
+
+import com.comfyui.mobile.network.ChatMessageDto
+import org.junit.Assert.*
+import org.junit.Test
+
+class AgentContextBudgetTest {
+    private fun message(role: String, text: String) = AgentContextMessage(ChatMessageDto(role, text))
+
+    @Test fun trimsOldestWholeTurnsAndKeepsSystemAndCurrentRequestIntact() {
+        val system = message("system", "rules")
+        val current = message("user", "current instruction")
+        val history = listOf(message("user", "old".repeat(100)), message("assistant", "old answer".repeat(100)),
+            message("user", "recent"), message("assistant", "recent answer"))
+        val result = AgentContextBudget.fit(system, history, listOf(current),
+            AgentGenerationLimits(1024, 128), 4)
+        assertEquals(listOf("rules", "recent", "recent answer", "current instruction"),
+            result.messages.map { it.message.content })
+        assertEquals(2, result.removedMessages)
+        assertTrue(result.estimatedInputTokens + 128 <= 1024)
+    }
+
+    @Test fun requiredInputOverflowIsVisibleRatherThanTruncatingTheCurrentInstruction() {
+        val exception = assertThrows(AgentExecutionException::class.java) {
+            AgentContextBudget.fit(message("system", "rules"), emptyList(),
+                listOf(message("user", "x".repeat(1200))), AgentGenerationLimits(1024, 128), 4)
+        }
+        assertTrue(exception.message!!.contains("未截断当前指令"))
+    }
+
+    @Test fun defaultRetainsLegacyHistoryCountAndExplicitBudgetCanIncludeMore() {
+        val history = (1..8).flatMap { listOf(message("user", "u$it"), message("assistant", "a$it")) }
+        val fixed = listOf(message("user", "current"))
+        val original = AgentContextBudget.fit(message("system", "rules"), history, fixed, AgentGenerationLimits(), 4)
+        val configured = AgentContextBudget.fit(message("system", "rules"), history, fixed,
+            AgentGenerationLimits(32768, 1024), 4)
+        assertEquals(6, original.messages.size)
+        assertEquals(18, configured.messages.size)
+    }
+
+    @Test fun imagesConsumeBudgetAndDetachedAssistantHistoryIsSkipped() {
+        val image = AgentContextMessage(ChatMessageDto("user", "image"), listOf("fixture"))
+        assertTrue(AgentContextBudget.estimate(image) >= 4096)
+        val selected = AgentContextBudget.fit(message("system", "rules"),
+            listOf(message("assistant", "orphan"), image, message("assistant", "answer")),
+            listOf(message("user", "now")), AgentGenerationLimits(4096, 512), 4)
+        assertEquals(2, selected.messages.size)
+        assertEquals("now", selected.messages.last().message.content)
+    }
+
+    @Test fun validatesNumericRangesAndOutputReservation() {
+        for (value in listOf(AgentGenerationLimits(100, 128), AgentGenerationLimits(1024, 1024),
+            AgentGenerationLimits(outputTokens = -1))) {
+            assertThrows(IllegalArgumentException::class.java) { value.validated() }
+        }
+        assertEquals(4096, AgentGenerationLimits(16384).validated().outputReserve)
+        assertEquals(OutputTokenParameter.COMPLETION, OutputTokenParameter.fromStored("unknown"))
+    }
+}

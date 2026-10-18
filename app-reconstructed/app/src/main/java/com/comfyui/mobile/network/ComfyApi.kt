@@ -83,7 +83,11 @@ interface ComfyApi {
         @retrofit2.http.Query("page") page: Int = 1,
         @retrofit2.http.Query("cursor") cursor: String? = null,
         @retrofit2.http.Query("limit") limit: Int = 20,
-        @retrofit2.http.Query("sort") sort: String? = null
+        @retrofit2.http.Query("sort") sort: String? = null,
+        @retrofit2.http.Query("username") username: String? = null,
+        @retrofit2.http.Query("period") period: String? = null,
+        @retrofit2.http.Query("nsfw") nsfw: Boolean? = null,
+        @retrofit2.http.Query("ids") ids: String? = null
     ): Response<com.comfyui.mobile.model.CivitaiSearchResponse>
 
     @retrofit2.http.GET("api/mobile/model-folders")

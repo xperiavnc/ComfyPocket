@@ -129,4 +129,31 @@ class AgentSettingsFeedbackTest {
         assertEquals("$previous\n我自己补充的规则", MainViewModelAgent.loadAgentDrawPrompt(vm))
         assertEquals(previous, vm.prefs.getString("agent_negative_previous_agent_draw_prompt", null))
     }
+
+    @Test fun contextAndOutputLimitsPersistPerProfileAndRejectInvalidUpdates() {
+        val first = LlmProfile(id = "limits-a", name = "limits-a", apiKey = "", model = "test",
+            contextTokens = 32768, maxOutputTokens = 4096, outputTokenParameter = "max_tokens")
+        val second = first.copy(id = "limits-b", contextTokens = 65536, maxOutputTokens = 8192,
+            outputTokenParameter = "max_completion_tokens")
+        vm.addOrUpdateLlmProfile(first)
+        vm.addOrUpdateLlmProfile(second)
+        assertEquals(second.generationLimits, vm.loadLlmProfiles().first { it.id == second.id }.generationLimits)
+        vm.selectLlmProfile(first.id)
+        assertEquals(first.generationLimits, AgentLlmSettings.capture(vm).generationLimits)
+        vm.addOrUpdateLlmProfile(first.copy(contextTokens = 1024, maxOutputTokens = 4096))
+        assertEquals(first.generationLimits, vm.loadLlmProfiles().first { it.id == first.id }.generationLimits)
+    }
+
+    @Test fun compositionUpgradeCopiesExactOldDefaultAndLeavesEditedRules() {
+        val previous = javaClass.classLoader!!.getResourceAsStream("agent-pre-composition-rules.json")!!.bufferedReader().use {
+            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject["defaultDrawRules"].asString
+        }
+        vm.prefs.edit().putBoolean("agent_composition_prompt_v1_migrated", false)
+            .putString("agent_draw_prompt", previous).commit()
+        assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
+        assertEquals(previous, vm.prefs.getString("agent_composition_previous_agent_draw_prompt", null))
+        vm.prefs.edit().putBoolean("agent_composition_prompt_v1_migrated", false)
+            .putString("agent_draw_prompt", "$previous\n自定义").commit()
+        assertEquals("$previous\n自定义", MainViewModelAgent.loadAgentDrawPrompt(vm))
+    }
 }

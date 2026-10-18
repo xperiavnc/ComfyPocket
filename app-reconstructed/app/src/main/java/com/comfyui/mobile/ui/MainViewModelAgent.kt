@@ -216,6 +216,17 @@ object MainViewModelAgent {
         editor.putBoolean("agent_negative_prompt_v1_migrated", true).apply()
     }
 
+    private fun ensureCompositionPromptMigration(vm: MainViewModel) {
+        if (vm.prefs.getBoolean("agent_composition_prompt_v1_migrated", false)) return
+        val old = vm.prefs.getString("agent_draw_prompt", null)
+        val editor = vm.prefs.edit()
+        if (old != null && com.comfyui.mobile.agent.AgentPromptPolicy.fingerprint(old) ==
+            "9d442232c59bd8bb2cf31b68b32a62ef0da624181a1cfb647fdc06a3e7240f48") {
+            editor.putString("agent_composition_previous_agent_draw_prompt", old).remove("agent_draw_prompt")
+        }
+        editor.putBoolean("agent_composition_prompt_v1_migrated", true).apply()
+    }
+
     fun loadAgentSystemPrompt(vm: MainViewModel): String {
         ensurePromptSplitMigration(vm)
         ensurePromptV3Migration(vm)
@@ -231,6 +242,7 @@ object MainViewModelAgent {
         ensureOfflinePromptMigration(vm)
         ensureUserInstructionPromptMigration(vm)
         ensureNegativePromptMigration(vm)
+        ensureCompositionPromptMigration(vm)
         val saved = vm.prefs.getString("agent_draw_prompt", null)?.takeIf { it.isNotBlank() }
         return saved ?: MainViewModel.DEFAULT_AGENT_DRAW_PROMPT
     }
@@ -799,6 +811,7 @@ object MainViewModelAgent {
 
     fun addOrUpdateLlmProfile(vm: MainViewModel, profile: LlmProfile, selectAfterSave: Boolean = true) {
         try {
+            profile.generationLimits.validated()
             val list = vm._llmProfiles.value.toMutableList()
             val index = list.indexOfFirst { it.id == profile.id }
             if (index != -1) {
@@ -815,7 +828,7 @@ object MainViewModelAgent {
             vm.showToast(if (applied) "已保存并应用配置：${profile.displayName}" else "已保存配置：${profile.displayName}")
         } catch (e: Exception) {
             vm.addLog("Agent 配置保存失败: ${e.javaClass.simpleName}", LogType.ERROR)
-            vm.showToast("配置保存失败，请重试")
+            vm.showToast(if (e is IllegalArgumentException) e.message ?: "长度配置无效" else "配置保存失败，请重试")
         }
     }
 
@@ -1170,7 +1183,7 @@ object MainViewModelAgent {
         val messages = mutableListOf<com.comfyui.mobile.network.ChatMessageDto>()
         messages.add(com.comfyui.mobile.network.ChatMessageDto("system", systemPrompt))
 
-        val recentHistory = validHistory.takeLast(4)
+        val recentHistory = validHistory.takeLast(if (settings.generationLimits.contextTokens == null) 4 else 200)
         val lastAssistantIdx = recentHistory.indexOfLast { it.role == "assistant" }
         for ((idx, hist) in recentHistory.withIndex()) {
             if (hist.role == "user") {
@@ -1227,16 +1240,30 @@ object MainViewModelAgent {
                 messages.add(messages.lastIndex,
                     com.comfyui.mobile.network.ChatMessageDto("user", vm.localTagLibrary.context(report)))
             }
+            val historyCount = recentHistory.size
+            val selection = com.comfyui.mobile.agent.AgentContextBudget.fit(
+                com.comfyui.mobile.agent.AgentContextMessage(messages.first()),
+                messages.subList(1, 1 + historyCount).map {
+                    com.comfyui.mobile.agent.AgentContextMessage(it) },
+                messages.drop(1 + historyCount).mapIndexed { index, message ->
+                    com.comfyui.mobile.agent.AgentContextMessage(message,
+                        if (index == messages.size - historyCount - 2) imageDataUrls else emptyList())
+                }, settings.generationLimits, defaultHistoryMessages = 4)
+            messages.clear()
+            messages.addAll(selection.messages.map { it.message })
+            vm.addLog("Agent 上下文：保守估算 ${selection.estimatedInputTokens} tokens，裁剪 ${selection.removedMessages} 条历史", LogType.INFO)
             checkCurrent()
             val output = if (onProgress != null) {
                 vm.llmClient.chatCompletionsStream(
                     settings.baseUrl, settings.apiKey, settings.model, messages,
                     images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
+                    generationLimits = settings.generationLimits,
                     onProgress = onProgress).getOrThrow()
             } else {
                 vm.llmClient.chatCompletions(
                     settings.baseUrl, settings.apiKey, settings.model, messages,
-                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort).getOrThrow()
+                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
+                    generationLimits = settings.generationLimits).getOrThrow()
             }
             checkCurrent()
             Result.success(parseAgentLlmReply(vm, output.content, output.reasoning,

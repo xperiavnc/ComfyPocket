@@ -452,7 +452,7 @@ def _list_native_models(
 async def handle_mobile_status(request: web.Request) -> web.Response:
     return web.json_response({
         "code": 0, "msg": "success", "data": {
-            "version": "2.2.2", "name": "ComfyUI-Mobile-Bridge",
+            "version": "2.2.3", "name": "ComfyUI-Mobile-Bridge",
             "loraManagerInstalled": False,
             "capabilities": ["native-civitai-downloads", "civitai-server-settings", "system-monitor",
                              "model-center-v1"],
@@ -780,13 +780,30 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
         return web.json_response({"code": 400, "msg": "分页参数无效"}, status=400)
     cursor = request.query.get("cursor", "").strip()
     sort = request.query.get("sort", "Highest Rated")
+    username = request.query.get("username", "").strip().lstrip("@")
+    period = request.query.get("period", "AllTime")
+    nsfw = request.query.get("nsfw", "false").lower()
+    ids = request.query.get("ids", "").strip()
+    if sort not in {"Highest Rated", "Most Downloaded", "Most Liked", "Most Discussed",
+                    "Most Collected", "Most Images", "Newest", "Oldest"} or \
+            period not in {"AllTime", "Year", "Month", "Week", "Day"} or nsfw not in {"true", "false"}:
+        return web.json_response({"code": 400, "msg": "排序、时间范围或内容参数无效"}, status=400)
+    if ids and (len(ids) > 16 or not ids.isascii() or not ids.isdigit() or not 0 < int(ids) <= 2**53 - 1):
+        return web.json_response({"code": 400, "msg": "模型编号无效"}, status=400)
+    if ids:
+        query = ""
 
     params: List[tuple[str, str]] = [
         ("limit", str(limit)),
-        ("nsfw", "false"),
+        ("nsfw", nsfw),
+        ("period", period),
     ]
+    if username:
+        params.append(("username", username))
+    if ids:
+        params.append(("ids", ids))
 
-    # Civitai forbids "page" and "sort" when "query" is present (uses cursor-based search)
+    # Text queries use opaque cursor paging; public results are relevance-ordered.
     if query:
         params.append(("query", query))
         if cursor:
@@ -802,7 +819,7 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
     # Type mapping aligned with model browser (LORA, CHECKPOINT, UNET, GGUF)
     type_upper = m_type.upper()
     if type_upper in ("LORA", "LORAS"):
-        params.append(("types", "LORA"))
+        params.extend([("types", "LORA"), ("types", "LoCon"), ("types", "DoRA")])
     elif type_upper in ("CHECKPOINT", "CHECKPOINTS"):
         params.append(("types", "Checkpoint"))
     elif type_upper == "UNET":
@@ -894,6 +911,7 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
                     "id": v_id,
                     "name": v_name,
                     "baseModel": v_base,
+                    "publishedAt": v.get("publishedAt") or v.get("createdAt") or "",
                     "trainedWords": trained_words,
                     "description": v_desc,
                     "downloadUrl": download_url,
@@ -928,6 +946,8 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
                 "creator": creator,
                 "description": m_desc,
                 "downloadCount": stats.get("downloadCount") or 0,
+                "publishedAt": max((v.get("publishedAt") or v.get("createdAt") or ""
+                                    for v in raw_versions if isinstance(v, dict)), default=""),
                 "rating": stats.get("rating") or 0.0,
                 "thumbsUpCount": stats.get("thumbsUpCount") or 0,
                 "tags": tags[:5],

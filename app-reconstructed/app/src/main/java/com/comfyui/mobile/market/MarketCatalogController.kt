@@ -17,8 +17,11 @@ data class MarketSearchResult(
 
 data class MarketCatalogState(
     val keyword: String = "",
-    val type: String = "LORA",
+    val type: String = "ALL",
     val baseModel: String = "全部",
+    val author: String = "",
+    val sort: MarketSort = MarketSort.DEFAULT,
+    val period: MarketPeriod = MarketPeriod.ALL_TIME,
     val items: List<CivitaiModelItem> = emptyList(),
     val loading: Boolean = false,
     val error: String? = null,
@@ -47,6 +50,20 @@ class MarketCatalogController(
 
     fun keyword(value: String) {
         mutableState.value = mutableState.value.copy(keyword = value)
+    }
+
+    fun author(value: String) {
+        mutableState.value = state.value.copy(author = value)
+    }
+
+    fun ordering(sort: MarketSort = state.value.sort, period: MarketPeriod = state.value.period) {
+        mutableState.value = state.value.copy(sort = sort, period = period)
+        load(reset = true)
+    }
+
+    fun clearFilters() {
+        mutableState.value = state.value.copy(type = "ALL", baseModel = "全部", author = "")
+        load(reset = true)
     }
 
     fun filter(type: String = state.value.type, baseModel: String = state.value.baseModel) {
@@ -81,7 +98,11 @@ class MarketCatalogController(
         if (reset) {
             job?.cancel()
             seenCursors.clear()
-            activeQuery = MarketQuery(state.value.keyword.trim(), state.value.type, state.value.baseModel)
+            if (CivitaiJson.modelId(state.value.keyword) != null) {
+                mutableState.value = state.value.copy(type = "ALL", baseModel = "全部", author = "")
+            }
+            activeQuery = MarketQuery(state.value.keyword.trim(), state.value.type, state.value.baseModel,
+                state.value.author.trim(), state.value.sort, state.value.period)
         }
         val requestGeneration = ++generation
         val targetQuery = activeQuery
@@ -98,7 +119,16 @@ class MarketCatalogController(
                 val result = search(targetQuery, targetPage, targetCursor, forceRefresh)
                 if (requestGeneration != generation) return@launch
                 val data = result.page
-                val items = ((if (reset) emptyList() else state.value.items) + data.items).distinctBy { it.id }
+                val combined = ((if (reset) emptyList() else state.value.items) + data.items).distinctBy { it.id }
+                // The public text-search endpoint restores relevance order even when sort is sent.
+                // Be explicit: custom ordering of text matches covers loaded results, not the universe.
+                val textSearch = targetQuery.keyword.isNotBlank() && CivitaiJson.modelId(targetQuery.keyword) == null
+                val items = if (!textSearch) combined else when (targetQuery.sort) {
+                    MarketSort.DEFAULT -> combined
+                    MarketSort.NEWEST -> combined.sortedByDescending { it.publishedAt }
+                    MarketSort.DOWNLOADS -> combined.sortedByDescending { it.downloadCount }
+                    MarketSort.LIKES -> combined.sortedByDescending { it.thumbsUpCount }
+                }
                 page = data.currentPage.coerceAtLeast(targetPage)
                 nextPage = data.nextPage
                 // Detect both immediate repetition and longer A -> B -> A cursor loops.
@@ -112,7 +142,11 @@ class MarketCatalogController(
                 mutableState.value = state.value.copy(
                     items = items, loading = false, hasNextPage = more, loadedPage = page,
                     error = if (items.isEmpty() && !more) "未找到相关模型，请尝试更换关键词或筛选" else null,
-                    notice = result.warning ?: if (result.fromCache) "正在显示本地缓存，刷新可获取最新内容" else null
+                    notice = listOfNotNull(result.warning,
+                        if (result.fromCache) "正在显示本地缓存，刷新可获取最新内容" else null,
+                        if (textSearch && targetQuery.sort != MarketSort.DEFAULT)
+                            "关键词接口按相关性分页；当前排序仅覆盖已加载结果，继续加载会合并重排。统计为接口返回的累计值。" else null
+                    ).takeIf { it.isNotEmpty() }?.joinToString("\n")
                 )
             } catch (cancelled: CancellationException) {
                 throw cancelled

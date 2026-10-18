@@ -14,7 +14,7 @@ internal object MarketModelFilters {
             "CHECKPOINT", "CHECKPOINTS" -> listOf("Checkpoint")
             "UNET" -> listOf("UNet")
             "GGUF" -> listOf("Checkpoint", "UNet")
-            "LORA", "LORAS" -> listOf("LORA")
+            "LORA", "LORAS" -> listOf("LORA", "LoCon", "DoRA")
             else -> emptyList()
         }
         if (expectedTypes.isNotEmpty() && expectedTypes.none { it.equals(value.type, true) }) return null

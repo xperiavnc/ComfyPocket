@@ -47,6 +47,8 @@ import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.model.LlmProfile
 import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.ui.screens.agent.AgentReasoningEffortSelector
+import com.comfyui.mobile.ui.screens.agent.AgentGenerationLimitsControls
+import com.comfyui.mobile.ui.screens.agent.AgentLimitsDraft
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -92,6 +94,10 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     var apiKey by remember(currentLlmProfileId, llmApiKey) { mutableStateOf(llmApiKey) }
     var model by remember(currentLlmProfileId, llmModel) { mutableStateOf(llmModel) }
     var reasoningEffort by remember(currentLlmProfileId, llmReasoningEffort) { mutableStateOf(llmReasoningEffort) }
+    var limits by remember(currentLlmProfileId, currentLlmProfile?.generationLimits) {
+        mutableStateOf(AgentLimitsDraft.from(currentLlmProfile?.generationLimits
+            ?: com.comfyui.mobile.agent.AgentGenerationLimits()))
+    }
     var showPassword by remember { mutableStateOf(false) }
 
     // 独立编辑对话框状态，彻底隔离超长文本与主界面滚动，杜绝滑动卡顿
@@ -169,6 +175,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                         apiKey = item.apiKey
                                         model = item.model
                                         reasoningEffort = AgentReasoningEffort.fromStored(item.reasoningEffort)
+                                        limits = AgentLimitsDraft.from(item.generationLimits)
                                         viewModel.selectLlmProfile(item.id)
                                     }
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -199,6 +206,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     apiKey = newP.apiKey
                                     model = newP.model
                                     reasoningEffort = AgentReasoningEffort.fromStored(newP.reasoningEffort)
+                                    limits = AgentLimitsDraft.from(newP.generationLimits)
                                 }
                                 .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
@@ -310,6 +318,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     )
 
                     AgentReasoningEffortSelector(reasoningEffort) { reasoningEffort = it }
+                    AgentGenerationLimitsControls(limits) { limits = it }
 
                     Spacer(modifier = Modifier.height(2.dp))
 
@@ -325,10 +334,14 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     baseUrl = baseUrl.trim(),
                                     apiKey = apiKey.trim(),
                                     model = model.trim(),
-                                    reasoningEffort = reasoningEffort.wireValue
+                                    reasoningEffort = reasoningEffort.wireValue,
+                                    contextTokens = limits.parsed().contextTokens,
+                                    maxOutputTokens = limits.parsed().outputTokens,
+                                    outputTokenParameter = limits.parameter.wireValue
     )
                                 viewModel.addOrUpdateLlmProfile(prof, selectAfterSave = true)
                             },
+                            enabled = runCatching { limits.parsed() }.isSuccess,
                             colors = ButtonDefaults.buttonColorsPrimary(),
                             modifier = Modifier.weight(1f),
                     ) {

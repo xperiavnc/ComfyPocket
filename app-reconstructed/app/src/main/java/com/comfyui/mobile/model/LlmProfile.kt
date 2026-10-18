@@ -10,8 +10,14 @@ data class LlmProfile(
     val baseUrl: String = "",
     val apiKey: String = "",
     val model: String = "",
-    val reasoningEffort: String? = null
+    val reasoningEffort: String? = null,
+    val contextTokens: Int? = null,
+    val maxOutputTokens: Int? = null,
+    val outputTokenParameter: String? = null
     ) {
+    val generationLimits: com.comfyui.mobile.agent.AgentGenerationLimits
+        get() = com.comfyui.mobile.agent.AgentGenerationLimits(contextTokens, maxOutputTokens,
+            com.comfyui.mobile.agent.OutputTokenParameter.fromStored(outputTokenParameter))
     val displayName: String
         get() = name.ifBlank { model.ifBlank { "未命名配置" } }
 

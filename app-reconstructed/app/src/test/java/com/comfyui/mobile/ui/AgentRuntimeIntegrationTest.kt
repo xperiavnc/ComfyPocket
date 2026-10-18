@@ -600,4 +600,25 @@ class AgentRuntimeIntegrationTest {
         assertEquals("xhigh", body["reasoning_effort"].asString)
         assertEquals("fixture-model", body["model"].asString)
     }
+
+    @Test fun chatAndDrawUseFrozenPerProfileOutputLimitAndBudgetedHistory() {
+        val profile = LlmProfile(id = "limit-profile", name = "limits", apiKey = "",
+            baseUrl = server.url("/v1").toString(), model = "fixture-model",
+            contextTokens = 16384, maxOutputTokens = 2048, outputTokenParameter = "max_tokens")
+        vm.addOrUpdateLlmProfile(profile)
+        vm._llmApiKey.value = "fixture-key"
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
+        responses += success("chat")
+        vm.sendAgentMessage("hello")
+        awaitDone()
+        assertEquals(2048, JsonParser.parseString(llmBodies.last()).asJsonObject["max_tokens"].asInt)
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_DRAW
+        responses += success("""{"reply":"ok","prompt":"cat","negative_prompt":"","should_draw":false}""")
+        vm.sendAgentMessage("只要提示词，猫")
+        awaitDone()
+        val body = JsonParser.parseString(llmBodies.last()).asJsonObject
+        assertEquals(2048, body["max_tokens"].asInt)
+        assertFalse(body.has("max_completion_tokens"))
+        assertTrue(promptBodies.isEmpty())
+    }
 }

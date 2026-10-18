@@ -1,6 +1,8 @@
 package com.comfyui.mobile.data
 
 import com.comfyui.mobile.agent.AgentReasoningEffort
+import com.comfyui.mobile.agent.AgentGenerationLimits
+import com.comfyui.mobile.agent.OutputTokenParameter
 import com.comfyui.mobile.network.ChatCompletionRequest
 import com.comfyui.mobile.network.ChatCompletionResponse
 import com.comfyui.mobile.network.ChatMessageDto
@@ -196,17 +198,23 @@ class LlmClient(
         messageImages: Map<Int, List<String>> = emptyMap(),
         requestId: String = UUID.randomUUID().toString(),
         reasoningEffort: AgentReasoningEffort = AgentReasoningEffort.DEFAULT,
-        tools: List<com.comfyui.mobile.network.ChatToolDefinition>? = null
+        tools: List<com.comfyui.mobile.network.ChatToolDefinition>? = null,
+        generationLimits: AgentGenerationLimits = AgentGenerationLimits()
     ): Result<LlmCompletionOutput> = withContext(Dispatchers.IO) {
         var endpoint = ""
         var connecting = true
         try {
             validate(baseUrl, apiKey, model)
+            generationLimits.validated()
             endpoint = resolveEndpoint(baseUrl)
             val body = buildBody(ChatCompletionRequest(
                 model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null,
                 reasoning_effort = reasoningEffort.wireValue, tools = tools,
-                parallel_tool_calls = if (tools.isNullOrEmpty()) null else false
+                parallel_tool_calls = if (tools.isNullOrEmpty()) null else false,
+                max_completion_tokens = generationLimits.outputTokens.takeIf {
+                    generationLimits.outputParameter == OutputTokenParameter.COMPLETION },
+                max_tokens = generationLimits.outputTokens.takeIf {
+                    generationLimits.outputParameter == OutputTokenParameter.LEGACY }
             ), images, messageImages)
             val output = executeCall(requestId, request(endpoint, apiKey, body, false)) { response ->
                 connecting = false
@@ -249,15 +257,22 @@ class LlmClient(
         messageImages: Map<Int, List<String>> = emptyMap(),
         requestId: String = UUID.randomUUID().toString(),
         reasoningEffort: AgentReasoningEffort = AgentReasoningEffort.DEFAULT,
+        generationLimits: AgentGenerationLimits = AgentGenerationLimits(),
         onProgress: suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit
     ): Result<LlmCompletionOutput> = withContext(Dispatchers.IO) {
         var endpoint = ""
         var connecting = true
         try {
             validate(baseUrl, apiKey, model)
+            generationLimits.validated()
             endpoint = resolveEndpoint(baseUrl)
             val body = buildBody(ChatCompletionRequest(
-                model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null, stream = true, reasoning_effort = reasoningEffort.wireValue
+                model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null,
+                stream = true, reasoning_effort = reasoningEffort.wireValue,
+                max_completion_tokens = generationLimits.outputTokens.takeIf {
+                    generationLimits.outputParameter == OutputTokenParameter.COMPLETION },
+                max_tokens = generationLimits.outputTokens.takeIf {
+                    generationLimits.outputParameter == OutputTokenParameter.LEGACY }
             ), images, messageImages)
             val output = executeCall(requestId, request(endpoint, apiKey, body, true)) { response ->
                 connecting = false

@@ -595,6 +595,62 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("cursor", "opaque|next"), captured)
         self.assertFalse(any(k == "page" for k, _ in captured))
 
+    async def test_search_author_sort_time_and_lora_family_reach_official_api(self):
+        _, app = self.load_plugin()
+        captured = []
+        async def fake_catalog(endpoint, params):
+            captured.append(list(params))
+            return {"items": [], "metadata": {}}
+        with patch.object(self.client, "json", new=fake_catalog):
+            async with TestClient(TestServer(app)) as client:
+                response = await client.get("/api/mobile/civitai/search", params={
+                    "username": "@fixture-author", "sort": "Most Liked", "period": "Week",
+                    "type": "LORA", "nsfw": "false"})
+                self.assertEqual(response.status, 200)
+        params = captured[0]
+        self.assertIn(("username", "fixture-author"), params)
+        self.assertIn(("sort", "Most Liked"), params)
+        self.assertIn(("period", "Week"), params)
+        self.assertIn(("nsfw", "false"), params)
+        self.assertEqual([v for k, v in params if k == "types"], ["LORA", "LoCon", "DoRA"])
+
+    async def test_model_id_lookup_and_keyword_search_use_different_query_paths(self):
+        _, app = self.load_plugin()
+        captured = []
+        async def fake_catalog(endpoint, params):
+            captured.append(list(params))
+            return {"items": [], "metadata": {}}
+        with patch.object(self.client, "json", new=fake_catalog):
+            async with TestClient(TestServer(app)) as client:
+                for values in [
+                    {"ids": "123", "query": "https://civitai.com/models/123", "nsfw": "false"},
+                    {"query": "fixture", "username": "artist", "sort": "Newest",
+                     "period": "Month", "cursor": "opaque|2", "page": "4"},
+                ]:
+                    response = await client.get("/api/mobile/civitai/search", params=values)
+                    self.assertEqual(response.status, 200)
+        self.assertIn(("ids", "123"), captured[0])
+        self.assertIn(("nsfw", "false"), captured[0])
+        self.assertFalse(any(k == "query" for k, _ in captured[0]))
+        self.assertIn(("query", "fixture"), captured[1])
+        self.assertIn(("username", "artist"), captured[1])
+        self.assertIn(("period", "Month"), captured[1])
+        self.assertIn(("cursor", "opaque|2"), captured[1])
+        self.assertFalse(any(k in {"page", "sort"} for k, _ in captured[1]))
+
+    async def test_search_preserves_publication_dates_and_popularity(self):
+        _, app = self.load_plugin()
+        self.catalog = {"items": [{"id": 10, "stats": {"downloadCount": 20, "thumbsUpCount": 30},
+            "modelVersions": [dict(self.version, publishedAt="2026-10-17T00:00:00Z")]}]}
+        async with TestClient(TestServer(app)) as client:
+            response = await client.get("/api/mobile/civitai/search")
+            self.assertEqual(response.status, 200)
+            data = (await response.json())["data"]["items"][0]
+        self.assertEqual(data["publishedAt"], "2026-10-17T00:00:00Z")
+        self.assertEqual(data["versions"][0]["publishedAt"], data["publishedAt"])
+        self.assertEqual(data["downloadCount"], 20)
+        self.assertEqual(data["thumbsUpCount"], 30)
+
     async def test_bridge_search_invalid_pagination_does_not_contact_upstream(self):
         _, app = self.load_plugin()
         async with TestClient(TestServer(app)) as client:

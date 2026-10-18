@@ -85,7 +85,8 @@ data class CivitaiVersionItem(
     val files: List<CivitaiFileItem> = emptyList(),
     val images: List<CivitaiPreviewItem> = emptyList(),
     val availability: String = "",
-    val canDownload: Boolean? = null
+    val canDownload: Boolean? = null,
+    val publishedAt: String = ""
 ) {
     val authorFiles: List<CivitaiFileItem> get() = files.filterNot { it.isRequiredComponent }
     val componentFiles: List<CivitaiFileItem> get() = files.filter { it.isRequiredComponent }
@@ -106,7 +107,8 @@ data class CivitaiModelItem(
     val thumbsUpCount: Long = 0,
     val tags: List<String> = emptyList(),
     val previewUrl: String? = null,
-    val versions: List<CivitaiVersionItem> = emptyList()
+    val versions: List<CivitaiVersionItem> = emptyList(),
+    val publishedAt: String = ""
 )
 
 data class CivitaiSearchPageData(

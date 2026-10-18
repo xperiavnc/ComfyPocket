@@ -15,7 +15,9 @@ data class ChatCompletionRequest(
     val stream: Boolean? = null,
     val reasoning_effort: String? = null,
     val tools: List<ChatToolDefinition>? = null,
-    val parallel_tool_calls: Boolean? = null
+    val parallel_tool_calls: Boolean? = null,
+    val max_completion_tokens: Int? = null,
+    val max_tokens: Int? = null
     )
 
 data class ChatCompletionResponse(

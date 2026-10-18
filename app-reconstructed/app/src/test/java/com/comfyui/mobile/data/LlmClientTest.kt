@@ -1,6 +1,8 @@
 package com.comfyui.mobile.data
 
 import com.comfyui.mobile.agent.AgentReasoningEffort
+import com.comfyui.mobile.agent.AgentGenerationLimits
+import com.comfyui.mobile.agent.OutputTokenParameter
 import com.comfyui.mobile.network.ChatMessageDto
 import com.google.gson.Gson
 import com.google.gson.JsonParser
@@ -200,6 +202,26 @@ class LlmClientTest {
         val body = JsonParser.parseString(server.takeRequest().body.readUtf8()).asJsonObject
         assertFalse(body.has("reasoning_effort"))
         assertEquals(0.7, body["temperature"].asDouble, 0.0)
+        assertFalse(body.has("max_tokens"))
+        assertFalse(body.has("max_completion_tokens"))
+    }
+
+    @Test fun outputLimitUsesExactlyTheSelectedParameterInStreamAndNonStream() = runBlocking {
+        for (parameter in OutputTokenParameter.entries) {
+            server.enqueue(stream(event("ok", finish = "stop")))
+            val limits = AgentGenerationLimits(32768, 2048, parameter)
+            client.chatCompletionsStream(base, "fixture-key", "fixture-model", messages,
+                generationLimits = limits) { _, _, _, _ -> }.getOrThrow()
+            val streamBody = JsonParser.parseString(server.takeRequest().body.readUtf8()).asJsonObject
+            assertEquals(2048, streamBody[parameter.wireValue].asInt)
+            assertFalse(streamBody.has(OutputTokenParameter.entries.first { it != parameter }.wireValue))
+            server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}"""))
+            client.chatCompletions(base, "fixture-key", "fixture-model", messages,
+                generationLimits = limits).getOrThrow()
+            val normalBody = JsonParser.parseString(server.takeRequest().body.readUtf8()).asJsonObject
+            assertEquals(2048, normalBody[parameter.wireValue].asInt)
+            assertFalse(normalBody.has("contextTokens"))
+        }
     }
 
     @Test fun nonStreamingAlsoCarriesMaxAndReturnsRequestId() = runBlocking {

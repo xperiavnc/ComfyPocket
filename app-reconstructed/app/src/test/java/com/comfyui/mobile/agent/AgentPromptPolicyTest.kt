@@ -59,4 +59,15 @@ class AgentPromptPolicyTest {
         assertTrue(AgentDrawIntent.isExplicitVeto("只要负向提示词"))
         assertTrue(AgentDrawIntent.isExplicitVeto("反推这张图片"))
     }
+
+    @Test fun compositionAdaptsReferenceRulesWithoutItsHostSpecificEnvelope() {
+        val rules = AgentPromptPolicy.defaultDrawRules
+        assertTrue(rules.contains("Anima 文生图提示词 V2.6"))
+        assertTrue(rules.contains("可见人物数与计数标签一致"))
+        assertTrue(rules.contains("双人直接互动"))
+        assertTrue(rules.contains("跨角色使用完整名字"))
+        assertFalse(rules.contains("<images>"))
+        assertFalse(rules.contains("regex:"))
+        assertFalse(rules.contains("explicit"))
+    }
 }

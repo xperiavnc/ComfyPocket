@@ -14,9 +14,22 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 data class MarketQuery(
     val keyword: String = "",
-    val type: String = "LORA",
-    val baseModel: String = "全部"
+    val type: String = "ALL",
+    val baseModel: String = "全部",
+    val author: String = "",
+    val sort: MarketSort = MarketSort.DEFAULT,
+    val period: MarketPeriod = MarketPeriod.ALL_TIME
 )
+
+enum class MarketSort(val label: String, val apiValue: String) {
+    DEFAULT("默认", "Highest Rated"), NEWEST("日期", "Newest"),
+    DOWNLOADS("热度 · 下载", "Most Downloaded"), LIKES("人气 · 赞", "Most Liked")
+}
+
+enum class MarketPeriod(val label: String, val apiValue: String) {
+    ALL_TIME("全部时间", "AllTime"), YEAR("一年", "Year"), MONTH("一月", "Month"),
+    WEEK("一周", "Week"), DAY("一天", "Day")
+}
 
 /** Official JSON is not the Bridge's {code,data} envelope. Keep the mapping separate. */
 internal object CivitaiJson {
@@ -29,14 +42,20 @@ internal object CivitaiJson {
     ): HttpUrl = endpoint("models").newBuilder().apply {
         addQueryParameter("limit", "20")
         addQueryParameter("nsfw", settings.includeMatureContent.toString())
-        val keyword = query.keyword.trim()
+        val id = modelId(query.keyword)
+        val keyword = query.keyword.trim().takeUnless { id != null }.orEmpty()
+        if (id != null) addQueryParameter("ids", id.toString())
         if (keyword.isNotEmpty()) addQueryParameter("query", keyword)
+        query.author.trim().removePrefix("@").takeIf { it.isNotEmpty() }?.let {
+            addQueryParameter("username", it)
+        }
         // Query search forbids page. Cursors are opaque; do not split or increment them.
         if (!cursor.isNullOrBlank()) addQueryParameter("cursor", cursor)
         else if (keyword.isEmpty() && page > 1) addQueryParameter("page", page.toString())
-        if (keyword.isEmpty()) addQueryParameter("sort", "Highest Rated")
+        if (keyword.isEmpty()) addQueryParameter("sort", query.sort.apiValue)
+        addQueryParameter("period", query.period.apiValue)
         val types = when (query.type.uppercase()) {
-            "LORA", "LORAS" -> listOf("LORA")
+            "LORA", "LORAS" -> listOf("LORA", "LoCon", "DoRA")
             "CHECKPOINT", "CHECKPOINTS" -> listOf("Checkpoint")
             "UNET" -> listOf("UNet")
             "GGUF" -> listOf("Checkpoint", "UNet")
@@ -51,6 +70,17 @@ internal object CivitaiJson {
         }
         baseModels(query.baseModel).forEach { addQueryParameter("baseModels", it) }
     }.build()
+
+    internal fun modelId(value: String): Long? {
+        val text = value.trim()
+        fun validId(value: String) = value.toLongOrNull()?.takeIf { it in 1..9_007_199_254_740_991L }
+        if (text.matches(Regex("""#?\d+"""))) return validId(text.removePrefix("#"))
+        val url = text.toHttpUrlOrNull() ?: return null
+        if (url.host !in setOf("civitai.com", "www.civitai.com") || url.scheme != "https") return null
+        val parts = url.pathSegments
+        if (parts.firstOrNull() != "models") return null
+        return parts.getOrNull(1)?.let(::validId)
+    }
 
     internal fun baseModels(tag: String): List<String> = when (tag) {
         "全部", "All", "" -> emptyList()
@@ -104,6 +134,7 @@ internal object CivitaiJson {
             description = value.string("description"),
             downloadCount = stats.long("downloadCount"),
             rating = stats.double("rating"), thumbsUpCount = stats.long("thumbsUpCount"),
+            publishedAt = versions.map { it.publishedAt }.filter { it.isNotBlank() }.maxOrNull().orEmpty(),
             tags = value.strings("tags"), versions = versions,
             previewUrl = thumbnail(versions.firstNotNullOfOrNull { it.previewUrl }, 450)
         )
@@ -134,6 +165,7 @@ internal object CivitaiJson {
         return CivitaiVersionItem(
             id = value.long("id"), name = value.string("name"),
             baseModel = value.string("baseModel"),
+            publishedAt = value.string("publishedAt").ifBlank { value.string("createdAt") },
             trainedWords = value.strings("trainedWords"),
             description = value.string("description"),
             downloadUrl = download.ifBlank { primary?.downloadUrl.orEmpty() },

@@ -4,6 +4,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CivitaiJsonTest {
+    @Test fun defaultSearchDoesNotSilentlyRestrictToLora() {
+        val url = CivitaiJson.searchUrl(MarketQuery("fixture"), 1, null, CivitaiSettings())
+        println("MARKET_DEFAULT_TYPES ${url.queryParameterValues("types")}")
+        assertTrue(url.queryParameterValues("types").isEmpty())
+    }
+
+    @Test fun loraFamilyIncludesLoconAndDoraVariants() {
+        val url = CivitaiJson.searchUrl(MarketQuery(type = "LORA"), 1, null, CivitaiSettings())
+        assertEquals(listOf("LORA", "LoCon", "DoRA"), url.queryParameterValues("types"))
+    }
+
     @Test fun normalBrowsingDoesNotForceEarlyAccessOnly() {
         val url = CivitaiJson.searchUrl(MarketQuery(), 1, null, CivitaiSettings())
         assertNull(url.queryParameter("earlyAccess"))
@@ -16,7 +27,7 @@ class CivitaiJsonTest {
         ).queryParameterValues("types")
         assertEquals(listOf("Checkpoint"), types("CHECKPOINT"))
         assertEquals(listOf("UNet"), types("UNET"))
-        assertEquals(listOf("LORA"), types("LORA"))
+        assertEquals(listOf("LORA", "LoCon", "DoRA"), types("LORA"))
     }
 
     @Test fun ggufUsesFormatArrayAcrossCheckpointAndUnet() {
@@ -37,6 +48,53 @@ class CivitaiJsonTest {
 
     @Test fun firstSearchDoesNotSendPage() {
         assertNull(CivitaiJson.searchUrl(MarketQuery(), 1, null, CivitaiSettings()).queryParameter("page"))
+    }
+
+    @Test fun authorAndTimeAndSortUseOfficialParameters() {
+        for (sort in MarketSort.entries) for (period in MarketPeriod.entries) {
+            val url = CivitaiJson.searchUrl(MarketQuery(author = " @Some_Author ",
+                sort = sort, period = period), 2, null, CivitaiSettings())
+            assertEquals("Some_Author", url.queryParameter("username"))
+            assertEquals(sort.apiValue, url.queryParameter("sort"))
+            assertEquals(period.apiValue, url.queryParameter("period"))
+            assertEquals("2", url.queryParameter("page"))
+            assertNull(url.queryParameter("query"))
+        }
+    }
+
+    @Test fun keywordAndAuthorCombineButDoNotClaimServerSortedFullTextSearch() {
+        val url = CivitaiJson.searchUrl(MarketQuery("rain", author = "artist",
+            sort = MarketSort.DOWNLOADS, period = MarketPeriod.WEEK), 4, "token|2", CivitaiSettings())
+        assertEquals("rain", url.queryParameter("query"))
+        assertEquals("artist", url.queryParameter("username"))
+        assertEquals("Week", url.queryParameter("period"))
+        assertEquals("token|2", url.queryParameter("cursor"))
+        assertNull(url.queryParameter("page"))
+        assertNull(url.queryParameter("sort"))
+    }
+
+    @Test fun modelNumbersAndOfficialLinksUseIdsNotTextIndex() {
+        for (input in listOf("123", "#123", " https://civitai.com/models/123/sample?modelVersionId=456 ")) {
+            val url = CivitaiJson.searchUrl(MarketQuery(input), 1, null, CivitaiSettings())
+            assertEquals("123", url.queryParameter("ids"))
+            assertEquals("false", url.queryParameter("nsfw"))
+            assertNull(url.queryParameter("query"))
+        }
+        for (input in listOf("0", "-1", "9007199254740992", "999999999999999999999999999",
+                "https://civitai.com.evil.invalid/models/123", "https://elsewhere.invalid/models/123",
+                "http://civitai.com/models/123")) {
+            assertNull(input, CivitaiJson.modelId(input))
+        }
+    }
+
+    @Test fun publicationDatesAndPopularityAreMappedForLoadedResultOrdering() {
+        val model = CivitaiJson.model("""{"id":10,"stats":{"downloadCount":20,"thumbsUpCount":30},
+            "modelVersions":[{"id":11,"publishedAt":"2026-10-01T00:00:00Z"},
+            {"id":12,"createdAt":"2026-10-17T00:00:00Z"}]}""")
+        assertEquals(20L, model.downloadCount)
+        assertEquals(30L, model.thumbsUpCount)
+        assertEquals("2026-10-17T00:00:00Z", model.publishedAt)
+        assertEquals("2026-10-01T00:00:00Z", model.versions.first().publishedAt)
     }
 
     @Test fun listingCanUsePageOnlyWhenThereIsNoCursor() {

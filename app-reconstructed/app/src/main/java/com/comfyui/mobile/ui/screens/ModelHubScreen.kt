@@ -345,6 +345,10 @@ fun ModelHubScreen(
                     onType = { market.catalog.filter(type = it); scope.launch { gridState.scrollToItem(0) } },
                     onBaseModel = { market.catalog.filter(baseModel = it); scope.launch { gridState.scrollToItem(0) } },
                     onManageTags = { showManageFilterDialog = true },
+                    onAuthor = market.catalog::author,
+                    onSort = { market.catalog.ordering(sort = it); scope.launch { gridState.scrollToItem(0) } },
+                    onPeriod = { market.catalog.ordering(period = it); scope.launch { gridState.scrollToItem(0) } },
+                    onClearFilters = market.catalog::clearFilters,
                     onSearch = { loadCivitai(reset = true) }, onRetry = market.catalog::retry,
                     onMore = { loadCivitai(reset = false) },
                     onOpen = { item ->
