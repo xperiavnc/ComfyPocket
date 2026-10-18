@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.0.19-navigation-styles"
+        versionCode = 22
+        versionName = "0.0.20-overlay-layer"
     }
 
     buildFeatures {

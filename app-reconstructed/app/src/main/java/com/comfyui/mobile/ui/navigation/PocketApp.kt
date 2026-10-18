@@ -1,9 +1,14 @@
 package com.comfyui.mobile.ui.navigation
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.comfyui.mobile.Screen
 import com.comfyui.mobile.ui.MainViewModel
@@ -25,8 +30,11 @@ internal fun PocketApp(viewModel: MainViewModel) {
         else -> true
     }
     val nav = rememberNavController()
+    val activeEntry by nav.currentBackStackEntryAsState()
+    val overlays = remember { PocketOverlayHost() }
     val haptics = rememberAppHaptics()
     PocketAppTheme(dark, palette) {
+      Box(Modifier.fillMaxSize()) {
         PocketNavigationShell(
             nav, viewModel.userMessage, haptics::tick,
             bottomBarStyle = bottomBarStyle, darkTheme = dark, paletteId = palette
@@ -34,9 +42,12 @@ internal fun PocketApp(viewModel: MainViewModel) {
             // A deliberate migration boundary: old screens get only their original theme.
             // Material navigation and feedback are siblings, never children of MiuixTheme.
             ComfyControllerTheme(dark, palette, manageSystemBars = false) {
-              // Legacy OverlayDialog siblings rely on an enclosing Miuix root scaffold.
-              // Keep that overlay/back owner inside this destination, not above Material.
-              LegacyScaffold(containerColor = MiuixTheme.colorScheme.background) { _ ->
+              // Own overlay state inside this destination; portal only its rendering
+              // above the shell so neither bar can cover dialog actions or receive taps.
+              LegacyScaffold(
+                  containerColor = MiuixTheme.colorScheme.background,
+                  popupHost = { overlays.Capture(entry.id) }
+              ) { _ ->
                 when (entry.destination.route) {
                     Screen.Dashboard.route -> DashboardScreen(nav, viewModel)
                     Screen.Control.route -> ControlScreen(viewModel)
@@ -56,5 +67,7 @@ internal fun PocketApp(viewModel: MainViewModel) {
               }
             }
         }
+        overlays.Render(activeEntry?.id)
+      }
     }
 }
