@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 23
-        versionName = "0.0.21-danbooru-media"
+        versionCode = 24
+        versionName = "0.0.22-danbooru-fullscreen"
     }
 
     buildFeatures {

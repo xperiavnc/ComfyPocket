@@ -55,6 +55,14 @@ fun DanbooruPost.playbackCandidates(): List<DanbooruMediaSource> {
         listOfNotNull(source(fileUrl, "video-original", extension))).distinctBy { it.url }
 }
 
+/** Download the original when available, not the lower-resolution playback sample. */
+fun DanbooruPost.videoDownloadSource(): DanbooruMediaSource? {
+    if (!isVideo) return null
+    if (!fileUrl.isNullOrBlank()) return DanbooruMediaSource(fileUrl, "video-original", extension.lowercase(Locale.ROOT))
+    return playbackCandidates().firstOrNull { it.representation == "video:original" }
+        ?: playbackCandidates().firstOrNull()
+}
+
 internal fun DanbooruMediaSource.videoMimeType(): String = when (extension) {
     "webm" -> "video/webm"
     "mov" -> "video/quicktime"

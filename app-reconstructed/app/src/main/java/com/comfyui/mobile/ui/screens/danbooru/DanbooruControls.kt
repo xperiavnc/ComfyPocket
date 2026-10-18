@@ -3,6 +3,9 @@ package com.comfyui.mobile.ui.screens.danbooru
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +42,6 @@ internal fun DanbooruBrowseControls(
     onDate: (java.time.LocalDate) -> Unit
 ) {
     val scheme = MiuixTheme.colorScheme
-    var filtersOpen by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         TextField(
             input, onInput, label = "搜索标签 / Danbooru 语法", useLabelAsPlaceholder = true,
@@ -56,13 +58,16 @@ internal fun DanbooruBrowseControls(
         )
         // Lightweight text tabs instead of five tall slabs and a clipped scrolling row.
         // Wrap on small screens/large fonts; every choice remains visible and tappable.
-        FlowRow(Modifier.fillMaxWidth().testTag("danbooru-browse-filters"),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            listOf(DanbooruSort.LATEST, DanbooruSort.HOT, DanbooruSort.RANKING, DanbooruSort.SCORE, DanbooruSort.FAVORITES).forEach {
-                DanbooruBrowseChip(it.title, query.sort == it) { onSort(it) }
+        Row(Modifier.fillMaxWidth().testTag("danbooru-browse-filters"),
+            horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Top) {
+            FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                listOf(DanbooruSort.LATEST, DanbooruSort.HOT, DanbooruSort.RANKING, DanbooruSort.SCORE, DanbooruSort.FAVORITES).forEach {
+                    DanbooruBrowseChip(it.title, query.sort == it) { onSort(it) }
+                }
+                if (query.sort == DanbooruSort.CUSTOM) DanbooruBrowseChip("自定义", true) {}
             }
-            if (query.sort == DanbooruSort.CUSTOM) DanbooruBrowseChip("自定义", true) {}
-            DanbooruBrowseChip(query.filter.title, false, dropdown = true) { filtersOpen = true }
+            // Rating always stays on the first sort line; only the sort group may wrap.
+            DanbooruRatingFilter(query.filter, onFilter)
         }
         if (query.sort == DanbooruSort.RANKING) {
             FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -91,10 +96,17 @@ internal fun DanbooruBrowseControls(
             }
         }
     }
+}
+
+@Composable
+internal fun DanbooruRatingFilter(filter: ContentFilter, onFilter: (ContentFilter) -> Unit) {
+    var filtersOpen by remember { mutableStateOf(false) }
+    DanbooruBrowseChip(filter.title, false, dropdown = true,
+        modifier = Modifier.testTag("danbooru-rating-filter")) { filtersOpen = true }
     if (filtersOpen) OverlayDialog(show = true, title = "内容评级", onDismissRequest = { filtersOpen = false }) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ContentFilter.entries.filter { it != ContentFilter.CUSTOM }.forEach { filter ->
-                DanbooruPill(filter.title, query.filter == filter) { onFilter(filter); filtersOpen = false }
+            ContentFilter.entries.filter { it != ContentFilter.CUSTOM }.forEach { value ->
+                DanbooruPill(value.title, filter == value) { onFilter(value); filtersOpen = false }
             }
         }
     }
@@ -102,17 +114,24 @@ internal fun DanbooruBrowseControls(
 
 @Composable
 private fun DanbooruBrowseChip(
-    text: String, selected: Boolean, dropdown: Boolean = false, onClick: () -> Unit
+    text: String, selected: Boolean, dropdown: Boolean = false, modifier: Modifier = Modifier, onClick: () -> Unit
 ) {
     val scheme = MiuixTheme.colorScheme
-    val touch = if (dropdown) Modifier.clickable(role = Role.Button, onClick = onClick)
-        else Modifier.selectable(selected = selected, role = Role.Tab, onClick = onClick)
-    Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).then(touch),
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val background by animateColorAsState(
+        if (selected) scheme.primary.copy(alpha = if (pressed) 0.2f else 0.14f)
+        else if (pressed) scheme.primary.copy(alpha = 0.08f) else Color.Transparent,
+        label = "danbooru-filter-state")
+    // A single painted surface replaces the default outer indication plus inner selected slab.
+    val touch = if (dropdown) Modifier.clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
+        else Modifier.selectable(selected = selected, interactionSource = interaction, indication = null, role = Role.Tab, onClick = onClick)
+    Box(modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).then(touch),
         contentAlignment = Alignment.Center) {
         Row(Modifier.clip(RoundedCornerShape(12.dp))
-            .background(if (selected) scheme.primary.copy(alpha = 0.14f) else Color.Transparent)
+            .background(background)
             .then(if (dropdown) Modifier.border(1.dp, scheme.onSurfaceSecondary.copy(alpha = 0.22f), RoundedCornerShape(12.dp)) else Modifier)
-            .padding(horizontal = 10.dp, vertical = 7.dp),
+            .padding(horizontal = if (dropdown) 8.dp else 4.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(text, style = MiuixTheme.textStyles.footnote2.copy(fontSize = 14.sp),
                 fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,

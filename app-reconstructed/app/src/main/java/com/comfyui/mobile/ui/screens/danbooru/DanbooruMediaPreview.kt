@@ -23,7 +23,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 internal fun DanbooruMediaPreview(
     post: DanbooruPost, imageLoader: ImageLoader, namespace: String,
     modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Fit,
-    originalOnly: Boolean = false, compact: Boolean = false
+    originalOnly: Boolean = false, compact: Boolean = false,
+    imageModifier: Modifier = Modifier, decodeSize: Int? = null
 ) {
     val context = LocalContext.current
     val candidates = remember(post, originalOnly) { post.previewCandidates(originalOnly) }
@@ -35,15 +36,15 @@ internal fun DanbooruMediaPreview(
             val source = candidates.getOrNull(index)
             if (source != null) key(source, attempt) {
                 val cacheKey = post.mediaKey(namespace, source.representation, source.url)
-                val request = remember(source, cacheKey, compact) {
+                val request = remember(source, cacheKey, compact, decodeSize) {
                     ImageRequest.Builder(context).data(source.url)
-                        .apply { if (compact) size(720) }
+                        .apply { if (decodeSize != null) size(decodeSize) else if (compact) size(720) }
                         .diskCacheKey(cacheKey).memoryCacheKey(cacheKey).crossfade(true).build()
                 }
                 AsyncImage(
                     request, imageLoader = imageLoader,
                     contentDescription = if (post.isVideo) "视频封面" else "帖子预览",
-                    modifier = Modifier.fillMaxSize(), contentScale = contentScale,
+                    modifier = Modifier.fillMaxSize().then(imageModifier), contentScale = contentScale,
                     onError = {
                         failure = danbooruMediaError(it.result.throwable)
                         // Actual decode/HTTP failure also advances, not just a null URL.

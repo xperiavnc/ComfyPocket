@@ -106,10 +106,14 @@ class DanbooruRuntime private constructor(context: Context) : DanbooruService {
             it.dispatcher.executorService.shutdown()
         }
     }
+    suspend fun video(post: DanbooruPost, onProgress: (Long, Long?) -> Unit = { _, _ -> }): DanbooruVideoFile {
+        val snapshot = current
+        return DanbooruVideoDownloads.get(app, post, snapshot.video, snapshot.settings.namespace(), onProgress)
+    }
     suspend fun original(post: DanbooruPost): File {
         val snapshot = current
         val url = post.fileUrl ?: throw DanbooruException("此帖子没有可用原图地址；Tag 仍可复制")
-        if (post.isVideo) throw DanbooruException("视频可在详情播放；保存或分享原始视频请打开原帖")
+        if (post.isVideo) throw DanbooruException("视频请使用详情页的下载视频入口")
         if (!post.isImage) throw DanbooruException("此动态格式支持封面和标签，原始文件请打开原帖")
         val key = post.mediaKey(snapshot.settings.namespace(), "original", url)
         val ext = post.extension.lowercase().takeIf { it in setOf("jpg", "jpeg", "png", "webp", "gif", "avif") }

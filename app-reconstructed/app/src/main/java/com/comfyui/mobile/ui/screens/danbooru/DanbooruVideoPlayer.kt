@@ -97,22 +97,41 @@ internal fun danbooruVideoPlayer(context: Context, calls: Call.Factory): ExoPlay
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 internal fun DanbooruVideoPlayer(
-    post: DanbooruPost, calls: Call.Factory, namespace: String, modifier: Modifier = Modifier
+    post: DanbooruPost, calls: Call.Factory, namespace: String,
+    fullscreen: Boolean, onFullscreenChange: (Boolean) -> Unit, modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val sources = remember(post) { post.playbackCandidates() }
     key(post.id, post.md5, namespace, sources) {
         var error by remember { mutableStateOf<String?>(null) }
+        val changeFullscreen by rememberUpdatedState(onFullscreenChange)
         val player = remember(context, calls) { danbooruVideoPlayer(context, calls) }
         val session = remember(player, sources) { DanbooruVideoSession(player, sources) { error = it } }
         val view = remember(player) {
             PlayerView(context).apply {
-                this.player = player
                 useController = true
                 resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                 setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                setFullscreenButtonClickListener { changeFullscreen(it) }
+                tag = "danbooru-inline-player"
             }
+        }
+        val fullView = remember(player) {
+            PlayerView(context).apply {
+                useController = true
+                resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
+                setFullscreenButtonClickListener { changeFullscreen(it) }
+                tag = "danbooru-fullscreen-player"
+            }
+        }
+        DisposableEffect(player, fullscreen) {
+            // Move only the render target: keep the same session, position, source and pause state.
+            PlayerView.switchTargetView(player, if (fullscreen) view else fullView, if (fullscreen) fullView else view)
+            view.setFullscreenButtonState(fullscreen)
+            fullView.setFullscreenButtonState(fullscreen)
+            onDispose { }
         }
         DisposableEffect(session, lifecycle) {
             val observer = LifecycleEventObserver { _, event ->
@@ -126,6 +145,7 @@ internal fun DanbooruVideoPlayer(
             onDispose {
                 lifecycle.removeObserver(observer)
                 view.player = null
+                fullView.player = null
                 session.release()
             }
         }
@@ -133,6 +153,20 @@ internal fun DanbooruVideoPlayer(
             AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
             if (error != null) {
                 Column(Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+                    .background(MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)).padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(error!!)
+                    DanbooruSmallAction("重试视频", primary = true) { session.retry() }
+                }
+            }
+        }
+        if (fullscreen) DanbooruFullscreen("danbooru-video-fullscreen", { changeFullscreen(false) }) {
+            AndroidView(factory = { fullView }, modifier = Modifier.fillMaxSize().safeDrawingPadding())
+            Row(Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(8.dp)) {
+                FullscreenClose { changeFullscreen(false) }
+            }
+            if (error != null) {
+                Column(Modifier.align(Alignment.BottomCenter).safeDrawingPadding()
                     .background(MiuixTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)).padding(12.dp),
                     horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(error!!)

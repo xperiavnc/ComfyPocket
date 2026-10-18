@@ -30,6 +30,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import org.robolectric.shadows.ShadowSystemClock
+import org.robolectric.shadows.ShadowDialog
 import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 
 @RunWith(RobolectricTestRunner::class)
@@ -129,6 +130,11 @@ class DanbooruVisualTest {
             compose.onNodeWithText("最新").performClick()
             compose.waitForIdle()
             save(view, "gallery-dark")
+            compose.onNodeWithText("热度").performTouchInput { down(center); advanceEventTime(160) }
+            save(view, "hot-pressed")
+            compose.onNodeWithText("热度").performTouchInput { up() }
+            compose.waitForIdle()
+            save(view, "hot-selected")
             compose.onNodeWithText("排行榜").performClick()
             compose.waitForIdle()
             save(view, "ranking-dark")
@@ -137,6 +143,14 @@ class DanbooruVisualTest {
             save(view, "ranking-light")
             compose.runOnIdle { dark = true }
             compose.onNodeWithTag("danbooru-image-100").performClick()
+            compose.waitForIdle()
+            compose.onNodeWithContentDescription("帖子预览").performTouchInput { click() }
+            compose.waitForIdle()
+            val fullscreen = ShadowDialog.getLatestDialog().window!!.decorView
+            save(fullscreen, "image-fullscreen")
+            compose.onNodeWithTag("danbooru-zoom-surface").performTouchInput { doubleClick() }
+            save(fullscreen, "image-fullscreen-zoomed")
+            compose.onNodeWithContentDescription("退出全屏").performTouchInput { click() }
             compose.waitForIdle()
             compose.onNodeWithText("标签与提示词").performScrollTo()
             compose.waitForIdle()
