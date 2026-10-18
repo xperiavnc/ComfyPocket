@@ -9,6 +9,8 @@ import android.view.inspector.WindowInspector
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.lifecycle.SavedStateHandle
@@ -17,6 +19,7 @@ import com.comfyui.mobile.ui.screens.gallery.GalleryHomeSource
 import com.comfyui.mobile.ui.screens.gallery.GallerySourcePicker
 import com.comfyui.mobile.ui.theme.ComfyControllerTheme
 import java.io.File
+import java.time.Duration
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -26,6 +29,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
+import org.robolectric.shadows.ShadowSystemClock
 import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 
 @RunWith(RobolectricTestRunner::class)
@@ -81,6 +85,11 @@ class DanbooruVisualTest {
     }
 
     private fun save(view: View, name: String) {
+        // Coil cache insertion precedes its crossfade; capture settled content, not a dim first frame.
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        // CrossfadeDrawable uses Android uptime, not Compose's animation clock.
+        ShadowSystemClock.advanceBy(Duration.ofSeconds(1))
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         compose.runOnUiThread { view.draw(Canvas(bitmap)) }
         val file = File("build/reports/danbooru-ui/$name.png").apply { parentFile?.mkdirs() }
@@ -108,7 +117,7 @@ class DanbooruVisualTest {
             } })
             compose.waitForIdle()
             compose.waitUntil(10000) {
-                pictures.take(2).all { p -> runtime.imageLoader.memoryCache?.keys?.any {
+                pictures.take(4).all { p -> runtime.imageLoader.memoryCache?.keys?.any {
                     it.key == p.mediaKey(runtime.settings.namespace(), "sample", p.sampleUrl!!)
                 } == true }
             }
@@ -137,6 +146,47 @@ class DanbooruVisualTest {
             compose.onNodeWithText("保存").assertIsDisplayed()
             val overlay = WindowInspector.getGlobalWindowViews().lastOrNull { it.visibility == View.VISIBLE && it.width > 0 } ?: view
             save(overlay, "settings-dark")
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w320dp-h800dp-xhdpi")
+    fun renderWrappingBrowseControlsAt320dpAndLargeFontInBothThemes() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val activity = controller.get()
+        val pictures = (0..7).map { picture(activity.cacheDir, it) }
+        val runtime = DanbooruRuntime.get(activity)
+        val vm = DanbooruViewModel(SavedStateHandle(), Service(pictures))
+        var dark by mutableStateOf(true)
+        val view = ComposeView(activity)
+        try {
+            activity.setContentView(view.apply { setContent {
+                CompositionLocalProvider(
+                    LocalSquircleEnabled provides false,
+                    LocalDensity provides Density(LocalDensity.current.density, 1.4f)
+                ) {
+                    ComfyControllerTheme(dark) {
+                        DanbooruScreen(vm, runtime) { GallerySourcePicker(GalleryHomeSource.DANBOORU) {} }
+                    }
+                }
+            } })
+            compose.waitForIdle()
+            compose.waitUntil(10000) {
+                pictures.take(4).all { p -> runtime.imageLoader.memoryCache?.keys?.any {
+                    it.key == p.mediaKey(runtime.settings.namespace(), "sample", p.sampleUrl!!)
+                } == true }
+            }
+            compose.waitForIdle()
+            for (text in listOf("最新", "热度", "排行榜", "评分", "收藏", "一般"))
+                compose.onNodeWithText(text).assertIsDisplayed()
+            save(view, "gallery-320-large-dark")
+            compose.onNodeWithText("排行榜").performClick()
+            compose.onNodeWithText("周榜").performClick()
+            compose.waitForIdle()
+            save(view, "ranking-320-large-dark")
+            compose.runOnIdle { dark = false }
+            compose.waitForIdle()
+            save(view, "ranking-320-large-light")
         } finally { controller.pause().stop().destroy() }
     }
 }

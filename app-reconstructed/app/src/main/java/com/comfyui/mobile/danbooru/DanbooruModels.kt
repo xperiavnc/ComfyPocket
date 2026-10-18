@@ -30,9 +30,11 @@ data class DanbooruPost(
     val width: Int? = null,
     val height: Int? = null,
     val rating: String = "",
-    val source: String = ""
+    val source: String = "",
+    val variants: List<DanbooruMediaVariant> = emptyList()
 ) {
-    val isVideo get() = extension.lowercase() in setOf("webm", "mp4", "mkv", "mov", "zip", "swf")
+    val isVideo get() = extension.lowercase() in DANBOORU_VIDEO_EXTENSIONS
+    val isImage get() = extension.isBlank() || extension.lowercase() in DANBOORU_IMAGE_EXTENSIONS
     val postUrl get() = "https://danbooru.donmai.us/posts/$id"
     fun mediaKey(scope: String, representation: String, url: String): String =
         "danbooru:$scope:$id:${md5.orEmpty()}:$representation:${danbooruHash(url)}"
@@ -113,8 +115,18 @@ object DanbooruJson {
         }, obj.media("preview_file_url"), obj.media("large_file_url"), obj.media("file_url"),
             obj.text("md5"), obj.text("file_ext").orEmpty(),
             obj.number("image_width")?.toInt(), obj.number("image_height")?.toInt(),
-            obj.text("rating").orEmpty(), obj.text("source").orEmpty())
+            obj.text("rating").orEmpty(), obj.text("source").orEmpty(),
+            obj.getAsJsonObjectOrNull("media_asset")?.get("variants")?.takeIf { it.isJsonArray }?.asJsonArray
+                ?.mapNotNull { value ->
+                    value.takeIf { it.isJsonObject }?.asJsonObject?.let { variant ->
+                        variant.media("url")?.let { url ->
+                            DanbooruMediaVariant(url, variant.text("file_ext").orEmpty(),
+                                variant.text("type").orEmpty(), variant.number("width")?.toInt())
+                        }
+                    }
+                }.orEmpty())
     }
+    private fun JsonObject.getAsJsonObjectOrNull(key: String): JsonObject? = get(key)?.takeIf { it.isJsonObject }?.asJsonObject
     fun posts(json: String): List<DanbooruPost> = parse {
         val array = JsonParser.parseString(json)
         if (!array.isJsonArray) throw DanbooruException("帖子列表格式错误，请重试")

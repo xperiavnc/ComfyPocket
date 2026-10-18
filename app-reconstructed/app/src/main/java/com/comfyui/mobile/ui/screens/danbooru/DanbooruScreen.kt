@@ -95,7 +95,8 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
             if (vm.hasDetail) IconButton(onClick = vm::back) {
                 Icon(MiuixIcons.Back, contentDescription = if (state.selected.isNotEmpty()) "退出多选" else "返回图片列表")
             }
-            Text(if (state.selected.isNotEmpty()) "已选 ${state.selected.size} 个标签" else if (vm.hasDetail) "图片详情" else "画廊",
+            Text(if (state.selected.isNotEmpty()) "已选 ${state.selected.size} 个标签"
+                else if (vm.hasDetail) (if (state.detail?.isVideo == true) "视频详情" else "图片详情") else "画廊",
                 Modifier.weight(1f), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = vm::showSettings) { Icon(MiuixIcons.Settings, contentDescription = "Danbooru 设置") }
         }
@@ -114,7 +115,7 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
             Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)
                 .testTag(if (snapshot.detail) "danbooru-detail-page" else "danbooru-browse-page")) {
               if (snapshot.detail) {
-                DanbooruDetailScreen(snapshot.state, runtime, vm, Modifier.weight(1f).padding(bottom = clearance))
+                DanbooruDetailScreen(snapshot.state, runtime, vm, Modifier.weight(1f), bottomClearance = clearance)
               } else {
                 sourcePicker()
                 DanbooruBrowseControls(input, { input = it }, snapshot.state.query,

@@ -1,24 +1,28 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.comfyui.mobile.danbooru.*
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -50,21 +54,22 @@ internal fun DanbooruBrowseControls(
             },
             modifier = Modifier.fillMaxWidth()
         )
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf(DanbooruSort.LATEST, DanbooruSort.HOT, DanbooruSort.RANKING, DanbooruSort.SCORE, DanbooruSort.FAVORITES).forEach {
-                    DanbooruPill(it.title, query.sort == it) { onSort(it) }
-                }
-                if (query.sort == DanbooruSort.CUSTOM) DanbooruPill("自定义", true) {}
+        // Lightweight text tabs instead of five tall slabs and a clipped scrolling row.
+        // Wrap on small screens/large fonts; every choice remains visible and tappable.
+        FlowRow(Modifier.fillMaxWidth().testTag("danbooru-browse-filters"),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf(DanbooruSort.LATEST, DanbooruSort.HOT, DanbooruSort.RANKING, DanbooruSort.SCORE, DanbooruSort.FAVORITES).forEach {
+                DanbooruBrowseChip(it.title, query.sort == it) { onSort(it) }
             }
-            DanbooruPill(query.filter.title + " ▾", false) { filtersOpen = true }
+            if (query.sort == DanbooruSort.CUSTOM) DanbooruBrowseChip("自定义", true) {}
+            DanbooruBrowseChip(query.filter.title, false, dropdown = true) { filtersOpen = true }
         }
         if (query.sort == DanbooruSort.RANKING) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 RankingPeriod.entries.forEach { value ->
-                    DanbooruPill(value.title, query.rankingPeriod == value) { onPeriod(value) }
+                    DanbooruBrowseChip(value.title, query.rankingPeriod == value) { onPeriod(value) }
                 }
-                Spacer(Modifier.weight(1f))
+                Row {
                 IconButton(onClick = { onDate(query.rankingPeriod.shift(query.rankingDate, -1)) }) {
                     Icon(MiuixIcons.Back, contentDescription = "上一期", modifier = Modifier.size(16.dp))
                 }
@@ -75,6 +80,7 @@ internal fun DanbooruBrowseControls(
                 ) {
                     Icon(MiuixIcons.Back, contentDescription = "下一期", modifier = Modifier.size(16.dp).rotate(180f),
                         tint = scheme.onSurface.copy(alpha = if (canAdvance) 1f else 0.25f))
+                }
                 }
             }
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -90,6 +96,29 @@ internal fun DanbooruBrowseControls(
             ContentFilter.entries.filter { it != ContentFilter.CUSTOM }.forEach { filter ->
                 DanbooruPill(filter.title, query.filter == filter) { onFilter(filter); filtersOpen = false }
             }
+        }
+    }
+}
+
+@Composable
+private fun DanbooruBrowseChip(
+    text: String, selected: Boolean, dropdown: Boolean = false, onClick: () -> Unit
+) {
+    val scheme = MiuixTheme.colorScheme
+    val touch = if (dropdown) Modifier.clickable(role = Role.Button, onClick = onClick)
+        else Modifier.selectable(selected = selected, role = Role.Tab, onClick = onClick)
+    Box(Modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).then(touch),
+        contentAlignment = Alignment.Center) {
+        Row(Modifier.clip(RoundedCornerShape(12.dp))
+            .background(if (selected) scheme.primary.copy(alpha = 0.14f) else Color.Transparent)
+            .then(if (dropdown) Modifier.border(1.dp, scheme.onSurfaceSecondary.copy(alpha = 0.22f), RoundedCornerShape(12.dp)) else Modifier)
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(text, style = MiuixTheme.textStyles.footnote2.copy(fontSize = 14.sp),
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (selected) scheme.primary else scheme.onSurfaceSecondary, maxLines = 1)
+            if (dropdown) Icon(Icons.Default.ArrowDropDown, contentDescription = null,
+                modifier = Modifier.size(16.dp), tint = scheme.onSurfaceSecondary)
         }
     }
 }

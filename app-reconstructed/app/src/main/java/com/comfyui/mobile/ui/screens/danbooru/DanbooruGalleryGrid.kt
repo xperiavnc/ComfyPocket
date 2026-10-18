@@ -5,22 +5,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import coil.ImageLoader
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.comfyui.mobile.danbooru.DanbooruPost
 import com.comfyui.mobile.danbooru.DanbooruState
 import top.yukonga.miuix.kmp.basic.*
-import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
@@ -66,33 +63,21 @@ internal fun DanbooruGalleryGrid(
 /** A browser tile contains only the image; post metadata lives in the detail screen. */
 @Composable
 internal fun DanbooruImageTile(post: DanbooruPost, imageLoader: ImageLoader, namespace: String, onClick: () -> Unit) {
-    val context = LocalContext.current
-    // 180 px API thumbnails look blurred on high-density phones. Reuse the detail sample cache.
-    val url = post.sampleUrl ?: post.previewUrl
-    val representation = if (url == post.sampleUrl) "sample" else "thumbnail"
     val ratio = if ((post.width ?: 0) > 0 && (post.height ?: 0) > 0)
         (post.width!!.toFloat() / post.height!!).coerceIn(0.6f, 1.6f) else 0.8f
-    var failure by remember(post.id, url, namespace) { mutableStateOf<String?>(null) }
     Box(
         Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(14.dp))
             .background(MiuixTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick).testTag("danbooru-image-${post.id}"),
         contentAlignment = Alignment.Center
     ) {
-        if (url != null && failure == null) {
-            AsyncImage(
-                ImageRequest.Builder(context).data(url).size(720)
-                    .diskCacheKey(post.mediaKey(namespace, representation, url))
-                    .memoryCacheKey(post.mediaKey(namespace, representation, url)).crossfade(true).build(),
-                contentDescription = "查看图片", imageLoader = imageLoader, modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop, onError = { failure = danbooruMediaError(it.result.throwable) }
-            )
-        } else {
-            Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(MiuixIcons.Image, contentDescription = null, modifier = Modifier.size(28.dp),
-                    tint = MiuixTheme.colorScheme.onSecondaryContainer)
-                Text(if (failure == null) "点按查看标签" else "图片加载失败\n点按查看详情",
-                    style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer)
+        DanbooruMediaPreview(post, imageLoader, namespace, Modifier.fillMaxSize(), ContentScale.Crop, compact = true)
+        if (post.isVideo) {
+            Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).size(28.dp)
+                .clip(RoundedCornerShape(14.dp)).background(MiuixTheme.colorScheme.background.copy(alpha = 0.8f)),
+                contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.PlayArrow, contentDescription = "视频", modifier = Modifier.size(18.dp),
+                    tint = MiuixTheme.colorScheme.onSurface)
             }
         }
     }

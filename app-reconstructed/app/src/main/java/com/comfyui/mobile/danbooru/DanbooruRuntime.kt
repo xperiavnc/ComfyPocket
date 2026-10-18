@@ -9,6 +9,7 @@ import com.comfyui.mobile.BuildConfig
 import com.comfyui.mobile.data.MediaFileCache
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -35,17 +36,25 @@ class DanbooruRuntime private constructor(context: Context) : DanbooruService {
     private val userId = AtomicLong(0)
     private val loaded = runCatching { store.load() }
     override val initialError = if (loaded.isFailure) "画廊配置读取失败，请重新检查并保存设置" else null
-    private data class Clients(val settings: DanbooruSettings, val api: OkHttpClient, val media: OkHttpClient, val repository: DanbooruRepository)
+    private data class Clients(
+        val settings: DanbooruSettings, val api: OkHttpClient, val media: OkHttpClient,
+        val video: OkHttpClient, val repository: DanbooruRepository
+    )
     private fun agent() = "ComfyPocket/${BuildConfig.VERSION_NAME} (Danbooru${userId.get().takeIf { it > 0 }?.let { "; user #$it" }.orEmpty()})"
     private fun clients(settings: DanbooruSettings): Clients {
         val api = DanbooruHttp.client(settings, api = true, ::agent)
-        return Clients(settings, api, DanbooruHttp.client(settings, api = false, ::agent),
+        val media = DanbooruHttp.client(settings, api = false, ::agent)
+        // Streaming can legitimately last longer than the 60s image-call timeout.
+        // Share the exact proxy/interceptors/dispatcher/pool; keep the 30s read timeout.
+        val video = media.newBuilder().callTimeout(0, TimeUnit.MILLISECONDS).build()
+        return Clients(settings, api, media, video,
             DanbooruRepository(api, queue, File(directory, "pages/${settings.namespace()}")))
     }
     @Volatile private var current = clients(loaded.getOrDefault(DanbooruSettings()))
     override val settings get() = current.settings
     override val repository: DanbooruDataSource get() = current.repository
     val mediaCalls = Call.Factory { request -> current.media.newCall(request) }
+    val videoCalls = Call.Factory { request -> current.video.newCall(request) }
     val imageLoader: ImageLoader by lazy {
         ImageLoader.Builder(app).callFactory { mediaCalls }
             .components { add(ImageDecoderDecoder.Factory()) }
@@ -100,7 +109,8 @@ class DanbooruRuntime private constructor(context: Context) : DanbooruService {
     suspend fun original(post: DanbooruPost): File {
         val snapshot = current
         val url = post.fileUrl ?: throw DanbooruException("此帖子没有可用原图地址；Tag 仍可复制")
-        if (post.isVideo) throw DanbooruException("首版仅保存或分享静态图片；视频请打开原帖")
+        if (post.isVideo) throw DanbooruException("视频可在详情播放；保存或分享原始视频请打开原帖")
+        if (!post.isImage) throw DanbooruException("此动态格式支持封面和标签，原始文件请打开原帖")
         val key = post.mediaKey(snapshot.settings.namespace(), "original", url)
         val ext = post.extension.lowercase().takeIf { it in setOf("jpg", "jpeg", "png", "webp", "gif", "avif") }
             ?: throw DanbooruException("原图格式尚未支持，请打开原帖")

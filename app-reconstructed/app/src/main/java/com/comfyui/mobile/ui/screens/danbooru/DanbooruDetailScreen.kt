@@ -11,6 +11,7 @@ import android.webkit.MimeTypeMap
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -19,11 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.core.content.FileProvider
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.comfyui.mobile.danbooru.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -34,7 +35,8 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun DanbooruDetailScreen(
-    state: DanbooruState, runtime: DanbooruRuntime, vm: DanbooruViewModel, modifier: Modifier = Modifier
+    state: DanbooruState, runtime: DanbooruRuntime, vm: DanbooruViewModel, modifier: Modifier = Modifier,
+    bottomClearance: Dp = 0.dp
 ) {
     val post = state.detail
     if (post == null) {
@@ -48,6 +50,8 @@ internal fun DanbooruDetailScreen(
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var original by rememberSaveable(post.id) { mutableStateOf(false) }
+    val namespace = runtime.settings.namespace()
+    var playVideo by rememberSaveable(post.id, namespace) { mutableStateOf(false) }
     fun toast(text: String) { Toast.makeText(context, text, Toast.LENGTH_SHORT).show() }
     fun download(share: Boolean) {
         if (busy) return
@@ -90,20 +94,30 @@ internal fun DanbooruDetailScreen(
             } finally { busy = false }
         }
     }
-    LazyColumn(modifier, contentPadding = PaddingValues(bottom = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    LazyColumn(modifier.testTag("danbooru-detail-scroll"), contentPadding = PaddingValues(bottom = 20.dp + bottomClearance),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            val url = if (original && !post.isVideo) post.fileUrl else post.sampleUrl ?: post.previewUrl
-            var failure by remember(post.id, url) { mutableStateOf<String?>(null) }
-            if (url != null && failure == null) {
-                val representation = if (url == post.fileUrl && !post.isVideo) "original" else "sample"
-                val cacheKey = post.mediaKey(runtime.settings.namespace(), representation, url)
-                AsyncImage(ImageRequest.Builder(context).data(url).diskCacheKey(cacheKey).memoryCacheKey(cacheKey).build(),
-                    contentDescription = "帖子预览", imageLoader = runtime.imageLoader,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 440.dp)
-                        .clip(RoundedCornerShape(18.dp)).background(MiuixTheme.colorScheme.surfaceContainerHigh),
-                    contentScale = ContentScale.Fit, onError = { failure = danbooruMediaError(it.result.throwable) })
-            } else Text((failure ?: "图片暂不可用") + "；仍可查看和复制下方 Tag")
-            if (post.isVideo) Text("视频 / 动态资源（${post.extension}）：首版提供封面与 Tag，播放请打开原帖")
+            val ratio = if ((post.width ?: 0) > 0 && (post.height ?: 0) > 0)
+                (post.width!!.toFloat() / post.height!!).coerceIn(0.6f, 1.8f) else 1.2f
+            Box(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 440.dp).aspectRatio(ratio)
+                .clip(RoundedCornerShape(18.dp)).background(MiuixTheme.colorScheme.surfaceContainerHigh)) {
+                if (post.isVideo && playVideo) {
+                    DanbooruVideoPlayer(post, runtime.videoCalls, namespace, Modifier.fillMaxSize())
+                } else {
+                    DanbooruMediaPreview(post, runtime.imageLoader, namespace, Modifier.fillMaxSize(),
+                        ContentScale.Fit, originalOnly = original)
+                    if (post.isVideo && post.playbackCandidates().isNotEmpty()) {
+                        DanbooruSmallAction("播放视频",
+                            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+                            primary = true) { playVideo = true }
+                    }
+                }
+            }
+            if (post.isVideo && post.playbackCandidates().isEmpty()) {
+                Text("暂未提供视频地址；仍可复制标签或打开原帖查看")
+            } else if (!post.isImage && !post.isVideo) {
+                Text("${post.extension.uppercase()} 动态格式暂提供封面与标签，播放请打开原帖")
+            }
             state.detailError?.let { Feedback(it + "；保留已读 Tag", "重试详情", vm::retryDetail) }
             if (state.detailLoading) Text("正在更新帖子信息…", style = MiuixTheme.textStyles.footnote1)
         }
@@ -117,7 +131,7 @@ internal fun DanbooruDetailScreen(
                     if (post.source.isNotBlank()) Text(post.source, style = MiuixTheme.textStyles.footnote2,
                         color = MiuixTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (post.fileUrl != null && !post.isVideo) {
+                        if (post.fileUrl != null && post.isImage) {
                             DanbooruSmallAction(if (busy) "读取中…" else "保存原图", enabled = !busy) { download(false) }
                             DanbooruSmallAction("分享原图", enabled = !busy) { download(true) }
                             DanbooruSmallAction(if (original) "显示预览" else "查看原图") { original = !original }
