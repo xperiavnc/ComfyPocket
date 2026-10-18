@@ -4,6 +4,8 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import time
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 
 from aiohttp import ClientSession, ClientTimeout
@@ -11,9 +13,10 @@ from yarl import URL
 
 
 class CivitaiError(Exception):
-    def __init__(self, message: str, status: int = 400):
+    def __init__(self, message: str, status: int = 400, retry_after: int = 0):
         super().__init__(message)
         self.status = status
+        self.retry_after = retry_after
 
 
 class CivitaiClient:
@@ -100,6 +103,15 @@ class CivitaiClient:
         async with self.session() as session:
             response = await transport.open(session, url)
             try:
+                if response.status == 429:
+                    retry = response.headers.get("Retry-After", "")
+                    try:
+                        seconds = int(retry) if retry.isdigit() else int(
+                            parsedate_to_datetime(retry).timestamp() - time.time())
+                    except (ValueError, TypeError, OverflowError):
+                        seconds = 60
+                    raise CivitaiError("Civitai 请求过于频繁，请按任务中的重试时间继续", 429,
+                                       max(60, min(seconds, 7 * 86400)))
                 self.check_status(response.status)
                 data = bytearray()
                 async for chunk in response.content.iter_chunked(64 * 1024):

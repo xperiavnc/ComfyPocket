@@ -62,7 +62,7 @@ import kotlin.math.roundToInt
 internal val pocketTabs = listOf(Screen.Dashboard, Screen.Control, Screen.Agent, Screen.AiApps, Screen.Gallery)
 internal val pocketSecondaryRoutes = listOf(
     "ai_app/{id}", "console", "settings", "theme", "servers", "about",
-    "agent_settings", "cloud_tasks", "model_hub"
+    "agent_settings", "cloud_tasks", "model_hub", "local_models", "plugins"
 )
 
 /** A reselect is a no-op. All switches, including root Back, preserve the departing stack. */

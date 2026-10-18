@@ -200,9 +200,11 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                     showFullScreen = true
                 }
             } else null,
-            totalModels = assetsSummary?.totalModels ?: 0,
-            totalPlugins = assetsSummary?.totalPlugins ?: 0,
+            totalModels = assetsSummary?.totalModels,
+            totalPlugins = assetsSummary?.totalPlugins,
             onAssetsClick = { navController.navigate("model_hub") },
+            onLocalModelsClick = { navController.navigate("local_models") },
+            onPluginsClick = { navController.navigate("plugins") },
             authorized = rhConnState == RhConnState.AUTHORIZED,
             rhCoins = rhAccountData?.displayCoins,
             rhMoney = rhAccountData?.displayMoney,

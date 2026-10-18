@@ -307,6 +307,8 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Authorization", cdn_request["headers"])
         self.assertNotIn("TEST_KEY", self.queue.state_file.read_text())
         self.assertNotIn("https://", self.queue.state_file.read_text())
+        self.assertNotIn("index_status", self.queue.state_file.read_text(),
+                         "The old queue schema must remain readable on plugin rollback")
 
     async def test_client_download_url_is_ignored(self):
         job = await self.settled((await self.submit(downloadUrl="http://127.0.0.1/private"))["download_id"])

@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 25
-        versionName = "0.0.23-navigation-motion"
+        versionCode = 26
+        versionName = "0.0.24-model-center"
     }
 
     buildFeatures {

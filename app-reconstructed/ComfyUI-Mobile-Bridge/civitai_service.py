@@ -10,6 +10,7 @@ from aiohttp import web
 from .civitai_client import CivitaiClient, CivitaiError
 from .civitai_downloads import DownloadQueue, ModelPaths
 from .credentials import CredentialStore, validate_key
+from .model_center import ModelCenterService
 
 
 def response(data=None, message="success", status=200):
@@ -66,6 +67,8 @@ class CivitaiService:
         self.credentials = CredentialStore(directory)
         self.client = client or CivitaiClient(self.credentials)
         self.queue = DownloadQueue(self.client, ModelPaths(folder_paths), directory)
+        self.model_center = ModelCenterService(folder_paths, directory, self.client)
+        self.queue.on_completed = self.model_center.download_completed
         self.settings_lock = asyncio.Lock()
 
     async def guarded(self, operation):
@@ -134,3 +137,4 @@ class CivitaiService:
             app.router.add_get(f"/api/mobile/civitai/{prefix}tasks", self.tasks)
             app.router.add_post(f"/api/mobile/civitai/{prefix}task-action", self.task_action)
         app.on_shutdown.append(self.shutdown)
+        self.model_center.register(app)

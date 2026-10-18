@@ -17,6 +17,7 @@ local.properties
 .image_cache/
 civitai-settings.json
 download-tasks.json
+**/mobile_bridge/model-center/
 
 # Credentials, signing material and local environment files.
 .env

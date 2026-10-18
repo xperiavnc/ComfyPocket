@@ -10,6 +10,7 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/BUILD.md`：重建工程的构建版本与说明。
 - `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
 - `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
+- `app-reconstructed/MODEL_CENTER.md`：P0–P1 模型中心、电脑索引 / 标注、离线缓存、哈希资料及版本契约。
 - `app-reconstructed/DANBOORU_GALLERY_PLAN.md`：Danbooru 原生画廊的实施记录、账号/代理操作与验证边界。
 - `app-reconstructed/MATERIAL.md`：两种底栏风格、老版页面动画、预览移除与历史迁移说明。
 - `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
@@ -52,6 +53,14 @@ cd app-reconstructed
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
 
 ## 当前验证状态
+
+- `0.0.24-model-center`（versionCode 26）：主页原资产区分流到本地模型 / 在线集市 /
+  原插件列表，模型中心三个分页；新增服务器隔离缓存、注册目录索引、详情标注与修订撤销、
+  精确 SHA-256 资料补全、独立资料队列和下载后资料留存，配套 Bridge 2.2。
+  两种底栏、原页面动画、正反提示词和角色库保留。
+  Android debug 构建及 506 项测试通过；Bridge 76 项、原设置面板 10 项通过。
+  本批仅 P0–P1，Agent 接线 / 写词库仍为后续阶段；电脑新插件部署和真机联调尚待完成。
+  验证边界与使用说明见 `app-reconstructed/MODEL_CENTER.md`。
 
 - `0.0.23-navigation-motion`（versionCode 25）：底栏切页按入口顺序区分左右，修复
   「应用 → Agent」仍从右进入；两种底栏保持同一套老版距离、时长，RTL 镜像，二级页进入/返回不变。

@@ -63,6 +63,8 @@ internal fun PocketApp(viewModel: MainViewModel) {
                     "agent_settings" -> AgentSettingsScreen(nav, viewModel)
                     "cloud_tasks" -> RhTaskRecordsScreen(nav, viewModel)
                     "model_hub" -> ModelHubScreen(nav, viewModel)
+                    "local_models" -> ModelHubScreen(nav, viewModel, initialPage = 0)
+                    "plugins" -> ModelHubScreen(nav, viewModel, initialPage = 3)
                 }
               }
             }

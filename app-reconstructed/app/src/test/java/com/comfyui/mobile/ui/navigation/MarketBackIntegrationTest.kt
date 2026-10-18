@@ -61,7 +61,7 @@ class MarketBackIntegrationTest {
     private fun openMarket() {
         compose.onNodeWithText("集市 ↗").performClick()
         compose.waitForIdle()
-        compose.onNodeWithText("Civitai 市场").assertExists()
+        compose.onNodeWithText("在线集市").assertExists()
     }
 
     private fun assertDashboard() {
@@ -107,7 +107,7 @@ class MarketBackIntegrationTest {
             activity.onBackPressedDispatcher.dispatchOnBackCancelled()
         }
         compose.waitForIdle()
-        compose.onNodeWithText("Civitai 市场").assertExists()
+        compose.onNodeWithText("在线集市").assertExists()
         assertFalse(activity.isFinishing)
         val trace = NavigationDiagnostics.report(activity).substringAfterLast("SESSION_STARTED")
         assertFalse("Cancelling a gesture must not run the return action", " MARKET_BACK_SYSTEM " in trace)
@@ -130,7 +130,7 @@ class MarketBackIntegrationTest {
         compose.waitForIdle()
         compose.runOnIdle { activity.onBackPressedDispatcher.onBackPressed() }
         compose.waitForIdle()
-        compose.onNodeWithText("Civitai 市场").assertExists()
+        compose.onNodeWithText("在线集市").assertExists()
         assertFalse(activity.isFinishing)
         val trace = NavigationDiagnostics.report(activity).substringAfterLast("SESSION_STARTED")
         assertFalse("The market handler must yield to the dialog", " MARKET_BACK_SYSTEM " in trace)

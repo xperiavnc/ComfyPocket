@@ -1,0 +1,9 @@
+{
+  "10": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "fixture.safetensors"}},
+  "style": {"class_type": "LoraLoader", "inputs": {"model": ["10", 0], "clip": ["10", 1], "lora_name": "styles/fixture.safetensors", "strength_model": 0.6, "strength_clip": 0.5}},
+  "modelOnly": {"class_type": "LoraLoaderModelOnly", "inputs": {"model": ["style", 0], "lora_name": "character/fixture.safetensors", "strength_model": 0.8}},
+  "positive": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["style", 1], "text": "FIXTURE_Trigger, a landscape"}},
+  "negative": {"class_type": "CLIPTextEncode", "inputs": {"clip": ["style", 1], "text": "blur, low quality"}},
+  "latent": {"class_type": "EmptyLatentImage", "inputs": {"width": 1024, "height": 1024, "batch_size": 1}},
+  "sampler": {"class_type": "KSampler", "inputs": {"model": ["modelOnly", 0], "positive": ["positive", 0], "negative": ["negative", 0], "latent_image": ["latent", 0], "seed": 1, "steps": 20, "cfg": 7.0, "sampler_name": "euler", "scheduler": "normal", "denoise": 1.0}}
+}

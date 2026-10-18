@@ -105,9 +105,11 @@ fun UserProfileCard(
     isBusy: Boolean = false,
     latestCount: Int = 0,
     onLatestClick: (() -> Unit)? = null,
-    totalModels: Int = 0,
-    totalPlugins: Int = 0,
+    totalModels: Int? = null,
+    totalPlugins: Int? = null,
     onAssetsClick: (() -> Unit)? = null,
+    onLocalModelsClick: (() -> Unit)? = null,
+    onPluginsClick: (() -> Unit)? = null,
     // RunningHub 业务指标
     authorized: Boolean = false,
     rhCoins: Double? = null,
@@ -514,7 +516,6 @@ fun UserProfileCard(
                             .weight(1f)
                             .clip(RoundedCornerShape(16.dp))
                             .background(scheme.surfaceContainer.copy(alpha = 0.45f))
-                            .then(if (onAssetsClick != null) Modifier.clickable(onClick = onAssetsClick) else Modifier)
                             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -531,6 +532,8 @@ fun UserProfileCard(
     )
                                 Text(
                                     text = "集市 ↗",
+                                    modifier = Modifier.then(if (onAssetsClick != null)
+                                        Modifier.clickable(onClick = onAssetsClick) else Modifier),
                                     style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp, fontWeight = FontWeight.SemiBold),
                                     color = scheme.primary
     )
@@ -542,16 +545,17 @@ fun UserProfileCard(
                                 verticalAlignment = Alignment.CenterVertically
     ) {
                                 Column(
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.weight(1f).then(if (onLocalModelsClick != null)
+                                        Modifier.clickable(onClick = onLocalModelsClick) else Modifier),
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
                                     Text(
-                                        text = "模型",
+                                        text = "本地模型",
                                         style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
                                         color = onCardColor.copy(alpha = 0.60f)
     )
                                     Text(
-                                        text = if (totalModels > 0) "$totalModels" else "—",
+                                        text = totalModels?.toString() ?: "—",
                                         style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
                                         color = onCardColor,
                                         maxLines = 1,
@@ -569,6 +573,7 @@ fun UserProfileCard(
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)
+                                         .then(if (onPluginsClick != null) Modifier.clickable(onClick = onPluginsClick) else Modifier)
                                         .padding(start = 10.dp),
                                     verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
@@ -578,7 +583,7 @@ fun UserProfileCard(
                                         color = onCardColor.copy(alpha = 0.60f)
     )
                                     Text(
-                                        text = if (totalPlugins > 0) "$totalPlugins" else "—",
+                                        text = totalPlugins?.toString() ?: "—",
                                         style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
                                         color = onCardColor,
                                         maxLines = 1,

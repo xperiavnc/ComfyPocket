@@ -21,6 +21,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.comfyui.mobile.model.CivitaiTasksData
+import com.comfyui.mobile.ui.components.rememberDialogDismiss
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -36,6 +37,24 @@ import java.util.Locale
 fun MarketDownloadQueueDialog(
     connected: Boolean,
     onDismiss: () -> Unit,
+    load: suspend () -> Result<CivitaiTasksData>,
+    action: suspend (String, String) -> Result<Unit>
+) {
+    val dismiss = rememberDialogDismiss(onDismiss)
+    OverlayDialog(show = dismiss.show, title = "电脑下载队列", onDismissRequest = dismiss::dismiss,
+        onDismissFinished = dismiss::onDismissFinished) {
+        Column(dismiss.modifier) {
+            MarketDownloadQueuePanel(connected, load, action)
+            TextButton(text = "关闭", onClick = dismiss::dismiss,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+        }
+    }
+}
+
+/** The model center reuses the same queue, task IDs and pause/resume actions. */
+@Composable
+fun MarketDownloadQueuePanel(
+    connected: Boolean,
     load: suspend () -> Result<CivitaiTasksData>,
     action: suspend (String, String) -> Result<Unit>
 ) {
@@ -62,7 +81,6 @@ fun MarketDownloadQueueDialog(
         }
     }
 
-    OverlayDialog(show = true, title = "电脑下载队列", onDismissRequest = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("由 Mobile Bridge 原生下载；受限模型请在 ComfyUI 设置 → Mobile Bridge → Civitai 配置电脑 Key。",
                 style = MiuixTheme.textStyles.footnote1)
@@ -92,6 +110,9 @@ fun MarketDownloadQueueDialog(
                             "${String.format(Locale.US, "%.2f", speed)} MiB/s",
                             style = MiuixTheme.textStyles.footnote1)
                         task.error?.takeIf { it.isNotBlank() }?.let {
+                            Text(it, style = MiuixTheme.textStyles.footnote1)
+                        }
+                        task.index_status?.takeIf { it.isNotBlank() }?.let {
                             Text(it, style = MiuixTheme.textStyles.footnote1)
                         }
                         val id = task.download_id
@@ -126,8 +147,5 @@ fun MarketDownloadQueueDialog(
                     }
                 }
             }
-            TextButton(text = "关闭", onClick = onDismiss,
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
         }
-    }
 }

@@ -63,6 +63,14 @@ import com.comfyui.mobile.market.MarketConnectionMode
 import com.comfyui.mobile.market.MarketModelFilters
 import com.comfyui.mobile.market.MarketQuery
 import com.comfyui.mobile.market.MarketViewModel
+import com.comfyui.mobile.modelcenter.ModelCenterViewModel
+import com.comfyui.mobile.ui.screens.modelcenter.LocalModelsPage
+import com.comfyui.mobile.ui.screens.modelcenter.ModelTasksPage
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import com.comfyui.mobile.network.ConnectionState
 import com.comfyui.mobile.model.CivitaiModelItem
 import com.comfyui.mobile.model.CivitaiFileItem
@@ -107,7 +115,8 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 @Composable
 fun ModelHubScreen(
     navController: NavController,
-    viewModel: MainViewModel
+    viewModel: MainViewModel,
+    initialPage: Int = 1
 ) {
     val context = LocalContext.current
     val scheme = MiuixTheme.colorScheme
@@ -121,6 +130,8 @@ fun ModelHubScreen(
     val remoteReady = currentServer != null && !currentServer.isRunningHub &&
         connectionState == ConnectionState.CONNECTED
     val market: MarketViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val models: ModelCenterViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    val localState by models.state.collectAsState()
     val marketSettings by market.settings.collectAsState()
     val catalog by market.catalog.state.collectAsState()
     val gridState = rememberLazyGridState()
@@ -131,7 +142,8 @@ fun ModelHubScreen(
 
     val assetsSummary by viewModel.assetsSummary.collectAsState()
 
-    var selectedTabIndex by rememberSaveable { mutableIntStateOf(0) }
+    var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialPage) }
+    val pluginPage = initialPage == 3
 
     // Tab 0: Civitai
     val searchKeyword = catalog.keyword
@@ -156,13 +168,17 @@ fun ModelHubScreen(
     var detailAttempt by remember { mutableIntStateOf(0) }
     val backNavigation = remember { MarketBackNavigationGate() }
     fun returnFromMarket(source: NavigationDiagnostics.Event) {
+        if (selectedTabIndex == 0 && localState.detail != null) {
+            models.openDetail(null)
+            return
+        }
         NavigationDiagnostics.record(source, navController.currentDestination?.route)
         backNavigation.leave(
-            isCurrentMarket = navController.currentDestination?.route == "model_hub",
+            isCurrentMarket = navController.currentDestination?.route in setOf("model_hub", "local_models", "plugins"),
             pop = { navController.popBackStack() },
             openDashboard = {
                 navController.navigate(Screen.Dashboard.route) {
-                    popUpTo("model_hub") { inclusive = true }
+                    popUpTo(navController.currentDestination?.route ?: "model_hub") { inclusive = true }
                     launchSingleTop = true
                 }
             }
@@ -197,21 +213,42 @@ fun ModelHubScreen(
 
     LaunchedEffect(currentServerId, currentServer?.baseUrl, remoteReady) {
         market.bridgeContext("$currentServerId|${currentServer?.baseUrl.orEmpty()}", remoteReady)
+        models.context("$currentServerId|${currentServer?.baseUrl.orEmpty()}",
+            currentServer?.name.orEmpty(), currentServer?.baseUrl?.takeUnless { currentServer.isRunningHub }, remoteReady)
         if (remoteReady) viewModel.fetchAssetsSummary()
     }
     LaunchedEffect(selectedTabIndex) {
-        if (selectedTabIndex == 0) market.catalog.ensureLoaded()
-        if (selectedTabIndex == 1 && remoteReady) viewModel.fetchAssetsSummary()
+        if (selectedTabIndex == 1) market.catalog.ensureLoaded()
+        if (selectedTabIndex == 3 && remoteReady) viewModel.fetchAssetsSummary()
     }
     LaunchedEffect(selectedTabIndex, selectedType, selectedFilterTag,
         hasNextPage, isSearching, searchError, catalog.loadedPage) {
-        if (selectedTabIndex != 0 || !hasNextPage || isSearching || searchError != null) return@LaunchedEffect
+        if (selectedTabIndex != 1 || !hasNextPage || isSearching || searchError != null) return@LaunchedEffect
         snapshotFlow {
             val layout = gridState.layoutInfo
             layout.totalItemsCount > 0 &&
                 (layout.visibleItemsInfo.lastOrNull()?.index ?: -1) >= layout.totalItemsCount - 5
         }.distinctUntilChanged().collect { nearEnd ->
             if (nearEnd) market.catalog.load(reset = false)
+        }
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle, remoteReady, selectedTabIndex, localState.identity) {
+        if (!remoteReady || selectedTabIndex !in setOf(0, 2)) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                val before = models.state.value
+                val hadWork = before.page.scan.active || before.tasks.scan.active ||
+                    before.tasks.enrichment.any { it.status in setOf("queued", "hashing", "matching") }
+                models.pollTasks()
+                val live = models.state.value
+                if (selectedTabIndex == 0 && (hadWork || live.page.scan.active || live.tasks.scan.active ||
+                        live.tasks.enrichment.any { it.status in setOf("queued", "hashing", "matching") })) {
+                    models.refresh()
+                    live.detail?.let { models.openDetail(it.id) }
+                }
+                delay(2_000)
+            }
         }
     }
     LaunchedEffect(selectedModelDetail?.id, selectedVersion?.id, detailAttempt) {
@@ -243,8 +280,8 @@ fun ModelHubScreen(
         containerColor = scheme.background,
         topBar = {
             TopAppBar(
-                title = "集市",
-                largeTitle = "集市",
+                title = if (pluginPage) "已装插件" else "模型中心",
+                largeTitle = if (pluginPage) "已装插件" else "模型中心",
                 color = scheme.background,
                 scrollBehavior = scrollBehavior,
                 navigationIcon = {
@@ -253,15 +290,19 @@ fun ModelHubScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { showDownloadQueue = true }) {
+                    if (!pluginPage) IconButton(onClick = { models.openDetail(null); selectedTabIndex = 2 }) {
                         Icon(MiuixIcons.Download, contentDescription = "电脑下载队列")
                     }
-                    IconButton(onClick = { showMarketSettings = true }) {
+                    if (!pluginPage) IconButton(onClick = { showMarketSettings = true }) {
                         Icon(MiuixIcons.Settings, contentDescription = "集市连接、代理与 Key 设置")
                     }
                     IconButton(onClick = {
                         if (remoteReady) viewModel.fetchAssetsSummary()
-                        if (selectedTabIndex == 0) loadCivitai(reset = true, forceRefresh = true)
+                        if (selectedTabIndex == 1) loadCivitai(reset = true, forceRefresh = true)
+                        if (selectedTabIndex == 0) {
+                            models.refresh()
+                            localState.detail?.let { models.openDetail(it.id) }
+                        }
                     }) {
                         Icon(MiuixIcons.Refresh, contentDescription = "刷新")
                     }
@@ -276,15 +317,14 @@ fun ModelHubScreen(
                 .padding(top = innerPadding.calculateTopPadding())
         ) {
             // 顶部分类 Tab
-            Row(
+            if (!pluginPage && localState.detail == null) Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(
-                    "Civitai 市场",
-                    "插件 (${assetsSummary?.totalPlugins ?: 0})"
+                    "本地模型", "在线集市", "下载任务"
                 ).forEachIndexed { index, title ->
                     val isSelected = selectedTabIndex == index
                     Box(
@@ -292,7 +332,7 @@ fun ModelHubScreen(
                             .weight(1f)
                             .clip(RoundedCornerShape(10.dp))
                             .background(if (isSelected) scheme.primary else scheme.surfaceContainerHigh)
-                            .clickable { selectedTabIndex = index }
+                            .clickable { models.openDetail(null); selectedTabIndex = index }
                             .padding(vertical = 9.dp),
                         contentAlignment = Alignment.Center
                     ) {
@@ -310,8 +350,12 @@ fun ModelHubScreen(
             Spacer(modifier = Modifier.height(4.dp))
 
             when (selectedTabIndex) {
+                0 -> androidx.compose.runtime.key(localState.identity) {
+                    LocalModelsPage(models, localState)
+                }
+                2 -> ModelTasksPage(models, localState, market)
                 // Tab 0: Civitai
-                0 -> {
+                1 -> {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
@@ -503,7 +547,7 @@ fun ModelHubScreen(
                 }
 
                 // Tab 1: 已装插件
-                1 -> {
+                3 -> {
                     val plugins = assetsSummary?.plugins.orEmpty()
                     Column(
                         modifier = Modifier
@@ -608,6 +652,13 @@ fun ModelHubScreen(
     selectedModelDetail?.let { model ->
         val version = selectedVersion ?: model.versions.firstOrNull()
         val file = selectedFile ?: version?.preferredFile()
+        var installation by remember(model.id, version?.id, file?.id, currentServerId) {
+            mutableStateOf("正在确认当前电脑的安装状态…")
+        }
+        LaunchedEffect(model.id, version?.id, file?.id, currentServerId, remoteReady) {
+            installation = if (version != null && file != null)
+                models.installation(model.id, version.id, file.id) else "请先选择具体版本与文件"
+        }
         val effectiveSizeKB = when {
             file != null && file.sizeKB > 0 -> file.sizeKB
             version != null && version.sizeKB > 0 -> version.sizeKB
@@ -683,6 +734,7 @@ fun ModelHubScreen(
                     overflow = TextOverflow.Ellipsis
                 )
                 if (detailLoading) Text("正在加载完整详情…", style = MiuixTheme.textStyles.footnote1)
+                Text(installation, style = MiuixTheme.textStyles.footnote1, color = scheme.primary)
                 detailError?.let { message ->
                     Text(message, style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
                     TextButton(text = "重试详情与提示词", onClick = { detailAttempt++ })

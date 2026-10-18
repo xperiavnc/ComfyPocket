@@ -1,4 +1,4 @@
-# ComfyUI-Mobile-Bridge 2.1
+# ComfyUI-Mobile-Bridge 2.2
 
 独立的 ComfyPocket 服务端插件。直接读取 ComfyUI 模型目录，并提供 Civitai
 桥接浏览、原生模型下载和 ComfyUI 设置页。**不需要 Lora Manager。**
@@ -71,8 +71,8 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 
 ## API 兼容
 
-- `GET /api/mobile/status`：版本 `2.1.0`，提供 `native-civitai-downloads`、
-  `civitai-server-settings` 和 `system-monitor` 能力字段。
+- `GET /api/mobile/status`：版本 `2.2.0`，提供 `native-civitai-downloads`、
+  `civitai-server-settings`、`system-monitor` 和 `model-center-v1` 能力字段。
 - `GET /api/mobile/system/monitor`：CPU 利用率（0–100%）、内存总字节数与已用字节数。
 - `GET/POST /api/mobile/civitai/settings`：只由设置 GUI 使用；状态不返回 Key。
 - `POST /api/mobile/civitai/native-download`
@@ -122,3 +122,19 @@ Crystools 时 CPU 行显示“暂无数据”。不自动重启或中断现有�
 ```sh
 python -m unittest discover -s tests -p test_system_monitor.py -v
 ```
+
+## 2.2 模型中心
+
+配套 App 在主页原“资产”区分别进入本地模型、在线集市和原插件列表。
+模型索引、人工标注、哈希来源资料及独立补全任务放在
+`folder_paths.get_user_directory()/mobile_bridge/model-center/`；
+不在插件源码或模型二进制内，不新增 Lora Manager 依赖。
+
+更新须替换完整插件目录并重启，新增 `model_center.py`、`model_index.py` 必须部署。
+已有 `mobile_bridge/` 用户目录不可覆盖；原 Key 和下载任务继续使用。
+资料匹配复用电脑 Key / 代理，不自动使用手机配置。
+
+首次模型列表触发本地后台扫描和指纹计算，不自动查 Civitai。
+用户选择补全后查询完整 SHA-256，并验证版本里的实际文件；来源失败保留标注。
+下载完成复用已校验 SHA-256 和版本资料入库；资料失败不重下权重。
+完整 API、资料归属、队列 / 离线边界和 P0–P1 范围见上级 `MODEL_CENTER.md`。

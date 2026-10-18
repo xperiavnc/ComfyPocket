@@ -133,6 +133,7 @@ class DownloadJob:
     last_modified: str = ""
     error: str = ""
     speed_bytes: float = 0
+    index_status: str = ""
 
     def public(self):
         result = asdict(self)
@@ -156,6 +157,7 @@ class DownloadQueue:
         self.workers: dict[str, asyncio.Task] = {}
         self.slots = asyncio.Semaphore(concurrency)
         self.closing = False
+        self.on_completed = None
         if self.state_file.exists():
             try:
                 import json
@@ -173,8 +175,13 @@ class DownloadQueue:
 
     def persist(self):
         # URLs, key and headers are intentionally absent from the persisted schema.
+        # Keep the 2.0/2.1 DownloadJob schema readable on rollback. The new
+        # informational index_status is public-only; durable metadata is in the
+        # independent model-center DB, not a new field in the old queue file.
         atomic_json(self.state_file, [
-            {**asdict(job), "speed_bytes": 0} for job in self.jobs.values()
+            {key: (0 if key == "speed_bytes" else value)
+             for key, value in asdict(job).items() if key != "index_status"}
+            for job in self.jobs.values()
         ])
 
     async def metadata(self, model_id, version_id, file_id=None):
@@ -277,7 +284,7 @@ class DownloadQueue:
             self.workers.pop(job.download_id, None)
 
     async def download(self, job):
-        _, _, filename, digest, url = await self.metadata(
+        version_data, _, filename, digest, url = await self.metadata(
             job.model_id, job.model_version_id, job.file_id)
         if filename != job.filename or digest != job.sha256:
             raise CivitaiError("官方文件信息已变化，请取消后重新创建任务")
@@ -356,13 +363,25 @@ class DownloadQueue:
         job.status = "verifying"
         job.downloaded_size = part.stat().st_size
         self.persist()
-        # Hash in chunks on the worker coroutine: cancellable between chunks and no detached
-        # thread still reading a .part file after a pause/cancel response.
+        # Join each worker read even on cancellation: no thread is still reading
+        # a .part file when pause/cancel closes or removes it.
         checksum = hashlib.sha256()
+        before_hash = part.stat()
         with part.open("rb") as stream:
-            while chunk := stream.read(1024 * 1024):
+            while True:
+                reading = asyncio.create_task(asyncio.to_thread(stream.read, 1024 * 1024))
+                try:
+                    chunk = await asyncio.shield(reading)
+                except asyncio.CancelledError:
+                    await reading
+                    raise
+                if not chunk:
+                    break
                 checksum.update(chunk)
                 await asyncio.sleep(0)
+        after_hash = part.stat()
+        if (before_hash.st_size, before_hash.st_mtime_ns) != (after_hash.st_size, after_hash.st_mtime_ns):
+            raise CivitaiError("临时文件在校验期间发生变化，请重新下载", 409)
         if checksum.hexdigest() != job.sha256:
             part.unlink(missing_ok=True)
             job.downloaded_size = 0
@@ -376,6 +395,14 @@ class DownloadQueue:
             part.unlink()
         job.total_size = job.downloaded_size
         job.status = "completed"
+        if self.on_completed:
+            try:
+                await self.on_completed(job, target, version_data)
+                job.index_status = "已入本地模型库，版本资料已保存"
+            except Exception:
+                # A text/index failure is not a failed weight download. Never fetch
+                # the multi-GB weight again merely to repair its metadata.
+                job.index_status = "模型已下载；资料入库未完成，可在模型中心同步/补全"
 
     async def action(self, action: str, download_id: str):
         job = self.jobs.get(download_id)

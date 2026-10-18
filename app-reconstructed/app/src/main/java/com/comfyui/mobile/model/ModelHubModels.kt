@@ -175,7 +175,8 @@ data class CivitaiDownloadTaskItem(
     val total_size: Double? = null,
     val downloaded_size: Double? = null,
     val error: String? = null,
-    val preview_url: String? = null
+    val preview_url: String? = null,
+    val index_status: String? = null
 ) {
     val effectiveName: String
         get() = model_name ?: filename ?: file_name ?: "下载任务"
