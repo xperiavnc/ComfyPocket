@@ -27,6 +27,7 @@ data class ModelProvider(
     val images: List<ModelPreview> = emptyList()
 )
 data class ModelPreview(val url: String = "")
+data class ModelPreviewInfo(val source: String = "", val version: String = "")
 
 data class LocalModel(
     val id: String = "", val serverId: String = "", val rootId: String = "",
@@ -35,7 +36,8 @@ data class LocalModel(
     val mtime: Long? = null, val sha256: String? = null, val present: Boolean = false,
     val nodeModelName: String? = null, val loadStatus: String = "unresolved",
     val lastUsed: Long? = null, val annotation: ModelAnnotation = ModelAnnotation(),
-    val revision: Int = 0, val provider: ModelProvider? = null, val matchBasis: String = ""
+    val revision: Int = 0, val provider: ModelProvider? = null, val matchBasis: String = "",
+    val preview: ModelPreviewInfo? = null
 ) {
     val displayName: String get() = annotation.alias.ifBlank { name }
     val baseModel: String get() = annotation.baseModel.ifBlank { provider?.baseModel.orEmpty() }

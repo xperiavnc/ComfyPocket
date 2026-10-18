@@ -3,6 +3,7 @@ package com.comfyui.mobile.modelcenter
 import com.google.gson.Gson
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.*
@@ -81,6 +82,20 @@ class ModelCenterHttpTest {
             val result = runCatching { repository(server).annotate(LocalModel(id = "a"), ModelAnnotation()) }
             assertTrue(result.isFailure)
             assertTrue(result.exceptionOrNull()!!.message!!.contains("刷新"))
+        }
+    }
+
+    @Test fun previewRequestIsServerScopedVersionedAndSupportsOldBridgeFallback() {
+        MockWebServer().use { server ->
+            val repo = repository(server)
+            val local = LocalModel(id = "cover-id", preview = ModelPreviewInfo("local", "cover revision"))
+            val url = repo.preview(local)!!.toHttpUrl()
+            assertEquals("/comfy/api/mobile/model-center/models/cover-id/preview", url.encodedPath)
+            assertEquals("cover revision", url.queryParameter("v"))
+            assertEquals("0", url.queryParameter("index"))
+            assertNotEquals(repo.preview(local), repo.preview(local.copy(preview = ModelPreviewInfo("local", "new"))))
+            assertNull(repo.preview(local.copy(preview = ModelPreviewInfo("none"))))
+            assertNotNull(repo.preview(LocalModel(id = "old-bridge-item")))
         }
     }
 }

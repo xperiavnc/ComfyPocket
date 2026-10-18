@@ -7,9 +7,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -17,13 +19,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import com.comfyui.mobile.modelcenter.*
 import com.comfyui.mobile.ui.components.rememberDialogDismiss
 import com.comfyui.mobile.ui.navigation.pocketPageEnter
@@ -33,6 +37,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.GridView
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.text.DateFormat
@@ -58,7 +64,7 @@ internal fun ModelChip(label: String, selected: Boolean = false, onClick: () -> 
         style = MiuixTheme.textStyles.footnote1,
         modifier = Modifier.background(
             if (selected) colors.primary.copy(alpha = .12f) else colors.surfaceContainerHigh,
-            RoundedCornerShape(12.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 9.dp))
+            RoundedCornerShape(999.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp))
 }
 
 @Composable
@@ -79,14 +85,16 @@ fun LocalModelsPage(vm: ModelCenterViewModel, state: ModelCenterState) {
 }
 
 @Composable
-private fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState) {
+internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
+                            coverUrl: (LocalModel) -> String? = { vm.preview(it) }) {
     if (!state.restored) {
         Text("正在恢复此电脑的模型缓存…", modifier = Modifier.padding(16.dp))
         return
     }
     var showFilters by remember { mutableStateOf(false) }
+    var showIndexInfo by remember { mutableStateOf(false) }
     var keyword by remember(state.identity, state.query.q) { mutableStateOf(state.query.q) }
-    val list = rememberLazyListState(state.scrollIndex, state.scrollOffset)
+    val list = rememberLazyGridState(state.scrollIndex, state.scrollOffset)
     LaunchedEffect(keyword) {
         delay(350)
         if (keyword != state.query.q) vm.query(state.query.copy(q = keyword))
@@ -101,90 +109,133 @@ private fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState) {
                 vm.scroll(index, offset)
             }
     }
-    LazyColumn(state = list, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(if (state.compact) 5.dp else 10.dp),
+    LazyVerticalGrid(state = list, columns = if (state.compact) GridCells.Fixed(1) else GridCells.Adaptive(156.dp),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize().testTag("local-model-list")) {
-      item(key = "controls") {
-       Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextField(value = keyword, onValueChange = { keyword = it }, label = "名称、中文别名、角色、触发词",
-                singleLine = true, useLabelAsPlaceholder = true, modifier = Modifier.weight(1f).testTag("local-model-search"))
-            TextButton(text = "筛选", onClick = { showFilters = true })
-            TextButton(text = if (state.compact) "卡片" else "紧凑", onClick = vm::compact)
-        }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("", "LORA", "CHECKPOINT", "UNET", "VAE", "TEXT_ENCODER").forEach { category ->
-                ModelChip(modelCategoryLabel(category), state.query.category == category) {
-                    vm.query(state.query.copy(category = category))
-                }
-            }
-        }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            (linkedMapOf("" to "全部用途", "unclassified" to "待分类") + modelUseCases).forEach { (key, label) ->
-                ModelChip(label, state.query.useCase == key) { vm.query(state.query.copy(useCase = key)) }
-            }
-        }
-        val stats = state.page.stats
-        Text("${state.serverLabel.ifBlank { "未选择电脑" }} · " +
-            if (state.fromCache) "离线 / 缓存 · 上次读取 ${modelTime(state.cacheAt)}"
-            else "电脑已连接 · 同步 ${modelTime(state.page.lastSync)}",
-            style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSecondaryContainer)
-        Text(if (state.fromCache) "仅检索已缓存条目；文件是否仍存在需联网同步确认。"
-            else "${if (state.page.scanComplete) "索引" else "部分索引"} ${stats.locations} 个位置 · ${modelBytes(stats.bytes)} · " +
-                "已哈希 ${stats.hashed} / ${stats.locations} · 已知唯一内容 ${stats.uniqueContents}",
-            style = MiuixTheme.textStyles.footnote1)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            val scan = state.tasks.scan.takeIf { it.active } ?: state.page.scan
-            Text(if (scan.active) "${if (scan.status == "hashing") "计算指纹" else "扫描目录"} · 已发现 ${scan.discovered} · 指纹 ${scan.hashed}"
-                else "筛选结果 ${state.page.total} · 缺失记录 ${stats.missing}",
-                modifier = Modifier.weight(1f), style = MiuixTheme.textStyles.footnote1)
-            TextButton(text = if (scan.active) "暂停同步" else "同步", enabled = state.connected,
-                onClick = { vm.scan(if (scan.active) "pause" else "start") })
-            TextButton(text = "本页补全", enabled = state.connected && !state.fromCache && state.page.items.isNotEmpty(),
-                onClick = { vm.enrich(state.page.items.filter { it.present }.map { it.id }.take(100)) })
-        }
-        state.error?.let { Text(it, color = MiuixTheme.colorScheme.error, style = MiuixTheme.textStyles.footnote1) }
-        state.notice?.let { Text(it, style = MiuixTheme.textStyles.footnote1) }
-        if (state.loading && state.page.items.isEmpty()) Text("正在读取电脑模型索引…")
-        if (!state.loading && state.page.items.isEmpty()) {
-            Text(if (state.connected) "当前筛选没有模型；首次同步会先显示清单，再后台计算指纹。"
-                 else "暂无此电脑的模型缓存。连接并更新 Bridge 后同步；在线集市仍可手机直连。")
-            TextButton(text = "重新读取", onClick = { vm.refresh() })
-        }
-       }
-      }
-            items(state.page.items, key = { it.id }) { model ->
-                Card(onClick = { vm.openDetail(model.id) }, cornerRadius = 16.dp,
-                    modifier = Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(if (state.compact) 12.dp else 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text((if (model.annotation.favorite) "★ " else "") + model.displayName,
-                            style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
-                            maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text("${modelCategoryLabel(model.category)} · ${model.format} · ${modelBytes(model.size)}",
-                            style = MiuixTheme.textStyles.footnote1)
-                        Text(model.relativePath, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSecondaryContainer)
-                        if (!state.compact) {
-                            Text(model.rootPath, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                style = MiuixTheme.textStyles.footnote1)
-                            Text("${model.baseModel.ifBlank { "底模未知" }} · " +
-                                (model.annotation.useCases.mapNotNull(modelUseCases::get).joinToString(" / ").ifBlank { "待分类" }) +
-                                " · " + if (model.provider != null) "SHA 匹配资料" else "来源未知",
-                                style = MiuixTheme.textStyles.footnote1)
-                        }
-                        if (!model.present || model.loadStatus in setOf("ambiguous", "unconfirmed"))
-                            Text(modelLoadStatus(model, state.fromCache), style = MiuixTheme.textStyles.footnote1,
-                                color = MiuixTheme.colorScheme.error)
+        item(key = "controls", span = { GridItemSpan(maxLineSpan) }) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ModelCenterSearch(keyword, { keyword = it }, "搜索名称、别名或触发词",
+                        Modifier.weight(1f).testTag("local-model-search"))
+                    ModelAction("筛选", onClick = { showFilters = true })
+                    IconButton(onClick = vm::compact, modifier = Modifier.size(40.dp)) {
+                        Icon(if (state.compact) MiuixIcons.GridView else Icons.AutoMirrored.Filled.List,
+                            if (state.compact) "切换到卡片视图" else "切换到紧凑列表", modifier = Modifier.size(22.dp))
                     }
                 }
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("", "LORA", "CHECKPOINT", "UNET", "VAE", "TEXT_ENCODER").forEach { category ->
+                        ModelChip(modelCategoryLabel(category), state.query.category == category) {
+                            vm.query(state.query.copy(category = category))
+                        }
+                    }
+                }
+                val stats = state.page.stats
+                val scan = state.tasks.scan.takeIf { it.active } ?: state.page.scan
+                Card(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text("${state.page.total} 个结果 · 库占用 ${modelBytes(stats.bytes)}",
+                                    style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium)
+                                Text(if (state.fromCache) "离线缓存 · ${state.serverLabel.ifBlank { "本地模型库" }}"
+                                    else "${state.serverLabel.ifBlank { "当前电脑" }} · " +
+                                        if (scan.active) "正在同步 ${scan.hashed}/${scan.discovered}"
+                                        else if (state.page.scanComplete) "已同步" else "索引尚未完成",
+                                    style = MiuixTheme.textStyles.footnote2,
+                                    color = MiuixTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            ModelAction(if (scan.active) "暂停" else "同步", enabled = state.connected) {
+                                vm.scan(if (scan.active) "pause" else "start")
+                            }
+                            ModelAction("详情") { showIndexInfo = !showIndexInfo }
+                        }
+                        if (scan.active) ModelProgressTrack(scan.hashed.toFloat() / scan.discovered.coerceAtLeast(1),
+                            Modifier.padding(bottom = 8.dp))
+                        if (showIndexInfo) {
+                            Text("${if (state.page.scanComplete) "已索引" else "部分索引"} ${stats.locations} 个文件位置 · " +
+                                "指纹 ${stats.hashed}/${stats.locations} · 唯一内容 ${stats.uniqueContents}\n" +
+                                "${if (state.fromCache) "缓存时间" else "同步时间"}：${modelTime(if (state.fromCache) state.cacheAt else state.page.lastSync)}" +
+                                if (state.fromCache) "\n仅查询已浏览缓存，文件状态需联网确认。" else "",
+                                style = MiuixTheme.textStyles.footnote2,
+                                color = MiuixTheme.colorScheme.onSecondaryContainer)
+                            ModelAction("补全本页资料", state.connected && !state.fromCache && state.page.items.isNotEmpty()) {
+                                vm.enrich(state.page.items.filter { it.present }.map { it.id }.take(100))
+                            }
+                        }
+                    }
+                }
+                if (state.query.useCase.isNotBlank() || state.query.favorite || state.query.baseModel.isNotBlank() ||
+                    state.query.rootId.isNotBlank() || state.query.source.isNotBlank())
+                    ModelAction("已启用筛选 · 调整") { showFilters = true }
+                state.error?.let { Text(it, color = MiuixTheme.colorScheme.error, style = MiuixTheme.textStyles.footnote1) }
+                state.notice?.let { Text(it, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.primary) }
+                if (state.loading && state.page.items.isEmpty()) Text("正在读取模型…", style = MiuixTheme.textStyles.footnote1)
             }
-            if (state.page.hasMore) item {
-                TextButton(text = if (state.loading) "正在加载…" else "加载更多（已显示 ${state.page.items.size}）",
-                    enabled = !state.loading, onClick = { vm.refresh(append = true) }, modifier = Modifier.fillMaxWidth())
+        }
+        if (!state.loading && state.page.items.isEmpty()) item(span = { GridItemSpan(maxLineSpan) }) {
+            Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (state.connected) "没有符合条件的模型" else "暂无此电脑的模型缓存",
+                    style = MiuixTheme.textStyles.body2)
+                Text("调整筛选，或连接电脑后同步模型库", style = MiuixTheme.textStyles.footnote1,
+                    color = MiuixTheme.colorScheme.onSecondaryContainer, modifier = Modifier.padding(top = 6.dp))
+                ModelAction("重新读取") { vm.refresh() }
             }
+        }
+        items(state.page.items, key = { it.id }) { model ->
+            LocalModelCard(model, coverUrl(model), state.compact, state.fromCache) { vm.openDetail(model.id) }
+        }
+        if (state.page.hasMore) item(span = { GridItemSpan(maxLineSpan) }) {
+            TextButton(text = if (state.loading) "正在加载…" else "加载更多（已显示 ${state.page.items.size}）",
+                enabled = !state.loading, onClick = { vm.refresh(append = true) }, modifier = Modifier.fillMaxWidth())
+        }
     }
     if (showFilters) ModelFiltersDialog(state, onDismiss = { showFilters = false }, onSave = vm::query)
+}
+
+@Composable
+internal fun LocalModelCard(model: LocalModel, previewUrl: String?, compact: Boolean, cached: Boolean, onClick: () -> Unit) {
+    val colors = MiuixTheme.colorScheme
+    Card(onClick = onClick, cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth().testTag("model-card-${model.id}")) {
+        if (compact) Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            LocalModelCover(model, previewUrl, cached, Modifier.width(64.dp).height(80.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                ModelCardName(model)
+                Text("${modelCategoryLabel(model.category)} · ${modelBytes(model.size)}",
+                    style = MiuixTheme.textStyles.footnote1, color = colors.onSecondaryContainer)
+                Text(model.baseModel.ifBlank { model.relativePath.substringBeforeLast('/', "未标注底模") },
+                    style = MiuixTheme.textStyles.footnote2, color = colors.onSecondaryContainer,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!model.present) ModelStatusBadge("文件待定位")
+            }
+        } else Column {
+            Box(Modifier.padding(6.dp)) {
+                LocalModelCover(model, previewUrl, cached, Modifier.fillMaxWidth().aspectRatio(.95f))
+                Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    ModelStatusBadge(modelCategoryLabel(model.category))
+                    if (model.annotation.favorite) ModelStatusBadge("收藏", true)
+                }
+            }
+            Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                ModelCardName(model)
+                Text(model.baseModel.ifBlank { "未标注底模" }, style = MiuixTheme.textStyles.footnote2,
+                    color = colors.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (model.present) modelBytes(model.size) else "文件待定位",
+                    style = MiuixTheme.textStyles.footnote2, color = colors.onSecondaryContainer)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelCardName(model: LocalModel) {
+    Text(model.annotation.alias.ifBlank { model.name.substringBeforeLast('.', model.name) },
+        style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.SemiBold,
+        maxLines = 2, overflow = TextOverflow.Ellipsis)
 }
 
 internal fun modelLoadStatus(item: LocalModel, cached: Boolean): String = if (cached)
@@ -213,6 +264,12 @@ private fun ModelFiltersDialog(state: ModelCenterState, onDismiss: () -> Unit, o
                     }
                 }
                 Text("最近使用尚无记录时显示未知，不以修改时间代替。", style = MiuixTheme.textStyles.footnote1)
+                Text("模型用途")
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    (linkedMapOf("" to "全部用途", "unclassified" to "待分类") + modelUseCases).forEach { (key, label) ->
+                        ModelChip(label, query.useCase == key) { query = query.copy(useCase = key) }
+                    }
+                }
                 ModelChip("仅收藏", query.favorite) { query = query.copy(favorite = !query.favorite) }
                 TextField(value = query.baseModel, onValueChange = { query = query.copy(baseModel = it) },
                     label = "底模系列（精确匹配，留空为全部）", singleLine = true)
@@ -243,7 +300,6 @@ private fun ModelFiltersDialog(state: ModelCenterState, onDismiss: () -> Unit, o
 @Composable
 private fun LocalModelDetails(vm: ModelCenterViewModel, state: ModelCenterState, item: LocalModel) {
     var editing by remember(item.id) { mutableStateOf(false) }
-    var showCover by remember(item.id) { mutableStateOf(false) }
     BackHandler(enabled = !editing && state.detail?.id == item.id) { vm.openDetail(null) }
     val writable = state.connected && !state.fromCache && !state.detailLoading
     Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
@@ -255,6 +311,10 @@ private fun LocalModelDetails(vm: ModelCenterViewModel, state: ModelCenterState,
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text(item.displayName, style = MiuixTheme.textStyles.title3, modifier = Modifier.testTag("local-model-detail"))
+            LocalModelCover(item, vm.preview(item), state.fromCache,
+                Modifier.fillMaxWidth().height(260.dp), contentScale = ContentScale.Fit)
+            Text(when (item.preview?.source) { "local" -> "本地封面"; "provider" -> "来源封面"; else -> "模型预览" },
+                style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer)
             state.notice?.let { Text(it, color = MiuixTheme.colorScheme.primary) }
             if (state.detailLoading) Text("正在刷新资料…")
             DetailSection("文件位置与指纹") {
@@ -298,11 +358,6 @@ private fun LocalModelDetails(vm: ModelCenterViewModel, state: ModelCenterState,
                         "更新：${modelTime(provider.fetchedAt)}", style = MiuixTheme.textStyles.footnote1)
                     SelectionContainer { Text(android.text.Html.fromHtml(provider.description,
                         android.text.Html.FROM_HTML_MODE_LEGACY).toString().ifBlank { "来源未提供简介" }) }
-                    if (provider.images.isNotEmpty()) {
-                        TextButton(text = if (showCover) "隐藏封面" else "按需加载来源封面", onClick = { showCover = !showCover })
-                        if (showCover) AsyncImage(model = vm.preview(item), contentDescription = "模型来源封面",
-                            modifier = Modifier.fillMaxWidth().height(220.dp))
-                    }
                     SelectionContainer { Text(provider.source, style = MiuixTheme.textStyles.footnote1) }
                 }
                 TextButton(text = if (provider == null) "补全资料" else "刷新来源资料", enabled = writable && item.present,

@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 26
-        versionName = "0.0.24-model-center"
+        versionCode = 27
+        versionName = "0.0.25-model-center-ui"
     }
 
     buildFeatures {

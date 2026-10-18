@@ -28,6 +28,8 @@ CATEGORIES = {
     "TEXT_ENCODER": ("text_encoders", "clip"),
 }
 FORMATS = {".safetensors", ".ckpt", ".pt", ".pth", ".bin", ".gguf", ".sft", ".onnx"}
+PREVIEW_SUFFIXES = (".preview.png", ".preview.jpg", ".preview.jpeg", ".preview.webp",
+                    ".png", ".jpg", ".jpeg", ".webp")
 USE_CASES = ("character", "style", "clothing", "pose", "scene", "lighting", "other")
 
 
@@ -101,7 +103,7 @@ class ModelIndex:
             roots = [dict(row) for row in db.execute("SELECT id,category,path,status FROM roots ORDER BY category,path")]
             return {"schemaVersion": SCHEMA, "serverId": values["serverId"],
                     "capabilities": ["model-index", "model-annotations", "hash-enrichment",
-                                     "download-index", "model-previews"],
+                                      "download-index", "model-previews", "local-model-previews"],
                     "categories": sorted({r["category"] for r in roots}),
                     "useCases": list(USE_CASES), "roots": roots,
                     "storage": "ComfyUI user directory/mobile_bridge/model-center",
@@ -415,7 +417,49 @@ class ModelIndex:
             annotations = {r["key"]: dict(r) for r in db.execute("SELECT * FROM annotations WHERE key IN (?,?)",
                            (annotation_key(row), "location:" + row["id"]))}
             providers = {row["sha256"]: self.provider(row["sha256"])} if row["sha256"] else {}
-            return self._item(row, annotations, providers)
+            return self.with_preview(self._item(row, annotations, providers))
+
+    def local_preview(self, item):
+        """Exact sibling covers, independent of provider matching and weight hashing."""
+        if not item["present"]:
+            return None
+        root = next((r for r in self.registered_roots() if r["id"] == item["rootId"]), None)
+        if not root:
+            return None
+        directory = Path(root["path"]).resolve()
+        model = directory / item["relativePath"]
+        if not model.resolve().is_relative_to(directory) or not model.is_file():
+            return None
+        for stem in (model.with_suffix(""), model):
+            for suffix in PREVIEW_SUFFIXES:
+                candidate = Path(str(stem) + suffix)
+                try:
+                    if candidate.is_symlink() or not candidate.resolve().is_relative_to(directory):
+                        continue
+                    if not candidate.is_file():
+                        continue
+                    with candidate.open("rb") as stream:
+                        header = stream.read(12)
+                    if (header.startswith(b"\x89PNG\r\n\x1a\n") or header.startswith(b"\xff\xd8") or
+                            (header.startswith(b"RIFF") and header[8:12] == b"WEBP")):
+                        return candidate
+                except OSError:
+                    continue
+        return None
+
+    def with_preview(self, item):
+        path = self.local_preview(item)
+        if path:
+            stat = path.stat()
+            item["preview"] = {"source": "local",
+                               "version": identity(str(path), str(stat.st_mtime_ns), str(stat.st_size))}
+        else:
+            provider = item["provider"] or {}
+            images = provider.get("images") or []
+            item["preview"] = ({"source": "provider",
+                                "version": identity(images[0]["url"], str(provider.get("fetchedAt", 0)))}
+                               if item["sha256"] and images else {"source": "none", "version": ""})
+        return item
 
     def query(self, query):
         try:
@@ -476,7 +520,7 @@ class ModelIndex:
             filtered.sort(key=key)
             info = self.info()
             return {"schemaVersion": SCHEMA, "serverId": info["serverId"],
-                    "items": filtered[(page-1)*limit:page*limit], "page": page,
+                    "items": [self.with_preview(item) for item in filtered[(page-1)*limit:page*limit]], "page": page,
                     "total": len(filtered), "hasMore": page*limit < len(filtered),
                     "stats": stats, "lastSync": info["lastSync"],
                     "scanComplete": info["scanComplete"]}

@@ -362,9 +362,16 @@ class ModelCenterService:
     async def preview(self, request):
         async def run():
             item = await threaded(self.index.detail, request.match_info["id"])
+            number = int(request.query.get("index", "0"))
+            if number < 0:
+                raise CivitaiError("图片索引无效", 400)
+            local = await threaded(self.index.local_preview, item)
+            if local and number == 0:
+                return web.FileResponse(local, headers={"Cache-Control": "private, max-age=86400"})
             digest = item["sha256"]
             images = (item["provider"] or {}).get("images", [])
-            number = int(request.query.get("index", "0"))
+            if local:
+                number -= 1
             if not digest or not 0 <= number < len(images):
                 raise CivitaiError("此模型暂无来源图片", 404)
             url = images[number]["url"]
@@ -391,7 +398,13 @@ class ModelCenterService:
                     temp.write_bytes(payload)
                     temp.replace(path)
                 await threaded(publish)
-            return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400"})
+            def image_type():
+                with path.open("rb") as stream:
+                    header = stream.read(12)
+                return "image/png" if header.startswith(b"\x89PNG") else (
+                    "image/webp" if header[8:12] == b"WEBP" else "image/jpeg")
+            return web.FileResponse(path, headers={"Cache-Control": "private, max-age=86400",
+                                                   "Content-Type": await threaded(image_type)})
         return await self.guarded(run)
 
     async def shutdown(self, app):

@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -34,8 +35,13 @@ class LocalModelRepository(
     suspend fun tasks() = checked(api.tasks())
     suspend fun enrich(ids: List<String>, refresh: Boolean) = checked(api.enrich(EnrichmentWrite(ids, refresh)))
     suspend fun taskAction(id: String, action: String) = checked(api.taskAction(ModelAction(action, id)))
-    fun preview(item: LocalModel, index: Int = 0): String =
-        baseUrl.trimEnd('/') + "/api/mobile/model-center/models/${item.id}/preview?index=$index"
+    fun preview(item: LocalModel, index: Int = 0): String? {
+        if (item.preview?.source == "none") return null
+        return (baseUrl.trimEnd('/') + "/api/mobile/model-center/models/${item.id}/preview").toHttpUrl()
+            .newBuilder().addQueryParameter("index", index.toString())
+            .addQueryParameter("v", item.preview?.version?.takeIf { it.isNotBlank() }
+                ?: "${item.sha256 ?: item.mtime}:${item.provider?.fetchedAt ?: 0}").build().toString()
+    }
 
     private suspend fun <T> checked(reply: Response<ModelEnvelope<T>>, capability: Boolean = false): T =
         withContext(Dispatchers.IO) {

@@ -20,16 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -52,7 +47,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,6 +60,9 @@ import com.comfyui.mobile.market.MarketViewModel
 import com.comfyui.mobile.modelcenter.ModelCenterViewModel
 import com.comfyui.mobile.ui.screens.modelcenter.LocalModelsPage
 import com.comfyui.mobile.ui.screens.modelcenter.ModelTasksPage
+import com.comfyui.mobile.ui.screens.modelcenter.ModelCenterToolbar
+import com.comfyui.mobile.ui.screens.modelcenter.ModelCenterTabs
+import com.comfyui.mobile.ui.screens.modelcenter.ModelMarketPage
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -79,9 +76,7 @@ import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.Screen
 import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import com.comfyui.mobile.ui.navigation.MarketBackNavigationGate
-import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserFilterChipBar
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserManageFilterDialog
-import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserTypeTabs
 import com.comfyui.mobile.ui.screens.modelbrowser.loadPinnedFilterTags
 import com.comfyui.mobile.ui.screens.market.MarketModelInformation
 import com.comfyui.mobile.ui.screens.market.MarketDownloadQueueDialog
@@ -106,7 +101,6 @@ import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
-import top.yukonga.miuix.kmp.icon.extended.Search
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -145,8 +139,7 @@ fun ModelHubScreen(
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialPage) }
     val pluginPage = initialPage == 3
 
-    // Tab 0: Civitai
-    val searchKeyword = catalog.keyword
+    // Online catalog retains its existing filter and pagination state.
     val selectedType = catalog.type
     val selectedFilterTag = catalog.baseModel
     val pinnedFilterTags = remember { mutableStateListOf<String>().apply { addAll(loadPinnedFilterTags(context)) } }
@@ -154,7 +147,6 @@ fun ModelHubScreen(
 
     val isSearching = catalog.loading
     val searchError = catalog.error
-    val civitaiModels = catalog.items
     val hasNextPage = catalog.hasNextPage
     var showMarketSettings by remember { mutableStateOf(false) }
     var showDownloadQueue by remember { mutableStateOf(false) }
@@ -279,7 +271,19 @@ fun ModelHubScreen(
     Scaffold(
         containerColor = scheme.background,
         topBar = {
-            TopAppBar(
+            if (!pluginPage) ModelCenterToolbar(
+                onBack = { returnFromMarket(NavigationDiagnostics.Event.MARKET_BACK_TOOLBAR) },
+                onSettings = { showMarketSettings = true },
+                onRefresh = {
+                    if (remoteReady) viewModel.fetchAssetsSummary()
+                    if (selectedTabIndex == 1) loadCivitai(reset = true, forceRefresh = true)
+                    if (selectedTabIndex == 0) {
+                        models.refresh()
+                        localState.detail?.let { models.openDetail(it.id) }
+                    }
+                    if (selectedTabIndex == 2) scope.launch { models.pollTasks() }
+                }
+            ) else TopAppBar(
                 title = if (pluginPage) "已装插件" else "模型中心",
                 largeTitle = if (pluginPage) "已装插件" else "模型中心",
                 color = scheme.background,
@@ -314,237 +318,31 @@ fun ModelHubScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(top = innerPadding.calculateTopPadding())
+                .padding(top = innerPadding.calculateTopPadding(), bottom = innerPadding.calculateBottomPadding())
         ) {
-            // 顶部分类 Tab
-            if (!pluginPage && localState.detail == null) Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    "本地模型", "在线集市", "下载任务"
-                ).forEachIndexed { index, title ->
-                    val isSelected = selectedTabIndex == index
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSelected) scheme.primary else scheme.surfaceContainerHigh)
-                            .clickable { models.openDetail(null); selectedTabIndex = index }
-                            .padding(vertical = 9.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = title,
-                            style = MiuixTheme.textStyles.body2.copy(
-                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                            ),
-                            color = if (isSelected) scheme.onPrimary else scheme.onSurface
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
+            if (!pluginPage && localState.detail == null)
+                ModelCenterTabs(selectedTabIndex) { models.openDetail(null); selectedTabIndex = it }
 
             when (selectedTabIndex) {
                 0 -> androidx.compose.runtime.key(localState.identity) {
                     LocalModelsPage(models, localState)
                 }
                 2 -> ModelTasksPage(models, localState, market)
-                // Tab 0: Civitai
-                1 -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp)
-                    ) {
-                        ModelBrowserTypeTabs(
-                            selectedType = selectedType,
-                            onTypeSelected = {
-                                market.catalog.filter(type = it)
-                                scope.launch { gridState.scrollToItem(0) }
-                            }
-                        )
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // 2. 搜索框
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextField(
-                                value = searchKeyword,
-                                onValueChange = market.catalog::keyword,
-                                label = "搜索模型",
-                                useLabelAsPlaceholder = true,
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                keyboardActions = KeyboardActions(onSearch = { loadCivitai(reset = true) }),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Card(
-                                modifier = Modifier.size(46.dp),
-                                cornerRadius = 12.dp,
-                                colors = CardDefaults.defaultColors(color = scheme.primary),
-                                onClick = { loadCivitai(reset = true) }
-                            ) {
-                                Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                                    Icon(MiuixIcons.Search, contentDescription = "搜索", tint = scheme.onPrimary)
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        ModelBrowserFilterChipBar(
-                            selectedFilterTag = selectedFilterTag,
-                            pinnedFilterTags = pinnedFilterTags,
-                            onFilterTagChange = {
-                                market.catalog.filter(baseModel = it)
-                                scope.launch { gridState.scrollToItem(0) }
-                            },
-                            onManageClick = { showManageFilterDialog = true }
-                        )
-
-                        Spacer(modifier = Modifier.height(8.dp))
-                        (catalog.notice ?: searchError?.takeIf { civitaiModels.isNotEmpty() })?.let { message ->
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(message, style = MiuixTheme.textStyles.footnote1,
-                                    color = scheme.onSecondaryContainer, modifier = Modifier.weight(1f))
-                                if (searchError != null) TextButton(text = "重试",
-                                    onClick = market.catalog::retry)
-                            }
-                        }
-
-                        // 4. 模型列表
-                        Box(modifier = Modifier.fillMaxSize()) {
-                            if (isSearching && civitaiModels.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("正在搜索...", style = MiuixTheme.textStyles.body2, color = scheme.onSecondaryContainer)
-                                }
-                            } else if (searchError != null && civitaiModels.isEmpty()) {
-                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(searchError, style = MiuixTheme.textStyles.body2, color = scheme.error)
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        TextButton(text = "重试", onClick = { loadCivitai(reset = true) })
-                                    }
-                                }
-                            } else {
-                                LazyVerticalGrid(
-                                    columns = GridCells.Fixed(2),
-                                    contentPadding = PaddingValues(bottom = 16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    state = gridState,
-                                    modifier = Modifier.fillMaxSize()
-                                ) {
-                                    items(civitaiModels, key = { it.id }) { item ->
-                                        Card(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            cornerRadius = 12.dp,
-                                            colors = CardDefaults.defaultColors(color = scheme.surfaceContainer),
-                                            pressFeedbackType = PressFeedbackType.Tilt,
-                                            showIndication = true,
-                                            onClick = {
-                                                selectedModelDetail = item
-                                                selectedVersion = item.versions.firstOrNull()
-                                                selectedFile = item.versions.firstOrNull()?.preferredFile()
-                                                detailAttempt = 0
-                                                detailError = null
-                                            }
-                                        ) {
-                                            Column(modifier = Modifier.padding(6.dp)) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(115.dp)
-                                                        .clip(RoundedCornerShape(8.dp))
-                                                        .background(scheme.surfaceContainerHigh)
-                                                ) {
-                                                    val displayImgUrl = resolveImageUrl(item.previewUrl)
-                                                    if (!displayImgUrl.isNullOrBlank()) {
-                                                        AsyncImage(
-                                                            model = imageRequest(displayImgUrl),
-                                                            imageLoader = marketImageLoader,
-                                                            contentDescription = null,
-                                                            contentScale = ContentScale.Crop,
-                                                            modifier = Modifier.fillMaxSize()
-                                                        )
-                                                    }
-                                                    val bm = item.versions.firstOrNull()?.baseModel
-                                                    if (!bm.isNullOrBlank()) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .align(Alignment.TopEnd)
-                                                                .padding(4.dp)
-                                                                .clip(RoundedCornerShape(4.dp))
-                                                                .background(scheme.surface.copy(alpha = 0.85f))
-                                                                .padding(horizontal = 4.dp, vertical = 2.dp)
-                                                        ) {
-                                                            Text(
-                                                                text = bm,
-                                                                fontSize = 9.sp,
-                                                                fontWeight = FontWeight.Medium,
-                                                                color = scheme.onSurface
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Text(
-                                                    text = item.name,
-                                                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Text(
-                                                    text = "${item.creator} · ⬇${item.downloadCount}",
-                                                    style = MiuixTheme.textStyles.body2,
-                                                    fontSize = 10.sp,
-                                                    color = scheme.onSecondaryContainer,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (hasNextPage) {
-                                        item(span = { GridItemSpan(2) }) {
-                                            TextButton(
-                                                text = when {
-                                                    isSearching -> "正在加载更多..."
-                                                    searchError != null -> "加载失败，点击重试"
-                                                    else -> "已加载 ${civitaiModels.size} 个 · 加载更多"
-                                                },
-                                                onClick = {
-                                                    if (searchError != null) market.catalog.retry()
-                                                    else loadCivitai(reset = false)
-                                                },
-                                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                                            )
-                                        }
-                                    } else if (civitaiModels.isNotEmpty()) {
-                                        item(span = { GridItemSpan(2) }) {
-                                            Text(
-                                                "已显示 ${civitaiModels.size} 个模型，当前筛选已到底",
-                                                style = MiuixTheme.textStyles.footnote1,
-                                                color = scheme.onSecondaryContainer,
-                                                modifier = Modifier.padding(vertical = 12.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                1 -> ModelMarketPage(
+                    state = catalog, grid = gridState, pinnedTags = pinnedFilterTags,
+                    imageLoader = marketImageLoader, previewUrl = { resolveImageUrl(it.previewUrl) },
+                    imageRequest = ::imageRequest, onKeyword = market.catalog::keyword,
+                    onType = { market.catalog.filter(type = it); scope.launch { gridState.scrollToItem(0) } },
+                    onBaseModel = { market.catalog.filter(baseModel = it); scope.launch { gridState.scrollToItem(0) } },
+                    onManageTags = { showManageFilterDialog = true },
+                    onSearch = { loadCivitai(reset = true) }, onRetry = market.catalog::retry,
+                    onMore = { loadCivitai(reset = false) },
+                    onOpen = { item ->
+                        selectedModelDetail = item; selectedVersion = item.versions.firstOrNull()
+                        selectedFile = item.versions.firstOrNull()?.preferredFile()
+                        detailAttempt = 0; detailError = null
                     }
-                }
+                )
 
                 // Tab 1: 已装插件
                 3 -> {

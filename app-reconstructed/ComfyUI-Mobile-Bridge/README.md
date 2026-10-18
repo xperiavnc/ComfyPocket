@@ -1,8 +1,13 @@
-# ComfyUI-Mobile-Bridge 2.2
+# ComfyUI-Mobile-Bridge 2.2.1
 
 独立的 ComfyPocket 服务端插件。直接读取 ComfyUI 模型目录，并提供 Civitai
 桥接浏览、原生模型下载和 ComfyUI 设置页。**不需要 Lora Manager。**
 ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下载。
+
+2.2.1 为模型中心补充本地封面：不依赖在线识别或权重哈希完成，读取同目录的
+`模型名.preview.png/jpg/jpeg/webp` 或 `模型名.png/jpg/jpeg/webp`，也兼容保留权重扩展名
+的同名封面。优先使用本地封面，其次使用已匹配的 Civitai 封面；资料索引的 v1 契约保持兼容。
+列表仅对请求页探测封面，预览响应提供独立版本键，文件更新后不会继续命中旧图。
 
 ## 安装 / 从单文件版升级
 
@@ -14,7 +19,7 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
    **设置 → Mobile Bridge → Civitai → Civitai Key（电脑端下载）**。
 4. 粘贴原始 API Key，点击“保存 Key”，再点击“测试 Key / 电脑网络”。
    无需填写 `Bearer`。保存后新任务立即生效，不必再次重启。
-5. 使用配套的新版 ComfyPocket 下发下载。在集市右上角打开“电脑下载队列”，
+5. 使用配套的新版 ComfyPocket 下发下载。在模型中心“下载任务”分页（或详情下载队列）中，
    可查看进度、暂停、继续或取消。
 
 运行依赖是 ComfyUI 已有的 `aiohttp`；CPU/内存采样使用 ComfyUI 已有的 `psutil`，不新增模型管理器依赖。

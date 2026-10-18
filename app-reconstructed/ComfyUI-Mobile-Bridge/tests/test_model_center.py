@@ -107,6 +107,82 @@ class ModelCenterTests(unittest.IsolatedAsyncioTestCase):
         return await self.http.post("/api/mobile/model-center/models/" + self.item["id"] + "/annotation",
                                     json={"expectedRevision": revision, "annotation": annotation, **extra})
 
+    async def test_local_cover_before_hash_or_provider_matching(self):
+        image = b"\x89PNG\r\n\x1a\n" + b"fixture preview"
+        self.file.with_suffix(".preview.png").write_bytes(image)
+        item = (await self.query())["items"][0]
+        self.assertIsNone(item["sha256"])
+        self.assertEqual("local", item["preview"]["source"])
+        reply = await self.http.get("/api/mobile/model-center/models/" + item["id"] + "/preview")
+        self.assertEqual(200, reply.status)
+        self.assertEqual("image/png", reply.content_type)
+        self.assertEqual(image, await reply.read())
+        self.assertEqual([], self.client.calls)
+        self.assertEqual(b"fixture original", self.file.read_bytes())
+
+    async def test_cover_revision_changes_and_file_extension_sidecars_work(self):
+        cover = Path(str(self.file) + ".jpg")
+        cover.write_bytes(b"\xff\xd8" + b"cover one")
+        before = (await self.query())["items"][0]["preview"]
+        cover.write_bytes(b"\xff\xd8" + b"cover two changed")
+        after = (await self.query())["items"][0]["preview"]
+        self.assertEqual("local", after["source"])
+        self.assertNotEqual(before["version"], after["version"])
+        cover.unlink()
+        self.assertEqual("none", (await self.query())["items"][0]["preview"]["source"])
+
+    async def test_duplicate_model_names_keep_location_specific_covers(self):
+        second = Path(self.folders.values["loras"][1]) / self.file.name
+        second.write_bytes(self.file.read_bytes())
+        self.file.with_suffix(".png").write_bytes(b"\x89PNG\r\n\x1a\nfirst")
+        second.with_suffix(".png").write_bytes(b"\x89PNG\r\n\x1a\nsecond")
+        self.index.scan(threading.Event(), {"discovered": 0})
+        items = (await self.query())["items"]
+        self.assertEqual(2, len(items))
+        payloads = []
+        for item in items:
+            reply = await self.http.get("/api/mobile/model-center/models/" + item["id"] + "/preview")
+            self.assertEqual(200, reply.status)
+            payloads.append(await reply.read())
+        self.assertEqual(2, len(set(payloads)))
+
+    async def test_missing_or_invalid_cover_has_explicit_empty_state(self):
+        self.file.with_suffix(".png").write_text("not an image")
+        item = (await self.query())["items"][0]
+        self.assertEqual("none", item["preview"]["source"])
+        reply = await self.http.get("/api/mobile/model-center/models/" + item["id"] + "/preview")
+        self.assertEqual(404, reply.status)
+        self.assertEqual([], self.client.calls)
+
+    async def test_provider_cover_fallback_and_local_cover_priority(self):
+        url = "https://image.civitai.com/fixture.png"
+        self.client.version["images"] = [{"url": url, "type": "image"}]
+        result = await self.enrich()
+        self.assertEqual("completed", result["status"])
+        item = (await self.query())["items"][0]
+        self.assertEqual("provider", item["preview"]["source"])
+        cache = self.index.directory / "previews" / self.digest / (hashlib.sha256(url.encode()).hexdigest() + ".image")
+        cache.parent.mkdir(parents=True)
+        payload = b"\x89PNG\r\n\x1a\nprovider fixture"
+        cache.write_bytes(payload)
+        reply = await self.http.get("/api/mobile/model-center/models/" + item["id"] + "/preview")
+        self.assertEqual(200, reply.status)
+        self.assertEqual("image/png", reply.content_type)
+        self.assertEqual(payload, await reply.read())
+        self.file.with_suffix(".webp").write_bytes(b"RIFF1234WEBPlocal")
+        self.assertEqual("local", (await self.query())["items"][0]["preview"]["source"])
+        reply = await self.http.get("/api/mobile/model-center/models/" + item["id"] + "/preview")
+        self.assertEqual(b"RIFF1234WEBPlocal", await reply.read())
+
+    async def test_only_requested_page_probes_cover_files(self):
+        for number in range(4):
+            self.file.with_name(f"page-{number}.safetensors").write_bytes(b"fixture")
+        self.index.scan(threading.Event(), {"discovered": 0})
+        with patch.object(self.index, "with_preview", wraps=self.index.with_preview) as cover:
+            result = await self.query(pageSize=2, page=2)
+            self.assertEqual(2, len(result["items"]))
+            self.assertEqual(2, cover.call_count)
+
     async def test_contract_and_persistent_server_id(self):
         reply = await self.http.get("/api/mobile/model-center/capabilities")
         data = (await reply.json())["data"]
