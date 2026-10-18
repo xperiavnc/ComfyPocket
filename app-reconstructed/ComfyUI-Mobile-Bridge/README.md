@@ -1,8 +1,13 @@
-# ComfyUI-Mobile-Bridge 2.2.1
+# ComfyUI-Mobile-Bridge 2.2.2
 
 独立的 ComfyPocket 服务端插件。直接读取 ComfyUI 模型目录，并提供 Civitai
 桥接浏览、原生模型下载和 ComfyUI 设置页。**不需要 Lora Manager。**
 ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下载。
+
+2.2.2 修正索引完成判定：已注册、尚未创建、且从未扫描到的空目录（如 `output/loras`）
+标记为 `absent` 并跳过，不再导致扫描永久显示未完成。曾经可读或有模型记录的目录
+后来失联，以及真正的读取错误，仍保留原记录并报告部分索引；根目录状态随索引持久保存。
+升级后在手机本地模型页点击一次“同步”重新确认，已有指纹和资料继续复用，不需删除索引。
 
 2.2.1 为模型中心补充本地封面：不依赖在线识别或权重哈希完成，读取同目录的
 `模型名.preview.png/jpg/jpeg/webp` 或 `模型名.png/jpg/jpeg/webp`，也兼容保留权重扩展名
@@ -76,7 +81,7 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 
 ## API 兼容
 
-- `GET /api/mobile/status`：版本 `2.2.0`，提供 `native-civitai-downloads`、
+- `GET /api/mobile/status`：版本 `2.2.2`，提供 `native-civitai-downloads`、
   `civitai-server-settings`、`system-monitor` 和 `model-center-v1` 能力字段。
 - `GET /api/mobile/system/monitor`：CPU 利用率（0–100%）、内存总字节数与已用字节数。
 - `GET/POST /api/mobile/civitai/settings`：只由设置 GUI 使用；状态不返回 Key。

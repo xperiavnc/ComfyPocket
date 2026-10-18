@@ -40,7 +40,8 @@ internal fun AgentLocalTagSettings(
     onSave: (AgentPromptSettings) -> Unit
 ) {
     val app = LocalContext.current.applicationContext
-    val counts = remember(app) { LocalTagLibrary(app).counts }
+    val library = remember(app) { LocalTagLibrary(app) }
+    val counts = library.counts
     var draft by remember(settings) { mutableStateOf(settings) }
     var query by remember { mutableStateOf("") }
     var kind by remember { mutableStateOf("tag") }
@@ -69,7 +70,7 @@ internal fun AgentLocalTagSettings(
                 Text("绘图前查询本地词库", Modifier.weight(1f))
                 Switch(checked = draft.useLocalLibrary, onCheckedChange = { draft = draft.copy(useLocalLibrary = it) })
             }
-            Text("内置 ${String.format(Locale.ROOT, "%,d", counts.first)} 个标签、${String.format(Locale.ROOT, "%,d", counts.second)} 个角色，均有中文对照。中文、英文和别名均可离线查询，再由 Agent 编写正向和反向；不访问 Danbooru、不增加模型修订轮次。部分翻译可能有误，未命中保留原词。",
+            Text("内置 ${String.format(Locale.ROOT, "%,d", counts.first)} 个标签、${String.format(Locale.ROOT, "%,d", counts.second)} 个角色；${String.format(Locale.ROOT, "%,d", library.translatedCount)} 项有中文对照，${String.format(Locale.ROOT, "%,d", library.untranslatedCount)} 项保留上游英文待补译。ai-tag-toolbox 全部词表、别名、角色与专用特征均已收录。可按中文、英文和别名离线查询，再由 Agent 编写正向和反向；未命中保留原词。",
                 style = MiuixTheme.textStyles.footnote1)
             Button(onClick = { onSave(draft) }, colors = ButtonDefaults.buttonColorsPrimary()) {
                 Text("保存词库设置")

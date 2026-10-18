@@ -190,10 +190,26 @@ object MainViewModelAgent {
         editor.putBoolean("agent_offline_prompt_migrated", true).apply()
     }
 
+    private fun ensureUserInstructionPromptMigration(vm: MainViewModel) {
+        if (vm.prefs.getBoolean("agent_user_instruction_prompt_migrated", false)) return
+        val editor = vm.prefs.edit()
+        for ((key, hash) in mapOf(
+            "agent_system_prompt" to "b2747c3207d0ffd572ff0452592df8bd6bb9266f482faec6c48f18a769a7631e",
+            "agent_draw_prompt" to "19081819c294021a7af74cf8b998441714c050c3c05b6cdc7799b52b67f6ad28"
+        )) {
+            val old = vm.prefs.getString(key, null) ?: continue
+            if (com.comfyui.mobile.agent.AgentPromptPolicy.fingerprint(old) == hash) {
+                editor.putString("agent_user_instruction_previous_$key", old).remove(key)
+            }
+        }
+        editor.putBoolean("agent_user_instruction_prompt_migrated", true).apply()
+    }
+
     fun loadAgentSystemPrompt(vm: MainViewModel): String {
         ensurePromptSplitMigration(vm)
         ensurePromptV3Migration(vm)
         ensureOfflinePromptMigration(vm)
+        ensureUserInstructionPromptMigration(vm)
         val saved = vm.prefs.getString("agent_system_prompt", null)?.takeIf { it.isNotBlank() }
         return saved ?: MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT
     }
@@ -202,6 +218,7 @@ object MainViewModelAgent {
         ensurePromptSplitMigration(vm)
         ensurePromptV3Migration(vm)
         ensureOfflinePromptMigration(vm)
+        ensureUserInstructionPromptMigration(vm)
         val saved = vm.prefs.getString("agent_draw_prompt", null)?.takeIf { it.isNotBlank() }
         return saved ?: MainViewModel.DEFAULT_AGENT_DRAW_PROMPT
     }

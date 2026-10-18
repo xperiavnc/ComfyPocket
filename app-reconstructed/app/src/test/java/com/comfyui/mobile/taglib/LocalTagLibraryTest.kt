@@ -17,8 +17,10 @@ class LocalTagLibraryTest {
     @Before fun setup() { library = LocalTagLibrary(RuntimeEnvironment.getApplication()) }
 
     @Test fun packagedCatalogueContainsThePinnedCounts() {
-        assertEquals(140871 to 99980, library.counts)
-        assertEquals("bilingual-v2-39c99ead10a54e79", library.revision)
+        assertEquals(141007 to 101952, library.counts)
+        assertEquals("full-toolbox-v3-fa8003a0311f6b09", library.revision)
+        assertEquals(240851, library.translatedCount)
+        assertEquals(2108, library.untranslatedCount)
     }
     @Test fun chineseEnglishAndUnderscoreAllFindTheExactConcept() = runBlocking {
         for (query in listOf("蓝发", "blue hair", "blue_hair", "BLUE HAIR")) {
@@ -37,6 +39,22 @@ class LocalTagLibraryTest {
         val generic = library.search("初音未来", "tag")
         assertTrue(generic.all { it.kind == "tag" })
         assertFalse(generic.any { it.name == "hatsune_miku" })
+    }
+    @Test fun characterSpecificTermsAndTheirAttachmentsReachTheAgentContext() = runBlocking {
+        val character = library.search("ayanami_(azur_lane)", "character").first { it.name == "ayanami_(azur_lane)" }
+        val data = JsonParser.parseString(character.detail).asJsonObject
+        assertTrue(data["optionalSpecificAppearance"].asJsonArray.size() > 0)
+        val context = library.context(LocalTagReport(entries = listOf(character)))
+        val candidate = JsonParser.parseString(context.substringAfter("\n").substringBefore("\n")).asJsonArray[0].asJsonObject
+        assertTrue(candidate["optionalSpecificAppearance"].asJsonArray.size() > 0)
+        assertTrue(library.search("a certain high school gym uniform").any { it.exact })
+    }
+    @Test fun missingChineseIsExplicitDataAndDoesNotInvalidateTheSourceWord() {
+        val entry = LocalTagEntry("source_term", "", "other", "", "tag", "", "", "source term", true)
+        val context = library.context(LocalTagReport(entries = listOf(entry)))
+        assertTrue(context.contains("\"translationStatus\":\"missing\""))
+        assertTrue(context.contains("不是无效词"))
+        assertTrue(context.contains("\"tag\":\"source_term\""))
     }
     @Test fun negativeCategoryIsAvailableForTheModelToChoose() = runBlocking {
         val result = library.search("blurry").first { it.name == "blurry" }

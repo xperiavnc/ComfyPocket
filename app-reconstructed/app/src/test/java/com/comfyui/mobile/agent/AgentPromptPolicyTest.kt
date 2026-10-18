@@ -6,6 +6,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AgentPromptPolicyTest {
+    @Test fun defaultsFollowCurrentUserRequirementsWithoutOverridingOutputContract() {
+        val system = AgentPromptPolicy.system("", "", emptyList())
+        assertTrue(AgentPromptPolicy.defaultPersona.contains("不以个人偏好无故拒绝"))
+        assertTrue(AgentPromptPolicy.defaultDrawRules.contains("不偷换主题，不省略重点"))
+        assertTrue(system.contains("明确要求多格分镜时保留格数"))
+        assertTrue(system.contains("只输出一个 JSON"))
+        assertTrue(system.contains("negative_prompt"))
+        assertFalse(system.contains("generation.execute"))
+        assertFalse(system.contains("vision.processOne"))
+    }
     @Test fun personaAndVisualRulesDoNotCompeteWithTransportContract() {
         assertFalse(AgentPromptPolicy.defaultPersona.contains("should_draw"))
         assertFalse(AgentPromptPolicy.defaultDrawRules.contains("只输出最终"))

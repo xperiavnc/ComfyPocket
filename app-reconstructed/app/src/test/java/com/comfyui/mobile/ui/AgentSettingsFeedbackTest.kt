@@ -96,4 +96,23 @@ class AgentSettingsFeedbackTest {
             assertEquals(old, vm.prefs.getString("agent_offline_previous_agent_draw_prompt", null))
         }
     }
+
+    @Test fun newUserFirstDefaultsMigrateOnlyExactBuiltInsAndBackThemUp() {
+        val previous = javaClass.classLoader!!.getResourceAsStream("agent-pre-toolbox-rules.json")!!.bufferedReader().use {
+            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject
+        }
+        val oldPersona = previous["defaultPersona"].asString
+        val oldRules = previous["defaultDrawRules"].asString
+        vm.prefs.edit().putBoolean("agent_user_instruction_prompt_migrated", false)
+            .putString("agent_system_prompt", oldPersona).putString("agent_draw_prompt", oldRules).commit()
+        assertEquals(MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT, MainViewModelAgent.loadAgentSystemPrompt(vm))
+        assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
+        assertEquals(oldPersona, vm.prefs.getString("agent_user_instruction_previous_agent_system_prompt", null))
+        assertEquals(oldRules, vm.prefs.getString("agent_user_instruction_previous_agent_draw_prompt", null))
+        vm.prefs.edit().putBoolean("agent_user_instruction_prompt_migrated", false)
+            .putString("agent_system_prompt", "我自己改的人设")
+            .putString("agent_draw_prompt", "我自己改的分镜").commit()
+        assertEquals("我自己改的人设", MainViewModelAgent.loadAgentSystemPrompt(vm))
+        assertEquals("我自己改的分镜", MainViewModelAgent.loadAgentDrawPrompt(vm))
+    }
 }

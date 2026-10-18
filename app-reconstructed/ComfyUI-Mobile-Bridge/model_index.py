@@ -12,6 +12,7 @@ import math
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import threading
 import time
 import uuid
@@ -153,6 +154,15 @@ class ModelIndex:
         roots = self.registered_roots()
         complete = True
         with self.db() as db:
+            # ComfyUI also registers save/output directories before they exist.
+            # An unused absent root is empty, not an I/O failure. Remember roots
+            # actually seen so a disconnected/deleted former root stays unknown.
+            known_roots = {r[0] for r in db.execute("SELECT DISTINCT root_id FROM locations")}
+            known_roots.update(r[0] for r in db.execute("SELECT id FROM roots WHERE status='ready'"))
+            known_roots.update(r[0][len("seenRoot:"):] for r in db.execute(
+                "SELECT key FROM info WHERE key LIKE 'seenRoot:%'"))
+            db.executemany("INSERT OR REPLACE INTO info VALUES(?, 'true')",
+                           [("seenRoot:" + root_id,) for root_id in known_roots])
             db.execute("INSERT OR REPLACE INTO info VALUES('scanComplete','false')")
             for root in roots:
                 db.execute("INSERT OR REPLACE INTO roots VALUES(?,?,?,?,?)",
@@ -161,10 +171,24 @@ class ModelIndex:
             if stop.is_set():
                 return False
             path = Path(root["path"])
+            errors = []
+            absent = False
+            try:
+                if not stat.S_ISDIR(path.stat().st_mode):
+                    errors.append(True)
+                else:
+                    with self.db() as db:
+                        db.execute("INSERT OR REPLACE INTO info VALUES(?, 'true')", ("seenRoot:" + root["id"],))
+            except FileNotFoundError:
+                absent = root["id"] not in known_roots
+                if not absent:
+                    errors.append(True)
+            except OSError:
+                errors.append(True)
             options = {}
             # Only exact names returned by the registered category API qualify.
             # get_full_path confirms which physical root a node option resolves to.
-            for key in root["keys"]:
+            for key in root["keys"] if not errors and not absent else []:
                 try:
                     names = self.folders.get_filename_list(key)
                     for name in names:
@@ -173,12 +197,10 @@ class ModelIndex:
                             options[Path(actual).resolve()] = str(name)
                 except Exception:
                     pass
-            errors = []
-            if not path.is_dir():
-                errors.append(True)
             def walk_error(error):
                 errors.append(True)
-            for directory, subdirs, files in os.walk(path, onerror=walk_error, followlinks=False):
+            walk = os.walk(path, onerror=walk_error, followlinks=False) if not errors and not absent else ()
+            for directory, subdirs, files in walk:
                 subdirs[:] = [s for s in subdirs if not (Path(directory) / s).is_symlink()]
                 if stop.is_set():
                     return False
@@ -195,7 +217,7 @@ class ModelIndex:
                         errors.append(True)
             with self.db() as db:
                 db.execute("UPDATE roots SET status=? WHERE id=?",
-                           ("unreadable" if errors else "ready", root["id"]))
+                           ("unreadable" if errors else "absent" if absent else "ready", root["id"]))
                 if not errors:
                     db.execute("UPDATE locations SET present=0,load_status='missing' WHERE root_id=? AND seen!=?",
                                (root["id"], token))

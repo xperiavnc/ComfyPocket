@@ -130,16 +130,18 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
                 }
                 val stats = state.page.stats
                 val scan = state.tasks.scan.takeIf { it.active } ?: state.page.scan
+                val roots = state.capabilities?.roots.orEmpty()
                 Card(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                Text("${state.page.total} 个结果 · 库占用 ${modelBytes(stats.bytes)}",
+                                Text(if (state.loading && state.page.items.isEmpty())
+                                    "正在读取${state.query.category.takeIf { it.isNotBlank() }?.let(::modelCategoryLabel) ?: "模型"}…"
+                                    else "${state.page.total} 个结果 · 库占用 ${modelBytes(stats.bytes)}",
                                     style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium)
                                 Text(if (state.fromCache) "离线缓存 · ${state.serverLabel.ifBlank { "本地模型库" }}"
                                     else "${state.serverLabel.ifBlank { "当前电脑" }} · " +
-                                        if (scan.active) "正在同步 ${scan.hashed}/${scan.discovered}"
-                                        else if (state.page.scanComplete) "已同步" else "索引尚未完成",
+                                        modelIndexStatus(state.page, scan, roots),
                                     style = MiuixTheme.textStyles.footnote2,
                                     color = MiuixTheme.colorScheme.onSecondaryContainer,
                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -158,6 +160,17 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
                                 if (state.fromCache) "\n仅查询已浏览缓存，文件状态需联网确认。" else "",
                                 style = MiuixTheme.textStyles.footnote2,
                                 color = MiuixTheme.colorScheme.onSecondaryContainer)
+                            if (!state.fromCache) {
+                                roots.filter { it.status == "unreadable" }.forEach { root ->
+                                    Text("${modelCategoryLabel(root.category)}：${root.path}\n目录读取失败，原记录保留；请检查目录是否在线及读取权限。",
+                                        style = MiuixTheme.textStyles.footnote2,
+                                        color = MiuixTheme.colorScheme.error)
+                                }
+                                val absent = roots.count { it.status == "absent" }
+                                if (absent > 0) Text("已跳过 $absent 个尚未创建的空目录，不影响索引完成。",
+                                    style = MiuixTheme.textStyles.footnote2,
+                                    color = MiuixTheme.colorScheme.onSecondaryContainer)
+                            }
                             ModelAction("手机补全本页资料", state.sourceScope.isNotBlank() && state.page.items.isNotEmpty()) {
                                 vm.enrich(state.page.items.map { it.id }.take(100), refresh = true)
                             }

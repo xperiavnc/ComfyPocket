@@ -5,10 +5,22 @@ import sqlite3
 import tempfile
 import unittest
 
-from build_local_tag_library import chinese_aliases, has_chinese, merge_danbooru, normalize
+from build_local_tag_library import chinese_aliases, has_chinese, merge_danbooru, merge_toolbox_supplements, normalize
 
 
 class BilingualImportTest(unittest.TestCase):
+    def test_all_supplemental_terms_survive_without_invented_chinese(self):
+        records = {}
+        merge_toolbox_supplements(records,
+            [dict(en="fixture_uniform", zh="")],
+            [dict(en="fixture_uniform", zh="", decision="specific", rawValues=["Fixture Uniform"])],
+            {"0": ["new_role", 4, 42], "1": ["new_pose", 0, 10]})
+        self.assertEqual({"fixture uniform", "new role", "new pose"}, set(records))
+        self.assertEqual("", records["fixture uniform"]["zh"])
+        self.assertIn("Fixture Uniform", records["fixture uniform"]["aliases"])
+        self.assertEqual("character", records["new role"]["kind"])
+        self.assertEqual(42, records["new role"]["post_count"])
+
     def test_chinese_correspondence_is_not_an_english_echo_or_a_placeholder(self):
         for value in ("", "Hololive", ":D", "未翻译", "待翻译", None):
             self.assertFalse(has_chinese(value))

@@ -1,4 +1,4 @@
-"""Build a Chinese-searchable offline catalogue from pinned factual tag data.
+"""Build a full-toolbox, Chinese-searchable offline catalogue from pinned factual data.
 
 Only JSON data literals are read; upstream JavaScript is never executed.
 Usage: python tools/build_local_tag_library.py [--source-dir PATH] [--danbooru-dir PATH]
@@ -32,6 +32,9 @@ TOOLBOX_HASHES = [
     "43ef5f655abeecd8752820fe9737d5e1a6a974b442e5bd6feb98f0ec90db0f80",
     "fb73d688a6cd15c27b71a3c33f317c4fbcd7d680d95c9e4dce3a5a412f2d7e48",
     "e962d9c91ef57c1608f9f8fdbef9e2ace281e3f9b7ec560000f621993cd83b89",
+    "1334b4891f28e106318bcd9fadb3e2854d6d0c9c62f3015cabaf729af5936c46",
+    "7a98e4ae6aadd0a8b78d71f422c2e0ead8d1fefb2345de4d1344de442214eea9",
+    "bab0450af2311b5350c267cd4c8749dd11e9ccbfd9db1385aab1ef348d52cec7",
 ]
 DANBOORU_CATEGORIES = {
     0: ("danbooru_general", "常规", "tag"),
@@ -49,6 +52,9 @@ FILES = [
     "assets/数据资产/标签/search-keywords.js",
     "assets/数据资产/角色/characters.json",
     "assets/数据资产/角色/manifest.json",
+    "assets/数据资产/角色/specific-tags.json",
+    "assets/数据资产/角色/word-decisions.json",
+    "assets/模型/tags-canary.json",
 ]
 
 
@@ -101,7 +107,7 @@ def merge_danbooru(records, source):
             stats["sourceRows"] += 1
             key = normalize(name)
             old = records.get(key)
-            if not has_chinese(translation) and not (old and has_chinese(old["zh"])):
+            if not has_chinese(translation) and old is None:
                 stats["withoutChineseExcluded"] += 1
                 continue
             category, section, kind = DANBOORU_CATEGORIES[category_id]
@@ -112,7 +118,7 @@ def merge_danbooru(records, source):
                 stats["added"] += 1
             else:
                 stats["merged"] += 1
-                if not has_chinese(old["zh"]):
+                if not has_chinese(old["zh"]) and has_chinese(translation):
                     old["zh"] = translation
                     stats["legacyTranslationsFilled"] += 1
                 # Preserve curated categories such as negative and all optional appearance data.
@@ -131,11 +137,43 @@ def literal(text, name):
     return json.JSONDecoder().raw_decode(text[match.end():])[0]
 
 
+def ensure_record(records, name, zh="", category="other", section=""):
+    key = normalize(name)
+    if not key:
+        raise ValueError("Empty vocabulary name")
+    record = records.setdefault(key, dict(name=name, zh=zh, aliases=set(), category=category, section=section))
+    record["aliases"].add(name)
+    if has_chinese(zh):
+        if not has_chinese(record["zh"]):
+            record["zh"] = zh
+        record["aliases"].update(chinese_aliases(zh))
+    return record
+
+
+def merge_toolbox_supplements(records, specific, decisions, canary):
+    """Keep every source term, including entries whose upstream Chinese is missing."""
+    for row in specific:
+        ensure_record(records, row["en"], row.get("zh", ""), "character_specific", "角色专用特征")
+    for row in decisions:
+        record = ensure_record(records, row["en"], row.get("zh", ""),
+                               "character_specific" if row["decision"] == "specific" else "other",
+                               "角色用词判定")
+        record["aliases"].update(row.get("rawValues", []))
+    for name, category_id, count in canary.values():
+        category, section, kind = (("rating", "分级", "tag") if category_id == 9 else
+                                   DANBOORU_CATEGORIES[category_id])
+        record = ensure_record(records, name, category=category, section=section)
+        record["post_count"] = max(record.get("post_count", 0), int(count))
+        if kind == "character":
+            record.update(kind=kind, trigger=record.get("trigger") or name)
+
+
 def build(source_dir, output, danbooru_dir=None):
-    sources, provenance = {}, []
+    sources, raw_inputs, provenance = {}, {}, []
     for relative, expected in zip(FILES, TOOLBOX_HASHES):
         data, origin = verified_input(relative, REPOSITORY, REVISION, expected, source_dir)
         sources[relative] = data.decode("utf-8-sig")
+        raw_inputs[relative] = data
         provenance.append(origin)
 
     records = {}
@@ -165,13 +203,17 @@ def build(source_dir, output, danbooru_dir=None):
     synonyms = sources[FILES[3]]
     for phrase, targets in literal(synonyms, "SYNONYMS").items():
         for target in targets:
-            if normalize(target) in records:
-                records[normalize(target)]["aliases"].add(phrase)
+            ensure_record(records, target)["aliases"].add(phrase)
     for mapping in (literal(synonyms, "SYNONYMS_BY_EN"), literal(synonyms, "SYNONYM_ALIASES"),
                     literal(sources[FILES[4]], "SEARCH_KEYWORDS")):
         for name, aliases in mapping.items():
-            if normalize(name) in records:
-                records[normalize(name)]["aliases"].update(aliases)
+            ensure_record(records, name)["aliases"].update(aliases)
+
+    specific = json.loads(sources[FILES[7]])
+    decisions = json.loads(sources[FILES[8]])
+    canary = json.loads(sources[FILES[9]])
+    merge_toolbox_supplements(records, specific, decisions, canary)
+    specific_by_id = {row["id"]: row for row in specific}
 
     for record in records.values():
         if record["category"] == "character_names" or (
@@ -188,7 +230,13 @@ def build(source_dir, output, danbooru_dir=None):
                       category="character_names", section=row.get("seriesId", ""), kind="character",
                       trigger=row.get("trigger", row["id"]))
         # Alternative appearance tags are suggestions, never mandatory character attributes.
-        record["detail"] = json.dumps(dict(optionalAppearance=row.get("tagIds", [])), ensure_ascii=False, separators=(",", ":"))
+        record["post_count"] = max((base or {}).get("post_count", 0), row.get("count", 0))
+        record["detail"] = json.dumps(dict(
+            optionalAppearance=row.get("tagIds", []),
+            optionalSpecificAppearance=[specific_by_id[key] for key in row.get("specificTagIds", [])]
+        ), ensure_ascii=False, separators=(",", ":"))
+        for name in row.get("tagIds", []):
+            ensure_record(records, name).setdefault("kind", "tag")
         # A series is context, not an alias for every character; don't flood a title query with identities.
         record["extra"] = (row["id"], row.get("trigger", "").split(",")[0])
         records[normalize(row["id"])] = record
@@ -202,10 +250,14 @@ def build(source_dir, output, danbooru_dir=None):
         danbooru_stats = merge_danbooru(records, local / "tag.sqlite")
         license_text = (local / "LICENSE").read_bytes()
 
-    # A bilingual entry must contain a real Chinese correspondence. No fabricated translations.
+    # Complete toolbox coverage takes precedence over filtering out missing translations.
+    # ffdkj still supplies Chinese where available; never label English echoes as Chinese.
     untranslated = sum(not has_chinese(record["zh"]) for record in records.values())
-    records = {key: record for key, record in records.items() if has_chinese(record["zh"])}
-    revision = "bilingual-v2-" + hashlib.sha256(
+    for record in records.values():
+        if not has_chinese(record["zh"]):
+            record["aliases"].add(record["zh"])
+            record["zh"] = ""
+    revision = "full-toolbox-v3-" + hashlib.sha256(
         json.dumps(provenance, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()[:16]
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -254,14 +306,23 @@ def build(source_dir, output, danbooru_dir=None):
     temporary.replace(output)
     output.with_name("ffdkj-LICENSE.txt").write_bytes(license_text)
     manifest = dict(schema=2, repository=REPOSITORY, revision=revision, counts=counts,
-                    translatedEntries=sum(counts.values()), categories=dict(sorted(categories.items())),
-                    excludedLegacyWithoutChinese=untranslated,
+                     translatedEntries=sum(counts.values()) - untranslated, untranslatedEntries=untranslated,
+                     categories=dict(sorted(categories.items())), excludedLegacyWithoutChinese=0,
+                     toolbox=dict(revision=REVISION, rawAssets="toolbox", files=len(raw_inputs),
+                                  characters=len(characters), specificTerms=len(specific),
+                                  wordDecisions=len(decisions), modelVocabulary=len(canary),
+                                  coverage="All canonical terms, aliases and character attachments retained"),
                     danbooru=dict(repository=DANBOORU_REPOSITORY, revision=DANBOORU_REVISION,
                                   license="MIT", licenseAsset="ffdkj-LICENSE.txt", **danbooru_stats),
                     bytes=output.stat().st_size, sha256=hashlib.sha256(output.read_bytes()).hexdigest(),
                     sources=provenance, characterSource=json.loads(sources[FILES[6]])["source"])
     output.with_name("manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
+    # These are inert source data, not JavaScript to execute or extra model weights.
+    for relative, data in raw_inputs.items():
+        target = output.parent / "toolbox" / relative.removeprefix("assets/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
     print(json.dumps(manifest, ensure_ascii=False, indent=2))
 
 

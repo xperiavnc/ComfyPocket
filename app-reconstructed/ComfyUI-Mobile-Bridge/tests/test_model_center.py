@@ -424,6 +424,92 @@ class ModelCenterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item["loadStatus"], "unconfirmed")
         self.assertFalse((await self.query())["scanComplete"])
 
+    async def test_registered_output_directory_not_created_yet_does_not_block_completion(self):
+        optional = self.directory / "output" / "loras"
+        self.folders.values["loras"].append(str(optional))
+        self.index.scan(threading.Event(), {"discovered": 0})
+        data = await self.query()
+        root = next(r for r in self.index.info()["roots"] if r["path"] == str(optional.resolve()))
+        print(f"\nMODEL_INDEX_OPTIONAL status={root['status']} complete={data['scanComplete']}")
+        self.assertTrue(data["scanComplete"])
+        self.assertEqual("absent", root["status"])
+        self.assertEqual(1, data["stats"]["locations"])
+        # A later save creates the directory: the next scan discovers its model.
+        optional.mkdir(parents=True)
+        (optional / "saved.safetensors").write_bytes(b"saved fixture")
+        self.index.scan(threading.Event(), {"discovered": 0})
+        self.assertEqual(2, (await self.query(category="LORA"))["total"])
+        fresh = index_module.ModelIndex(self.folders, self.directory / "user")
+        self.assertTrue(fresh.info()["scanComplete"])
+
+    async def test_previously_seen_root_disappearing_is_not_treated_as_unused(self):
+        self.file.unlink()
+        self.file.parent.rmdir()
+        self.index.scan(threading.Event(), {"discovered": 0})
+        data = await self.query()
+        self.assertFalse(data["scanComplete"])
+        item = self.index.detail(self.item["id"])
+        self.assertTrue(item["present"])
+        self.assertEqual("unconfirmed", item["loadStatus"])
+        root = next(r for r in self.index.info()["roots"] if r["id"] == item["rootId"])
+        self.assertEqual("unreadable", root["status"])
+
+    async def test_empty_root_seen_before_restart_still_counts_if_it_disappears(self):
+        empty = Path(self.folders.values["loras"][1])
+        self.assertEqual([], list(empty.iterdir()))
+        empty.rmdir()
+        fresh = index_module.ModelIndex(self.folders, self.directory / "user")
+        fresh.scan(threading.Event(), {"discovered": 0})
+        self.assertFalse(fresh.info()["scanComplete"])
+        root = next(r for r in fresh.info()["roots"] if r["path"] == str(empty))
+        self.assertEqual("unreadable", root["status"])
+
+    async def test_legacy_ready_empty_root_remains_known_across_multiple_failed_scans(self):
+        # Upgrade from 2.2.1, which has roots.status but no seenRoot marker.
+        with self.index.db() as db:
+            db.execute("DELETE FROM info WHERE key LIKE 'seenRoot:%'")
+        empty = Path(self.folders.values["loras"][1])
+        empty.rmdir()
+        for _ in range(2):
+            fresh = index_module.ModelIndex(self.folders, self.directory / "user")
+            fresh.scan(threading.Event(), {"discovered": 0})
+            self.assertFalse(fresh.info()["scanComplete"])
+
+    async def test_permission_failure_on_never_seen_root_is_not_treated_as_absent(self):
+        protected = self.directory / "protected"
+        self.folders.values["loras"].append(str(protected))
+        real_stat = Path.stat
+        def denied(path, *args, **kwargs):
+            if path == protected:
+                raise PermissionError("fixture root permission")
+            return real_stat(path, *args, **kwargs)
+        with patch.object(Path, "stat", denied):
+            self.index.scan(threading.Event(), {"discovered": 0})
+        self.assertFalse(self.index.info()["scanComplete"])
+        root = next(r for r in self.index.info()["roots"] if r["path"] == str(protected))
+        self.assertEqual("unreadable", root["status"])
+
+    async def test_lora_and_checkpoint_filters_keep_distinct_paginated_results(self):
+        checkpoints = self.directory / "checkpoints"
+        checkpoints.mkdir()
+        self.folders.values["checkpoints"] = [str(checkpoints)]
+        for number in range(2):
+            (checkpoints / f"checkpoint-{number}.safetensors").write_bytes(b"checkpoint")
+        for number in range(47):
+            self.file.with_name(f"lora-{number}.safetensors").write_bytes(b"lora")
+        self.index.scan(threading.Event(), {"discovered": 0})
+        checkpoint = await self.query(category="CHECKPOINT")
+        first = await self.query(category="LORA", page=1, pageSize=40)
+        second = await self.query(category="LORA", page=2, pageSize=40)
+        self.assertEqual(2, checkpoint["total"])
+        self.assertTrue(all(i["category"] == "CHECKPOINT" for i in checkpoint["items"]))
+        self.assertEqual(48, first["total"])
+        self.assertEqual(40, len(first["items"]))
+        self.assertTrue(first["hasMore"])
+        self.assertEqual(8, len(second["items"]))
+        self.assertFalse(second["hasMore"])
+        self.assertTrue(all(i["category"] == "LORA" for i in first["items"] + second["items"]))
+
     async def test_cancelling_hash_before_first_chunk_publishes_no_digest(self):
         stop = threading.Event()
         stop.set()

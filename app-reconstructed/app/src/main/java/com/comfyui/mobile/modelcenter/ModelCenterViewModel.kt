@@ -37,6 +37,7 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
     private var queryEpoch = 0L
     private var detailEpoch = 0L
     private var loadJob: Job? = null
+    private var loadingQuery: LocalModelQuery? = null
     private var contextKey = ""
     private var negotiated = false
     private val cacheWrites = Mutex()
@@ -129,7 +130,10 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
     fun query(value: LocalModelQuery) {
         if (value == state.value.query) return
         queryEpoch++
-        mutable.value = state.value.copy(query = value, scrollIndex = 0, scrollOffset = 0)
+        // A selected chip must never label rows/counts from the previous query,
+        // even while a slow phone request is still in flight.
+        mutable.value = state.value.copy(query = value, scrollIndex = 0, scrollOffset = 0,
+            page = state.value.page.copy(items = emptyList(), page = 1, total = 0, hasMore = false))
         snapshot = snapshot.copy(query = value, scrollIndex = 0, scrollOffset = 0)
         persist()
         refresh()
@@ -160,11 +164,14 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     fun refresh(append: Boolean = false) {
+        val query = state.value.query
+        // Task polling can run faster than a model-list request. Join the current
+        // query instead of cancelling it forever (also preserves a pending next page).
+        if (state.value.loading && loadJob?.isActive == true && loadingQuery == query) return
         loadJob?.cancel()
         val token = generation
         val epoch = ++queryEpoch
         val repo = repository
-        val query = state.value.query
         val nextPage = if (append) state.value.page.page + 1 else 1
         if (!state.value.connected || repo == null) {
             val cached = cachedPage(query, nextPage)
@@ -173,12 +180,16 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
                 page = if (append) cached.copy(items = state.value.page.items + cached.items) else cached)
             return
         }
+        loadingQuery = query
         mutable.value = state.value.copy(loading = true, error = null)
         loadJob = viewModelScope.launch {
             try {
                 val cap = repo.capabilities()
                 val result = repo.models(query, nextPage)
                 check(result.schemaVersion == 1 && result.serverId == cap.serverId) { "模型中心服务器身份不一致，请重新连接" }
+                check(query.category.isBlank() || result.items.all { it.category == query.category }) {
+                    "电脑返回的模型分类与当前筛选不一致，请更新 Bridge 后重试"
+                }
                 if (generation != token || epoch != queryEpoch) return@launch
                 negotiated = true
                 if (snapshot.bridgeServerId != cap.serverId) {
