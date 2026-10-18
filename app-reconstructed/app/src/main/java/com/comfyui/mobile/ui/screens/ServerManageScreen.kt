@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -46,32 +44,39 @@ import com.comfyui.mobile.model.ServerType
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import com.comfyui.mobile.ui.MainViewModel
 import kotlinx.coroutines.launch
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
-
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Edit
+import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 
 @Composable
 fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
-    val schemeColors = MaterialTheme.colorScheme
+    val schemeColors = MiuixTheme.colorScheme
     val servers by viewModel.servers.collectAsState()
     val currentId by viewModel.currentServerId.collectAsState()
     val floatingNavClearance = LocalFloatingNavClearance.current
+    val scrollBehavior = MiuixScrollBehavior()
     val scope = rememberCoroutineScope()
 
     var editor by remember { mutableStateOf<ServerProfile?>(null) }
@@ -143,15 +148,17 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
         topBar = {
             TopAppBar(
                 title = "服务器",
+                largeTitle = "服务器",
                 color = schemeColors.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(PocketIcons.Back, contentDescription = "返回")
+                        Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 },
                 actions = {
                     IconButton(onClick = { openNew() }) {
-                        Icon(PocketIcons.Add, contentDescription = "添加")
+                        Icon(MiuixIcons.Add, contentDescription = "添加")
                     }
                 }
     )
@@ -160,7 +167,8 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                ,
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(
                 start = 20.dp,
                 end = 20.dp,
@@ -175,12 +183,12 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                         Column(modifier = Modifier.padding(18.dp)) {
                             Text(
                                 text = "还没有服务器",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+                                style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold)
     )
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "添加本地或云端服务器",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MiuixTheme.textStyles.body2,
                                 color = schemeColors.onSecondaryContainer
     )
                             Spacer(modifier = Modifier.height(14.dp))
@@ -199,6 +207,8 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     val selected = server.effectiveId == currentId
                     Card(
                         modifier = Modifier.fillMaxWidth(),
+                        pressFeedbackType = PressFeedbackType.Tilt,
+                        showIndication = true,
                         onClick = { viewModel.selectServer(server.effectiveId) },
                         colors = CardDefaults.defaultColors(
                             color = if (selected) {
@@ -222,7 +232,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
                                         text = server.displayName,
-                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                        style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f, fill = false)
@@ -240,7 +250,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                                     ) {
                                         Text(
                                             text = if (isRh) "云端" else "本地",
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                            style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium),
                                             fontSize = 11.sp,
                                             color = if (isRh) schemeColors.primary else schemeColors.onSecondaryContainer,
                                             maxLines = 1
@@ -250,7 +260,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = server.addressLabel,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MiuixTheme.textStyles.body2,
                                     color = schemeColors.onSecondaryContainer,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -265,7 +275,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                                     contentAlignment = Alignment.Center
     ) {
                                     Icon(
-                                        imageVector = PocketIcons.Ok,
+                                        imageVector = MiuixIcons.Ok,
                                         contentDescription = "当前选中",
                                         tint = schemeColors.primary,
                                         modifier = Modifier.size(16.dp)
@@ -278,7 +288,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                                 modifier = Modifier.size(36.dp)
     ) {
                                 Icon(
-                                    imageVector = PocketIcons.Edit,
+                                    imageVector = MiuixIcons.Edit,
                                     contentDescription = "编辑",
                                     tint = schemeColors.onSecondaryContainer,
                                     modifier = Modifier.size(19.dp)
@@ -289,7 +299,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                                 modifier = Modifier.size(36.dp)
     ) {
                                 Icon(
-                                    imageVector = PocketIcons.Delete,
+                                    imageVector = MiuixIcons.Delete,
                                     contentDescription = "删除",
                                     tint = schemeColors.onSecondaryContainer.copy(alpha = 0.75f),
                                     modifier = Modifier.size(19.dp)
@@ -317,7 +327,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
             // 服务器类型切换
             Text(
                 text = "服务器类型",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MiuixTheme.textStyles.body2,
                 color = schemeColors.onSecondaryContainer
     )
             Spacer(modifier = Modifier.height(8.dp))
@@ -346,7 +356,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                         Text(
                             text = label,
-                            style = MaterialTheme.typography.bodyMedium.copy(
+                            style = MiuixTheme.textStyles.body2.copy(
                                 fontSize = 14.sp,
                                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
     ),
@@ -365,11 +375,13 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     onValueChange = { name = it },
                     label = "名称（可选）",
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true)
+                    singleLine = true,
+                    useLabelAsPlaceholder = true
+    )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "协议类型",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = schemeColors.onSecondaryContainer
     )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -399,7 +411,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                             Text(
                                 text = label,
-                                style = MaterialTheme.typography.bodyMedium.copy(
+                                style = MiuixTheme.textStyles.body2.copy(
                                     fontSize = 14.sp,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
     ),
@@ -424,14 +436,18 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     },
                     label = "IP / 域名",
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true)
+                    singleLine = true,
+                    useLabelAsPlaceholder = true
+    )
                 Spacer(modifier = Modifier.height(16.dp))
                 TextField(
                     value = port,
                     onValueChange = { port = it },
                     label = "端口",
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true)
+                    singleLine = true,
+                    useLabelAsPlaceholder = true
+    )
             } else {
                 // RunningHub 云端配置
                 TextField(
@@ -439,11 +455,13 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     onValueChange = { name = it },
                     label = "名称（可选）",
                     modifier = Modifier.fillMaxWidth(),
-                    singleLine = true)
+                    singleLine = true,
+                    useLabelAsPlaceholder = true
+    )
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "站点",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = schemeColors.onSecondaryContainer
     )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -469,7 +487,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                             Text(
                                 text = site.displayName,
-                                style = MaterialTheme.typography.bodyMedium.copy(
+                                style = MiuixTheme.textStyles.body2.copy(
                                     fontSize = 14.sp,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
     ),
@@ -482,7 +500,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "显存",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = schemeColors.onSecondaryContainer
     )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -507,7 +525,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                             Text(
                                 text = tier.displayName,
-                                style = MaterialTheme.typography.bodyMedium.copy(
+                                style = MiuixTheme.textStyles.body2.copy(
                                     fontSize = 13.5.sp,
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
     ),
@@ -531,6 +549,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                         label = "API Key",
                         modifier = Modifier.weight(1f),
                         singleLine = true,
+                        useLabelAsPlaceholder = true,
                         visualTransformation = if (showApiKey) VisualTransformation.None else PasswordVisualTransformation()
     )
                     Spacer(modifier = Modifier.width(8.dp))
@@ -542,7 +561,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "可在 ${if (rhSite == RunningHubSite.DOMESTIC_CN) "runninghub.cn" else "runninghub.ai"} 获取密钥",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     fontSize = 12.5.sp,
                     color = schemeColors.onSecondaryContainer
     )
@@ -613,7 +632,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = msg,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MiuixTheme.textStyles.body2,
                         color = schemeColors.error,
                         fontSize = 12.sp
     )
@@ -667,7 +686,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
         Column {
             Text(
                 text = "确定删除「${deleteTarget?.displayName.orEmpty()}」吗？",
-                style = MaterialTheme.typography.bodyLarge
+                style = MiuixTheme.textStyles.body1
     )
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth()) {

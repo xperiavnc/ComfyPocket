@@ -10,8 +10,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
  * Small "#12" capsule with the workflow node ID, same shape/size as the type capsule in
@@ -20,7 +20,7 @@ import androidx.compose.material3.MaterialTheme
  */
 @Composable
 fun NodeIdChip(nodeId: String, modifier: Modifier = Modifier) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(6.dp))

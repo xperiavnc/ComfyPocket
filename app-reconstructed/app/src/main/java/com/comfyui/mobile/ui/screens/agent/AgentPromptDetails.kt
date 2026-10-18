@@ -13,31 +13,31 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun AgentPromptDetails(positive: String?, negative: String?, status: String?) {
     if (positive.isNullOrBlank() && negative == null) return
     var expanded by remember { mutableStateOf(false) }
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(
             "正向 / 反向提示词",
             color = scheme.primary,
-            style = MaterialTheme.typography.bodySmall,
+            style = MiuixTheme.textStyles.footnote1,
             modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(vertical = 6.dp)
         )
         if (expanded) {
-            Text("正向提示词", style = MaterialTheme.typography.bodySmall)
-            SelectionContainer { Text(positive.orEmpty(), style = MaterialTheme.typography.bodySmall) }
-            Text("反向提示词", style = MaterialTheme.typography.bodySmall)
+            Text("正向提示词", style = MiuixTheme.textStyles.footnote1)
+            SelectionContainer { Text(positive.orEmpty(), style = MiuixTheme.textStyles.footnote1) }
+            Text("反向提示词", style = MiuixTheme.textStyles.footnote1)
             SelectionContainer {
                 Text(negative?.ifEmpty { "（空）" } ?: "模型未返回，保留工作流原值",
-                    style = MaterialTheme.typography.bodySmall)
+                    style = MiuixTheme.textStyles.footnote1)
             }
             if (!status.isNullOrBlank()) {
-                Text(status, color = scheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
+                Text(status, color = scheme.onSurfaceVariantSummary, style = MiuixTheme.textStyles.footnote1)
             }
         }
     }

@@ -16,8 +16,8 @@ import com.comfyui.mobile.model.MediaType
 import com.comfyui.mobile.ui.GalleryCategory
 import com.comfyui.mobile.ui.GalleryUi
 import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
-import com.comfyui.mobile.ui.designsystem.PocketScaffold
 import com.comfyui.mobile.ui.screens.gallery.GalleryHomeScreen
+import com.comfyui.mobile.ui.theme.ComfyControllerTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.*
 import org.junit.Rule
@@ -29,6 +29,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
+import top.yukonga.miuix.kmp.basic.Scaffold
 import java.lang.reflect.Proxy
 
 @RunWith(RobolectricTestRunner::class)
@@ -75,7 +76,9 @@ class PocketGalleryNavigationTest {
                 PocketMaterialTheme(false) {
                     PocketNavigationShell(nav) { entry ->
                         if (entry.destination.route == Screen.Gallery.route) {
-                            PocketScaffold { GalleryHomeScreen(nav, legacy) }
+                            ComfyControllerTheme(false, manageSystemBars = false) {
+                                Scaffold { _ -> GalleryHomeScreen(nav, legacy) }
+                            }
                         } else Text("其他主入口")
                     }
                 }

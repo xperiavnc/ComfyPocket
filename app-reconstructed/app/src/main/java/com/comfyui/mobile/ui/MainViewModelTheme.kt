@@ -29,6 +29,11 @@ object MainViewModelTheme {
             .apply()
     }
 
+    fun toggleLiquidGlass(vm: MainViewModel, enable: Boolean) {
+        vm._isLiquidGlassEnabled.value = enable
+        vm.prefs.edit().putBoolean("liquid_glass_enabled", enable).apply()
+    }
+
     fun setLiveUpdateShowPercent(vm: MainViewModel, enable: Boolean) {
         vm._liveUpdateShowPercent.value = enable
         vm.prefs.edit().putBoolean("live_update_show_percent", enable).apply()

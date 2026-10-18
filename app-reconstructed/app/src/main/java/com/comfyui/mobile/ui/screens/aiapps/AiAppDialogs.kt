@@ -10,12 +10,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.model.AiApp
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.foundation.layout.Column
 import com.comfyui.mobile.ui.components.DialogFormColumn
 
@@ -56,7 +56,9 @@ fun AiAppEditTitleDialog(
                 onValueChange = onValueChange,
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = "标题")
+                label = "标题",
+                useLabelAsPlaceholder = true
+    )
         }
     }
 }
@@ -74,7 +76,7 @@ fun AiAppDeleteConfirmDialog(
     ) {
         Text(
             text = if (app != null) "确定删除“${app.title}”吗？" else "",
-            style = MaterialTheme.typography.bodyMedium
+            style = MiuixTheme.textStyles.body2
     )
         Spacer(modifier = Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth()) {

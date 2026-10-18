@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens.modelbrowser
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,19 +28,17 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.FilterChip
-import androidx.compose.foundation.layout.FlowRow
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** Shared resource-type tab row (大模型 / UNet / GGUF / LoRA). */
 @Composable
@@ -51,10 +47,32 @@ fun ModelBrowserTypeTabs(
     onTypeSelected: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    FlowRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        MODEL_RESOURCE_TYPE_TABS.forEach { (key, label) ->
-            FilterChip(selected = selectedType == key, onClick = { onTypeSelected(key) },
-                modifier = Modifier.heightIn(min = 48.dp), label = { Text(label) })
+    val scheme = MiuixTheme.colorScheme
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        MODEL_RESOURCE_TYPE_TABS.forEach { (typeKey, label) ->
+            val isSelected = selectedType == typeKey
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(
+                        if (isSelected) scheme.primary else scheme.surfaceContainerHigh
+                    )
+                    .clickable { onTypeSelected(typeKey) }
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    style = MiuixTheme.textStyles.body2.copy(
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                    ),
+                    color = if (isSelected) scheme.onPrimary else scheme.onSurface
+                )
+            }
         }
     }
 }
@@ -71,7 +89,7 @@ fun ModelBrowserFilterChipBar(
     onManageClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -108,7 +126,7 @@ fun ModelBrowserFilterChipBar(
                 .clip(RoundedCornerShape(999.dp))
                 .background(scheme.surfaceContainerHigh)
                 .clickable(onClick = onManageClick)
-                .heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 10.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center
         ) {
             Row(
@@ -116,14 +134,14 @@ fun ModelBrowserFilterChipBar(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Icon(
-                    imageVector = PocketIcons.Settings,
+                    imageVector = MiuixIcons.Settings,
                     contentDescription = "管理标签",
                     tint = scheme.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.size(13.dp)
                 )
                 Text(
                     text = "管理",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MiuixTheme.textStyles.footnote1,
                     color = scheme.onSurface.copy(alpha = 0.7f)
                 )
             }
@@ -137,8 +155,31 @@ private fun FilterCapsule(
     selected: Boolean,
     onClick: () -> Unit
 ) {
-    FilterChip(selected = selected, onClick = onClick, label = { Text(text) },
-        modifier = Modifier.heightIn(min = 48.dp))
+    val scheme = MiuixTheme.colorScheme
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(
+                if (selected) scheme.primary.copy(alpha = 0.15f)
+                else scheme.surfaceContainerHigh
+            )
+            .border(
+                width = 1.dp,
+                color = if (selected) scheme.primary else Color.Transparent,
+                shape = RoundedCornerShape(999.dp)
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            style = MiuixTheme.textStyles.footnote1.copy(
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+            ),
+            color = if (selected) scheme.primary else scheme.onSurface
+        )
+    }
 }
 
 /**
@@ -157,7 +198,7 @@ fun ModelBrowserManageFilterDialog(
     context: Context = LocalContext.current
 ) {
     if (!show) return
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
 
     OverlayDialog(
         show = true,
@@ -171,7 +212,7 @@ fun ModelBrowserManageFilterDialog(
         ) {
             Text(
                 text = "点击标签直接以此筛选；打开右侧开关可在上方胶囊栏常驻展示。",
-                style = MaterialTheme.typography.bodySmall,
+                style = MiuixTheme.textStyles.footnote1,
                 color = scheme.onSurface.copy(alpha = 0.7f),
                 modifier = Modifier.padding(bottom = 8.dp)
             )
@@ -186,7 +227,7 @@ fun ModelBrowserManageFilterDialog(
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = group.categoryName,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MiuixTheme.textStyles.subtitle,
                             fontWeight = FontWeight.SemiBold,
                             color = scheme.primary
                         )
@@ -220,7 +261,7 @@ fun ModelBrowserManageFilterDialog(
                                         ) {
                                             Text(
                                                 text = tag,
-                                                style = MaterialTheme.typography.bodyMedium.copy(
+                                                style = MiuixTheme.textStyles.body2.copy(
                                                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                                                 ),
                                                 color = if (isSelected) scheme.primary else scheme.onSurface
@@ -229,7 +270,7 @@ fun ModelBrowserManageFilterDialog(
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
                                                     text = "(当前选中)",
-                                                    style = MaterialTheme.typography.labelSmall,
+                                                    style = MiuixTheme.textStyles.footnote2,
                                                     color = scheme.primary
                                                 )
                                             }

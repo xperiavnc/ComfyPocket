@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import android.content.Intent
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -40,21 +38,28 @@ import com.comfyui.mobile.ui.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Recent
+import top.yukonga.miuix.kmp.icon.extended.Share
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel) {
     val logs by viewModel.consoleMessages.collectAsState()
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val context = LocalContext.current
+
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
 
     fun exportLogs() {
@@ -83,10 +88,11 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
             TopAppBar(
                 title = "运行日志",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController?.popBackStack() }) {
                         Icon(
-                            PocketIcons.Back,
+                            MiuixIcons.Back,
                             contentDescription = "返回",
                             tint = scheme.onBackground
     )
@@ -96,7 +102,7 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
                     // 顶栏导出 / 分享
                     IconButton(onClick = { exportLogs() }) {
                         Icon(
-                            PocketIcons.Share,
+                            MiuixIcons.Share,
                             contentDescription = "导出日志",
                             tint = scheme.onBackground
     )
@@ -107,7 +113,7 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
                         Toast.makeText(context, "已清空运行日志", Toast.LENGTH_SHORT).show()
                     }) {
                         Icon(
-                            PocketIcons.Delete,
+                            MiuixIcons.Delete,
                             contentDescription = "清除日志",
                             tint = scheme.error
     )
@@ -128,15 +134,15 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
                     verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
                     Icon(
-                        imageVector = PocketIcons.Recent,
+                        imageVector = MiuixIcons.Recent,
                         contentDescription = null,
-                        tint = scheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        tint = scheme.onSurfaceVariantSummary.copy(alpha = 0.5f),
                         modifier = Modifier.size(48.dp)
     )
                     Text(
                         text = "暂无运行日志",
                         fontSize = 14.sp,
-                        color = scheme.onSurfaceVariant
+                        color = scheme.onSurfaceVariantSummary
     )
                 }
             }
@@ -144,6 +150,8 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .overScrollVertical()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
                     .padding(horizontal = 12.dp),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding() + 6.dp,
@@ -169,7 +177,7 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
 
 @Composable
 fun LogItem(msg: ConsoleMessage) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val (tagColor, tagBg, label) = when (msg.type) {
         LogType.INFO -> Triple(scheme.primary, scheme.primaryContainer, "INFO")
         LogType.SUCCESS -> Triple(Color(0xFF00B578), Color(0xFFE6F8F1), "OK")
@@ -187,8 +195,8 @@ fun LogItem(msg: ConsoleMessage) {
         // 时间
         Text(
             text = timeFormat.format(Date(msg.timestamp)),
-            color = scheme.onSurfaceVariant,
-            style = MaterialTheme.typography.bodySmall.copy(
+            color = scheme.onSurfaceVariantSummary,
+            style = MiuixTheme.textStyles.footnote1.copy(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 11.sp
     ),
@@ -216,7 +224,7 @@ fun LogItem(msg: ConsoleMessage) {
             Text(
                 text = msg.text,
                 color = scheme.onSurface,
-                style = MaterialTheme.typography.bodySmall.copy(
+                style = MiuixTheme.textStyles.footnote1.copy(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 12.sp,
                     lineHeight = 16.sp

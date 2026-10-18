@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens.control
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -63,17 +61,18 @@ import com.comfyui.mobile.ui.screens.modelbrowser.cleanHtmlToPlainText
 import com.comfyui.mobile.ui.screens.modelbrowser.getBaseModelAliases
 import com.comfyui.mobile.ui.screens.modelbrowser.loadPinnedFilterTags
 import kotlinx.coroutines.launch
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 /** Chinese text for a resource/list failure (never a raw HTTP body). */
 private fun resourceErrorText(e: Throwable): String {
@@ -106,7 +105,7 @@ fun CloudModelBrowserDialog(
     if (!show) return
 
     val context = LocalContext.current
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val scope = rememberCoroutineScope()
     val servers by viewModel.servers.collectAsState()
     val currentServerId by viewModel.currentServerId.collectAsState()
@@ -248,6 +247,7 @@ fun CloudModelBrowserDialog(
                     value = searchKeyword,
                     onValueChange = { searchKeyword = it },
                     label = "搜索模型或关键词...",
+                    useLabelAsPlaceholder = true,
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                     keyboardActions = KeyboardActions(onSearch = { loadData(reset = true) }),
@@ -261,7 +261,7 @@ fun CloudModelBrowserDialog(
                     onClick = { loadData(reset = true) }
                 ) {
                     Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                        Icon(PocketIcons.Search, contentDescription = "搜索", tint = scheme.onPrimary)
+                        Icon(MiuixIcons.Search, contentDescription = "搜索", tint = scheme.onPrimary)
                     }
                 }
             }
@@ -287,7 +287,7 @@ fun CloudModelBrowserDialog(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = "正在检索云端模型库...",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MiuixTheme.textStyles.body2,
                             color = scheme.onSecondaryContainer
                         )
                     }
@@ -295,7 +295,7 @@ fun CloudModelBrowserDialog(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = errorMessage ?: "暂无模型",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MiuixTheme.textStyles.body2,
                             color = scheme.error
                         )
                     }
@@ -313,6 +313,8 @@ fun CloudModelBrowserDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 cornerRadius = 12.dp,
                                 colors = CardDefaults.defaultColors(color = scheme.surfaceContainer),
+                                pressFeedbackType = PressFeedbackType.Tilt,
+                                showIndication = true,
                                 onClick = {
                                     pendingSelectedItem = item
                                 }
@@ -364,13 +366,13 @@ fun CloudModelBrowserDialog(
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         text = item.effectiveResourceName.ifBlank { "未知模型" },
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                        style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
                                         text = item.effectiveModelName.ifBlank { "" },
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MiuixTheme.textStyles.body2,
                                         fontSize = 10.sp,
                                         color = scheme.onSecondaryContainer,
                                         maxLines = 1,
@@ -381,7 +383,7 @@ fun CloudModelBrowserDialog(
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             text = "触发词: $tw",
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = MiuixTheme.textStyles.body2,
                                             fontSize = 10.sp,
                                             color = scheme.primary,
                                             maxLines = 1,
@@ -401,7 +403,7 @@ fun CloudModelBrowserDialog(
                                 ) {
                                     Text(
                                         text = "正在加载更多模型...",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MiuixTheme.textStyles.footnote1,
                                         color = scheme.onSecondaryContainer
                                     )
                                 }
@@ -416,7 +418,7 @@ fun CloudModelBrowserDialog(
                                 ) {
                                     Text(
                                         text = "已加载全部模型 (${resources.size})",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MiuixTheme.textStyles.footnote1,
                                         color = scheme.onSecondaryContainer.copy(alpha = 0.6f)
                                     )
                                 }
@@ -456,7 +458,7 @@ fun CloudModelBrowserDialog(
                 // 顶部仅显示模型名称
                 Text(
                     text = item.effectiveResourceName.ifBlank { item.effectiveModelName },
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MiuixTheme.textStyles.title4.copy(fontWeight = FontWeight.Bold),
                     color = scheme.onSurface,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -475,7 +477,7 @@ fun CloudModelBrowserDialog(
                     ) {
                         Text(
                             text = "触发词：",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
                             color = scheme.onSurface
                         )
                         TextButton(
@@ -501,7 +503,7 @@ fun CloudModelBrowserDialog(
                     ) {
                         Text(
                             text = triggers,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium),
                             color = scheme.primary
                         )
                     }
@@ -519,7 +521,7 @@ fun CloudModelBrowserDialog(
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
                             text = "写入节点（点击追加到指定文本节点）：",
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MiuixTheme.textStyles.footnote1,
                             color = scheme.onSecondaryContainer
                         )
                         Spacer(modifier = Modifier.height(4.dp))
@@ -551,7 +553,7 @@ fun CloudModelBrowserDialog(
                                 ) {
                                     Text(
                                         text = "#${node.nodeId}  ${node.title}",
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MiuixTheme.textStyles.body2,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
@@ -567,7 +569,7 @@ fun CloudModelBrowserDialog(
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "模型介绍：",
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
                         color = scheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(4.dp))
@@ -582,7 +584,7 @@ fun CloudModelBrowserDialog(
                     ) {
                         Text(
                             text = desc,
-                            style = MaterialTheme.typography.bodySmall,
+                            style = MiuixTheme.textStyles.footnote1,
                             color = scheme.onSecondaryContainer
                         )
                     }
@@ -590,7 +592,7 @@ fun CloudModelBrowserDialog(
                     Spacer(modifier = Modifier.height(10.dp))
                     Text(
                         text = "确定要将当前节点设置为该模型吗？",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MiuixTheme.textStyles.body2,
                         color = scheme.onSurface
                     )
                 }

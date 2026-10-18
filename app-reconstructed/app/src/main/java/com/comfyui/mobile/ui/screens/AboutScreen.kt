@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -40,22 +38,26 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.comfyui.mobile.R
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketArrowPreference as ArrowPreference
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Link
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 fun AboutScreen(navController: NavController) {
     val context = LocalContext.current
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
 
     val versionName = remember {
         try {
@@ -89,9 +91,10 @@ fun AboutScreen(navController: NavController) {
             TopAppBar(
                 title = "关于应用",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(PocketIcons.Back, contentDescription = "返回")
+                        Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 }
     )
@@ -100,6 +103,8 @@ fun AboutScreen(navController: NavController) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp)
                 .padding(
@@ -138,7 +143,7 @@ fun AboutScreen(navController: NavController) {
     ) {
                         Text(
                             text = "ComfyUI",
-                            style = MaterialTheme.typography.headlineSmall,
+                            style = MiuixTheme.textStyles.title2,
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
     )
@@ -161,8 +166,8 @@ fun AboutScreen(navController: NavController) {
 
                     Text(
                         text = "ComfyUI 移动端控制器",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = scheme.onSurfaceVariant,
+                        style = MiuixTheme.textStyles.body2,
+                        color = scheme.onSurfaceVariantSummary,
                         textAlign = TextAlign.Center
     )
                 }
@@ -175,7 +180,7 @@ fun AboutScreen(navController: NavController) {
                     summary = "GitHub (HAIGC/ComfyUI-APP)",
                     startAction = {
                         Icon(
-                            PocketIcons.Link,
+                            MiuixIcons.Link,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -188,7 +193,7 @@ fun AboutScreen(navController: NavController) {
                     summary = "Pixiv (京科夫猫子)",
                     startAction = {
                         Icon(
-                            PocketIcons.Link,
+                            MiuixIcons.Link,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -206,7 +211,7 @@ fun AboutScreen(navController: NavController) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "技术亮点",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MiuixTheme.textStyles.title3,
                         fontWeight = FontWeight.SemiBold
     )
                     FeatureItem(
@@ -240,9 +245,9 @@ fun AboutScreen(navController: NavController) {
                     onClick = { openUrl("https://developer.android.com/jetpack/compose") }
     )
                 ArrowPreference(
-                    title = "Material 3",
-                    summary = "Jetpack Compose Material 3 组件",
-                    onClick = { openUrl("https://developer.android.com/develop/ui/compose/designsystems/material3") }
+                    title = "Miuix UI",
+                    summary = "HyperOS 组件库",
+                    onClick = { openUrl("https://github.com/compose-miuix-ui/miuix") }
     )
                 ArrowPreference(
                     title = "Coil",
@@ -267,12 +272,12 @@ fun AboutScreen(navController: NavController) {
                 Text(
                     text = "Made with ❤️ for ComfyUI Creators",
                     fontSize = 12.sp,
-                    color = scheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    color = scheme.onSurfaceVariantSummary.copy(alpha = 0.8f)
     )
                 Text(
                     text = "Apache-2.0 Licensed · Open Source Project",
                     fontSize = 11.sp,
-                    color = scheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = scheme.onSurfaceVariantSummary.copy(alpha = 0.6f)
     )
             }
         }
@@ -285,7 +290,7 @@ private fun FeatureItem(
     title: String,
     desc: String
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -306,7 +311,7 @@ private fun FeatureItem(
             Text(
                 text = desc,
                 fontSize = 12.sp,
-                color = scheme.onSurfaceVariant,
+                color = scheme.onSurfaceVariantSummary,
                 lineHeight = 16.sp
     )
         }

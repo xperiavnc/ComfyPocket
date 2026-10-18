@@ -416,7 +416,9 @@ object MainViewModelGallery {
     fun refreshLocalMedia(vm: MainViewModel, context: Context) {
         vm.viewModelScope.launch(Dispatchers.IO) {
             val list = scanSystemAlbumMedia(context)
-            vm._localMediaList.value = list
+            withContext(Dispatchers.Main) {
+                vm._localMediaList.value = list
+            }
         }
     }
 

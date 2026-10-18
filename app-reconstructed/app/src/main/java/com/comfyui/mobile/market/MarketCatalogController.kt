@@ -21,7 +21,6 @@ data class MarketCatalogState(
     val baseModel: String = "全部",
     val items: List<CivitaiModelItem> = emptyList(),
     val loading: Boolean = false,
-    val appending: Boolean = false,
     val error: String? = null,
     val notice: String? = null,
     val loadedPage: Int = 0,
@@ -70,7 +69,7 @@ class MarketCatalogController(
         nextPage = null
         seenCursors.clear()
         mutableState.value = state.value.copy(
-            items = emptyList(), loading = false, appending = false, error = null, notice = null,
+            items = emptyList(), loading = false, error = null, notice = null,
             loadedPage = 0, hasNextPage = false
         )
     }
@@ -90,7 +89,7 @@ class MarketCatalogController(
         val targetCursor = if (reset) null else cursor
         // Don't leave old-filter cards visible under new filter chips while a new search runs.
         mutableState.value = state.value.copy(
-            loading = true, appending = !reset, error = null, notice = null,
+            loading = true, error = null, notice = null,
             items = if (reset && targetQuery != lastSuccessfulQuery) emptyList() else state.value.items,
             hasNextPage = if (reset) false else state.value.hasNextPage
         )
@@ -111,7 +110,7 @@ class MarketCatalogController(
                 val more = !looping && (cursor != null || (targetQuery.keyword.isEmpty() &&
                     (nextPage != null || page < data.totalPages)))
                 mutableState.value = state.value.copy(
-                    items = items, loading = false, appending = false, hasNextPage = more, loadedPage = page,
+                    items = items, loading = false, hasNextPage = more, loadedPage = page,
                     error = if (items.isEmpty() && !more) "未找到相关模型，请尝试更换关键词或筛选" else null,
                     notice = result.warning ?: if (result.fromCache) "正在显示本地缓存，刷新可获取最新内容" else null
                 )
@@ -121,7 +120,7 @@ class MarketCatalogController(
                 if (requestGeneration == generation) {
                     val denied = error is MarketAccessException && error.status in setOf(401, 403, 404)
                     mutableState.value = state.value.copy(
-                        loading = false, appending = false, error = error.message ?: "集市加载失败，请重试",
+                        loading = false, error = error.message ?: "集市加载失败，请重试",
                         items = if (denied) emptyList() else state.value.items
                     )
                 }

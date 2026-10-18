@@ -1,10 +1,8 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
-
-
-
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import com.comfyui.mobile.ui.screens.dashboard.UserProfileCard
 import com.comfyui.mobile.ui.screens.dashboard.EditUserProfileDialog
 
@@ -46,24 +44,25 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.comfyui.mobile.network.ConnectionState
 import com.comfyui.mobile.ui.MainViewModel
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-import com.comfyui.mobile.ui.designsystem.PocketLinearProgressIndicator as LinearProgressIndicator
-import com.comfyui.mobile.ui.designsystem.PocketProgressDefaults as ProgressIndicatorDefaults
-import com.comfyui.mobile.ui.designsystem.PocketSmallTitle as SmallTitle
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import com.comfyui.mobile.ui.MainViewModelRhConn
 import com.comfyui.mobile.ui.RhConnState
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-
-
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 private val DashCardRadius = 28.dp
 private val DashInnerRadius = 22.dp
@@ -130,10 +129,12 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
         }
     }
     val busy = isRunning || (progress > 0f && progress < 1f) || queueSize > 0
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val cardColor = scheme.secondaryContainer
     val onCard = scheme.onSecondaryContainer
     val cardColors = CardDefaults.defaultColors(color = cardColor, contentColor = onCard)
+
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
 
     Scaffold(
@@ -141,7 +142,9 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
         topBar = {
             TopAppBar(
                 title = if (isRh) "RunningHub" else "ComfyUI",
+                largeTitle = if (isRh) "RunningHub" else "ComfyUI",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 actions = {
                     IconButton(onClick = {
                         if (isRh && rhConnState != RhConnState.AUTHORIZED) {
@@ -153,13 +156,13 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                         viewModel.fetchSystemStats()
                     }) {
                         Icon(
-                            PocketIcons.Refresh,
+                            MiuixIcons.Refresh,
                             contentDescription = "刷新"
     )
                     }
                     IconButton(onClick = { navController.navigate("settings") }) {
                         Icon(
-                            PocketIcons.Settings,
+                            MiuixIcons.Settings,
                             contentDescription = "设置"
     )
                     }
@@ -170,8 +173,8 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-
-
+            .overScrollVertical()
+            .nestedScroll(scrollBehavior.nestedScrollConnection)
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
             .padding(top = innerPadding.calculateTopPadding() + 8.dp, bottom = 24.dp + floatingNavClearance)
@@ -227,7 +230,10 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = DashCardRadius,
                 colors = cardColors,
-                onClick = { navController.navigate("cloud_tasks") }) {
+                onClick = { navController.navigate("cloud_tasks") },
+                pressFeedbackType = PressFeedbackType.Tilt,
+                showIndication = true
+    ) {
                 Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -244,7 +250,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                             ?.takeIf { it.isNotBlank() } ?: "云端任务"
                         Text(
                             text = activeTitle,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MiuixTheme.textStyles.body1,
                             color = onCard,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -252,7 +258,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
     )
                         Text(
                             text = activeTask.taskState.label,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MiuixTheme.textStyles.subtitle,
                             color = scheme.primary
     )
                     }
@@ -260,7 +266,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                     val elapsed = if (activeTask.createdAt > 0L) formatElapsed(nowMs - activeTask.createdAt) else "—"
                     Text(
                         text = "已用时 $elapsed" + if (rhActive.second > 1) " · ${rhActive.second} 个进行中" else "",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MiuixTheme.textStyles.body2,
                         color = onCard.copy(alpha = 0.72f),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -275,8 +281,11 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = DashCardRadius,
                 colors = cardColors,
-
-                onClick = null) {
+            
+                onClick = null,
+                pressFeedbackType = PressFeedbackType.Tilt,
+                showIndication = true
+    ) {
                 Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -289,7 +298,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                             ?: "当前任务"
                         Text(
                             text = cleanWorkflowName,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MiuixTheme.textStyles.body1,
                             color = onCard,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -297,7 +306,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
     )
                         Text(
                             text = "运行中",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MiuixTheme.textStyles.subtitle,
                             color = scheme.primary
     )
                     }
@@ -316,7 +325,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(
                             text = lastMsgType,
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MiuixTheme.textStyles.body2,
                             color = onCard.copy(alpha = 0.72f),
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
@@ -333,8 +342,11 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
             modifier = Modifier.fillMaxWidth(),
             cornerRadius = DashCardRadius,
             colors = cardColors,
-
-            onClick = null) {
+        
+            onClick = null,
+            pressFeedbackType = PressFeedbackType.Tilt,
+            showIndication = true
+    ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
                 if (isRh) {
                     // Only real data: profile settings + /uc/openapi/accountStatus + /openapi/v2/queue/status.
@@ -397,7 +409,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                             }
                             Text(
                                 text = hint,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MiuixTheme.textStyles.body1,
                                 color = if (rhConnState == RhConnState.UNAUTHORIZED || rhConnState == RhConnState.NETWORK_ERROR) scheme.error else onCard.copy(alpha = 0.7f),
                                 modifier = Modifier.padding(vertical = 8.dp)
     )
@@ -412,7 +424,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                     } else {
                         Text(
                             text = "未选择服务器",
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MiuixTheme.textStyles.body1,
                             color = onCard.copy(alpha = 0.7f),
                             modifier = Modifier.padding(vertical = 12.dp)
     )
@@ -420,18 +432,18 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 } else {
                     val s = stats
                     if (connected && s != null) {
-                        LocalSystemStatusPreview(s, onCard, scheme.primary)
+                        LocalSystemStatusPreview(s, onCard)
                     } else if (connected) {
                         Text(
                             text = "同步中…",
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MiuixTheme.textStyles.body1,
                             color = onCard.copy(alpha = 0.7f),
                             modifier = Modifier.padding(vertical = 12.dp)
     )
                     } else {
                         Text(
                             text = "未连接",
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MiuixTheme.textStyles.body1,
                             color = onCard.copy(alpha = 0.7f),
                             modifier = Modifier.padding(vertical = 12.dp)
     )
@@ -484,12 +496,12 @@ internal fun StatProgressRow(
     ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
                 color = contentColor
     )
             Text(
                 text = valueText,
-                style = MaterialTheme.typography.bodyMedium,
+                style = MiuixTheme.textStyles.body2,
                 color = contentColor.copy(alpha = 0.72f)
     )
         }
@@ -550,14 +562,14 @@ private fun RhSpecList(
     ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MiuixTheme.textStyles.body1,
                     color = contentColor,
                     maxLines = 1
     )
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = contentColor.copy(alpha = 0.72f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -579,19 +591,19 @@ private fun RhMetricTile(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f))
+            .background(MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f))
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
                 color = contentColor.copy(alpha = 0.65f),
                 maxLines = 1
     )
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
                 color = contentColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -613,13 +625,13 @@ internal fun InfoRow(
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+            style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
             color = contentColor
     )
         Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MiuixTheme.textStyles.body2,
             color = contentColor.copy(alpha = 0.72f),
             maxLines = 3,
             overflow = TextOverflow.Ellipsis

@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens.agent
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -53,15 +51,17 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.MediaOutput
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.CardColors
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketLinearProgressIndicator as LinearProgressIndicator
-import com.comfyui.mobile.ui.designsystem.PocketProgressDefaults as ProgressIndicatorDefaults
-import androidx.compose.material3.Text
-
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardColors
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Report
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 /**
  * Agent image preview card — one frosted center overlay for all busy/complete phases.
@@ -82,7 +82,7 @@ fun AgentImagePreviewCard(
     onStyleParamsClick: () -> Unit,
     onPromptClick: () -> Unit
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { mediaList.size })
     val overlayOn = status.showOverlay
     // Keep last overlay payload so exit fade still draws "完成" (no empty flash).
@@ -120,7 +120,10 @@ fun AgentImagePreviewCard(
             ),
         cornerRadius = 28.dp,
         colors = cardColors,
-        onClick = { }) {
+        onClick = { },
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true
+    ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (mediaList.isNotEmpty()) {
                 HorizontalPager(
@@ -148,7 +151,7 @@ fun AgentImagePreviewCard(
                     contentAlignment = Alignment.Center
     ) {
                     Icon(
-                        PocketIcons.Image,
+                        MiuixIcons.Image,
                         contentDescription = null,
                         modifier = Modifier.size(88.dp),
                         tint = scheme.primary.copy(alpha = 0.45f)
@@ -204,7 +207,7 @@ fun AgentImagePreviewCard(
                             verticalArrangement = Arrangement.Center
     ) {
                             Icon(
-                                PocketIcons.Image,
+                                MiuixIcons.Image,
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(72.dp)
@@ -215,7 +218,7 @@ fun AgentImagePreviewCard(
                             Text(
                                 text = if (accentComplete) "✓  $title" else title,
                                 color = titleColor,
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                                style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
     )
@@ -233,7 +236,7 @@ fun AgentImagePreviewCard(
                                 Text(
                                     text = subtitle,
                                     color = titleColor.copy(alpha = 0.92f),
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
     )
@@ -258,13 +261,13 @@ fun AgentImagePreviewCard(
                     Text(
                         text = if (pagerState.currentPage == 0) "最新生成" else "历史生成",
                         color = scheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MiuixTheme.textStyles.body2
     )
                     if (mediaList.size > 1) {
                         Text(
                             text = "(${pagerState.currentPage + 1}/${mediaList.size})",
                             color = scheme.primary,
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold)
     )
                     }
                 }
@@ -283,7 +286,7 @@ fun AgentImagePreviewCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
                     Icon(
-                        PocketIcons.Report,
+                        MiuixIcons.Report,
                         contentDescription = null,
                         modifier = Modifier.size(12.dp),
                         tint = scheme.error
@@ -291,7 +294,7 @@ fun AgentImagePreviewCard(
                     Text(
                         text = status.errorBadge,
                         color = scheme.error,
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
     )
@@ -350,7 +353,7 @@ private fun AgentStatusProgressBar(
     progress: Float?,
     modifier: Modifier = Modifier
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val h = 4.dp
     if (progress != null) {
         LinearProgressIndicator(

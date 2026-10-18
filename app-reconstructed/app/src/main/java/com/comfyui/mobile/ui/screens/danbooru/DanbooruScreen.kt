@@ -1,49 +1,5 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
-import androidx.compose.material3.CardColors
-
-import androidx.compose.material3.Slider
-
-import androidx.compose.material3.Switch
-
-import androidx.compose.material3.Icon
-
-import androidx.compose.material3.Text
-
-import com.comfyui.mobile.ui.designsystem.PocketCircularProgressIndicator as CircularProgressIndicator
-
-import com.comfyui.mobile.ui.designsystem.PocketProgressDefaults as ProgressIndicatorDefaults
-
-import com.comfyui.mobile.ui.designsystem.PocketLinearProgressIndicator as LinearProgressIndicator
-
-import com.comfyui.mobile.ui.designsystem.PocketListRow as BasicComponent
-
-import com.comfyui.mobile.ui.designsystem.PocketSmallTitle as SmallTitle
-
-import com.comfyui.mobile.ui.designsystem.PocketFloatingToolbar as FloatingToolbar
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import android.widget.Toast
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.layout.*
@@ -62,9 +18,11 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.comfyui.mobile.danbooru.*
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import kotlinx.coroutines.flow.distinctUntilChanged
-
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker: @Composable () -> Unit) {
@@ -117,22 +75,18 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
             if (near && !busy && !s.refreshing && !vm.hasDetail && !s.settingsOpen && s.appendError == null && s.error == null) vm.loadNext()
         }
     }
-    if (state.settingsOpen) {
-        DanbooruSettingsDialog(vm.settings, state, vm::closeSettings, vm::save, vm::test, vm::logout, vm::clearCache)
-        return
-    }
-    Scaffold(containerColor = MaterialTheme.colorScheme.background, topBar = {
+    Scaffold(containerColor = MiuixTheme.colorScheme.background, topBar = {
         Row(Modifier.fillMaxWidth().statusBarsPadding().heightIn(min = 56.dp).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (vm.hasDetail) IconButton(onClick = vm::back) {
-                Icon(PocketIcons.Back, contentDescription = if (state.selected.isNotEmpty()) "退出多选" else "返回图片列表")
+                Icon(MiuixIcons.Back, contentDescription = if (state.selected.isNotEmpty()) "退出多选" else "返回图片列表")
             }
             Text(if (state.selected.isNotEmpty()) "已选 ${state.selected.size} 个标签" else if (vm.hasDetail) "图片详情" else "画廊",
-                Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            IconButton(onClick = vm::showSettings) { Icon(PocketIcons.Settings, contentDescription = "Danbooru 设置") }
+                Modifier.weight(1f), style = MiuixTheme.textStyles.title3, fontWeight = FontWeight.SemiBold)
+            IconButton(onClick = vm::showSettings) { Icon(MiuixIcons.Settings, contentDescription = "Danbooru 设置") }
         }
     }) { padding ->
-        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).padding(horizontal = 16.dp)) {
+        Column(Modifier.fillMaxSize().padding(top = padding.calculateTopPadding()).padding(horizontal = 20.dp)) {
             if (vm.hasDetail) {
                 DanbooruDetailScreen(state, runtime, vm, Modifier.weight(1f).padding(bottom = clearance))
             } else {
@@ -142,17 +96,27 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
                     onSort = { keyboard?.hide(); vm.sort(input, it) },
                     onFilter = { vm.filter(input, it) },
                     onPeriod = { vm.rankingPeriod(input, it) }, onDate = vm::rankingDate)
-                DanbooruGalleryGrid(state, grid, runtime.imageLoader, scope, clearance, Modifier.weight(1f),
-                    vm::open, vm::previous, vm::retry, { vm.loadNext() }, vm::refresh)
+                if (state.loading && state.posts.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                } else if (state.error != null && state.posts.isEmpty()) {
+                    Feedback(state.error!!, "重试", vm::refresh)
+                } else if (state.posts.isEmpty()) {
+                    Feedback(if (state.ended) "没有找到图片，试试其他标签或日期" else "正在准备画廊", "重新加载", vm::refresh)
+                } else {
+                    state.error?.let { Feedback("$it；当前图片已保留", "重新刷新", vm::refresh) }
+                    DanbooruGalleryGrid(state, grid, runtime.imageLoader, scope, clearance, Modifier.weight(1f),
+                        vm::open, vm::previous, vm::retry, { vm.loadNext() }, vm::refresh)
+                }
             }
         }
+        if (state.settingsOpen) DanbooruSettingsDialog(vm.settings, state, vm::closeSettings, vm::save, vm::test, vm::logout, vm::clearCache)
     }
 }
 
 @Composable
 internal fun Feedback(message: String, action: String, onAction: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+        Text(message, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSecondaryContainer)
         DanbooruSmallAction(action, onClick = onAction)
     }
 }

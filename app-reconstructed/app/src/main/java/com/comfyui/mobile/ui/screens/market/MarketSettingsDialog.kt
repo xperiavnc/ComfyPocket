@@ -1,6 +1,5 @@
 package com.comfyui.mobile.ui.screens.market
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -26,13 +25,13 @@ import com.comfyui.mobile.market.MarketConnectionMode
 import com.comfyui.mobile.ui.components.DialogFormColumn
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun MarketSettingsDialog(
@@ -48,9 +47,8 @@ fun MarketSettingsDialog(
     var testing by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val passwordTransformation = if (showSecrets) VisualTransformation.None else PasswordVisualTransformation()
-    BackHandler(enabled = !saving) { onDismiss() }
 
     OverlayDialog(
         show = true,
@@ -60,7 +58,7 @@ fun MarketSettingsDialog(
         DialogFormColumn(
             footer = {
                 status?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall,
+                    Text(it, style = MiuixTheme.textStyles.footnote1,
                         color = scheme.onSurface, modifier = Modifier.padding(top = 10.dp))
                 }
                 Row(
@@ -102,7 +100,7 @@ fun MarketSettingsDialog(
                 if (draft.mode == MarketConnectionMode.DIRECT)
                     "手机独立浏览 Civitai，无需电脑在线；安装模型仍交给电脑下载。"
                 else "浏览经由当前 ComfyUI 电脑转发，使用电脑自己的网络与 Key。",
-                style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer
+                style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer
             )
             Spacer(Modifier.height(12.dp))
             SettingSwitch("启用自定义 HTTP 代理（手机直连）", draft.proxyEnabled) {
@@ -112,25 +110,25 @@ fun MarketSettingsDialog(
                 TextField(
                     value = draft.proxyAddress,
                     onValueChange = { if (!saving && !testing) draft = draft.copy(proxyAddress = it) },
-                    label = "http://代理主机:端口", singleLine = true,
+                    label = "http://代理主机:端口", useLabelAsPlaceholder = true, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
                 Text(
                     "127.0.0.1 指手机本机；使用电脑代理时请填写电脑的局域网 IP，并允许局域网连接。",
-                    style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer,
+                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer,
                     modifier = Modifier.padding(top = 4.dp)
                 )
                 TextField(
                     value = draft.proxyUsername,
                     onValueChange = { if (!saving && !testing) draft = draft.copy(proxyUsername = it) },
-                    label = "代理用户名（可选）", singleLine = true,
+                    label = "代理用户名（可选）", useLabelAsPlaceholder = true, singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
                 TextField(
                     value = draft.proxyPassword,
                     onValueChange = { if (!saving && !testing) draft = draft.copy(proxyPassword = it) },
-                    label = "代理密码（可选）", singleLine = true,
+                    label = "代理密码（可选）", useLabelAsPlaceholder = true, singleLine = true,
                     visualTransformation = passwordTransformation,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -140,7 +138,7 @@ fun MarketSettingsDialog(
             TextField(
                 value = draft.apiKey,
                 onValueChange = { if (!saving && !testing) draft = draft.copy(apiKey = it) },
-                label = "Civitai Key（留空为匿名访问）", singleLine = true,
+                label = "Civitai Key（留空为匿名访问）", useLabelAsPlaceholder = true, singleLine = true,
                 visualTransformation = passwordTransformation,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth()
@@ -151,7 +149,7 @@ fun MarketSettingsDialog(
                 "Key 和代理密码由手机密钥库加密保存，不进入配置导出或日志，也不发送给电脑。" +
                     "电脑下载的 Key 请到 ComfyUI 设置 → Mobile Bridge → Civitai 配置。" +
                     "Key 用于账号已有访问权限；购买、抢先体验及地区限制仍由 Civitai 判断。",
-                style = MaterialTheme.typography.bodySmall, color = scheme.onSecondaryContainer
+                style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer
             )
             Spacer(Modifier.height(8.dp))
             SettingSwitch("显示成人内容（直连，遵循账号与地区限制）", draft.includeMatureContent) {
@@ -188,7 +186,7 @@ private fun SettingSwitch(title: String, checked: Boolean, onChange: (Boolean) -
         modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(title, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f).padding(end = 8.dp))
+        Text(title, style = MiuixTheme.textStyles.body2, modifier = Modifier.weight(1f).padding(end = 8.dp))
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }

@@ -1,47 +1,5 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
-import androidx.compose.material3.CardColors
-
-import androidx.compose.material3.Slider
-
-import androidx.compose.material3.Switch
-
-import androidx.compose.material3.Icon
-
-import androidx.compose.material3.Text
-
-import com.comfyui.mobile.ui.designsystem.PocketCircularProgressIndicator as CircularProgressIndicator
-
-import com.comfyui.mobile.ui.designsystem.PocketProgressDefaults as ProgressIndicatorDefaults
-
-import com.comfyui.mobile.ui.designsystem.PocketLinearProgressIndicator as LinearProgressIndicator
-
-import com.comfyui.mobile.ui.designsystem.PocketListRow as BasicComponent
-
-import com.comfyui.mobile.ui.designsystem.PocketSmallTitle as SmallTitle
-
-import com.comfyui.mobile.ui.designsystem.PocketFloatingToolbar as FloatingToolbar
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.ContentValues
@@ -71,8 +29,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.*
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun DanbooruDetailScreen(
@@ -142,22 +100,22 @@ internal fun DanbooruDetailScreen(
                 AsyncImage(ImageRequest.Builder(context).data(url).diskCacheKey(cacheKey).memoryCacheKey(cacheKey).build(),
                     contentDescription = "帖子预览", imageLoader = runtime.imageLoader,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 440.dp)
-                        .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        .clip(RoundedCornerShape(18.dp)).background(MiuixTheme.colorScheme.surfaceContainerHigh),
                     contentScale = ContentScale.Fit, onError = { failure = danbooruMediaError(it.result.throwable) })
             } else Text((failure ?: "图片暂不可用") + "；仍可查看和复制下方 Tag")
             if (post.isVideo) Text("视频 / 动态资源（${post.extension}）：首版提供封面与 Tag，播放请打开原帖")
             state.detailError?.let { Feedback(it + "；保留已读 Tag", "重试详情", vm::retryDetail) }
-            if (state.detailLoading) Text("正在更新帖子信息…", style = MaterialTheme.typography.bodySmall)
+            if (state.detailLoading) Text("正在更新帖子信息…", style = MiuixTheme.textStyles.footnote1)
         }
         item {
-            Card(colors = CardDefaults.defaultColors(color = MaterialTheme.colorScheme.surfaceContainerHigh), cornerRadius = 14.dp) {
+            Card(colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainerHigh), cornerRadius = 14.dp) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("画师  ${post.tags[TagGroup.ARTIST].orEmpty().joinToString(" / ").ifBlank { "未标注" }}",
-                        style = MaterialTheme.typography.bodyMedium)
+                        style = MiuixTheme.textStyles.body2)
                     Text("#${post.id} · ${post.width ?: "?"} × ${post.height ?: "?"} · ${post.extension.uppercase()} · ${post.rating.uppercase()}",
-                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    if (post.source.isNotBlank()) Text(post.source, style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer)
+                    if (post.source.isNotBlank()) Text(post.source, style = MiuixTheme.textStyles.footnote2,
+                        color = MiuixTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (post.fileUrl != null && !post.isVideo) {
                             DanbooruSmallAction(if (busy) "读取中…" else "保存原图", enabled = !busy) { download(false) }

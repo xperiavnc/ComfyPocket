@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -55,17 +53,25 @@ import com.comfyui.mobile.ui.theme.ThemePalette
 import com.comfyui.mobile.ui.theme.ThemePalettes
 import com.comfyui.mobile.ui.theme.themePaletteById
 import kotlin.math.roundToInt
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import com.comfyui.mobile.ui.designsystem.PocketSliderPreference as SliderPreference
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketSwitchPreference as SwitchPreference
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SliderDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Layers
+import top.yukonga.miuix.kmp.icon.extended.ExpandMore
+import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.icon.extended.Tune
+import top.yukonga.miuix.kmp.preference.SliderPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) {
@@ -77,8 +83,9 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
 
     var scaleDraft by remember { mutableFloatStateOf(uiScale) }
 
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
 
     Scaffold(
         containerColor = scheme.background,
@@ -86,9 +93,10 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             TopAppBar(
                 title = "外观与主题",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(PocketIcons.Back, contentDescription = "返回")
+                        Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 }
     )
@@ -97,6 +105,8 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp)
                 .padding(
@@ -115,7 +125,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "外观模式",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MiuixTheme.textStyles.title3,
                         fontWeight = FontWeight.SemiBold
     )
                     Row(
@@ -157,13 +167,13 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "主题色板",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MiuixTheme.textStyles.title3,
                         fontWeight = FontWeight.SemiBold
     )
                     Text(
                         text = "固定配色，不使用壁纸动态取色",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = scheme.onSurfaceVariant
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = scheme.onSurfaceVariantSummary
     )
                     // Collapsed header: current swatch + name; tap to expand
                     Row(
@@ -183,7 +193,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = currentPalette.displayName,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MiuixTheme.textStyles.body1,
                                 fontWeight = FontWeight.SemiBold,
                                 color = scheme.onSurface,
                                 maxLines = 1,
@@ -191,16 +201,16 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     )
                             Text(
                                 text = if (palettePickerExpanded) "点选色点切换" else currentPalette.summary,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = scheme.onSurfaceVariant,
+                                style = MiuixTheme.textStyles.footnote1,
+                                color = scheme.onSurfaceVariantSummary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
     )
                         }
                         Icon(
-                            imageVector = PocketIcons.ExpandMore,
+                            imageVector = MiuixIcons.ExpandMore,
                             contentDescription = if (palettePickerExpanded) "收起色板" else "展开色板",
-                            tint = scheme.onSurfaceVariant,
+                            tint = scheme.onSurfaceVariantSummary,
                             modifier = Modifier
                                 .size(20.dp)
                                 .rotate(if (palettePickerExpanded) 180f else 0f)
@@ -229,7 +239,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                     summary = "通知栏显示进度百分比",
                     startAction = {
                         Icon(
-                            PocketIcons.Info,
+                            MiuixIcons.Info,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -253,10 +263,10 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                     steps = 44,
                     showKeyPoints = true,
                     keyPoints = listOf(0.85f, 1.0f, 1.15f, 1.30f),
-                     hapticEffect = null,
+                    hapticEffect = SliderDefaults.SliderHapticEffect.Step,
                     startAction = {
                         Icon(
-                            PocketIcons.Tune,
+                            MiuixIcons.Tune,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -267,6 +277,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
         }
     }
 }
+
 
 @Composable
 private fun PaletteDualSwatch(
@@ -333,7 +344,7 @@ private fun PaletteSwatchCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val ring by animateColorAsState(
         targetValue = if (selected) scheme.primary else scheme.outline.copy(alpha = 0.35f),
         animationSpec = tween(160),
@@ -371,7 +382,7 @@ private fun PaletteSwatchCell(
                     contentAlignment = Alignment.Center
     ) {
                     Icon(
-                        imageVector = PocketIcons.Ok,
+                        imageVector = MiuixIcons.Ok,
                         contentDescription = null,
                         tint = scheme.onPrimary,
                         modifier = Modifier.size(10.dp)
@@ -381,7 +392,7 @@ private fun PaletteSwatchCell(
         }
         Text(
             text = palette.displayName,
-            style = MaterialTheme.typography.bodySmall,
+            style = MiuixTheme.textStyles.footnote1,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) scheme.primary else scheme.onSurface,
             maxLines = 1,
@@ -390,6 +401,7 @@ private fun PaletteSwatchCell(
     )
     }
 }
+
 
 @Composable
 private fun AppearanceModeMockup(
@@ -400,7 +412,7 @@ private fun AppearanceModeMockup(
     onClick: () -> Unit
     ) {
     val isSelected = mode == currentMode
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val borderColor by animateColorAsState(
         targetValue = if (isSelected) scheme.primary else Color.Transparent,
         animationSpec = tween(220),
@@ -495,7 +507,7 @@ private fun AppearanceModeMockup(
                     contentAlignment = Alignment.Center
     ) {
                     Icon(
-                        imageVector = PocketIcons.Ok,
+                        imageVector = MiuixIcons.Ok,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(12.dp)

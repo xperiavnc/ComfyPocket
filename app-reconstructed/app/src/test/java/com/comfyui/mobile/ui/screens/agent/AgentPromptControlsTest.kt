@@ -29,7 +29,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
-import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -42,7 +42,7 @@ class AgentPromptControlsTest {
         var saved: AgentPromptSettings? = null
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { PocketMaterialTheme {
+                setContent { MiuixTheme {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         AgentLocalTagSettings(AgentPromptSettings(), search = { _, _ -> emptyList() }) { saved = it }
                     }
@@ -61,7 +61,7 @@ class AgentPromptControlsTest {
         val report = LocalTagReport(listOf(LocalTagEntry("blue hair", "蓝发", "hair", "颜色", "tag", "", "", "蓝发", true)))
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { PocketMaterialTheme {
+                setContent { MiuixTheme {
                     AgentBubble(AgentChatMessage("fixture", "assistant", "好的，正在整理画面。", localTagReport = report))
                 } }
             })
@@ -76,7 +76,7 @@ class AgentPromptControlsTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { PocketMaterialTheme {
+                setContent { MiuixTheme {
                     AgentPromptDetails("cat, rain", "blurry, extra limbs", "已写入工作流反向输入（1 项）")
                 } }
             })
@@ -95,7 +95,7 @@ class AgentPromptControlsTest {
         val copied = mutableListOf<Pair<String, String>>()
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { PocketMaterialTheme {
+                setContent { MiuixTheme {
                     AgentOutputPromptPanel(AgentPromptOutput("cat, rain", "blurry", "已写入反向")) { label, text ->
                         copied += label to text
                     }
@@ -122,7 +122,7 @@ class AgentPromptControlsTest {
         )
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { PocketMaterialTheme {
+                setContent { MiuixTheme {
                     AgentPromptBindingPanel(AgentPromptBinding(), AgentPromptBinding(), nodes) { negative, binding ->
                         selected += negative to binding
                     }
@@ -144,7 +144,7 @@ class AgentPromptControlsTest {
         val queries = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { PocketMaterialTheme {
+                setContent { MiuixTheme {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
                         AgentLocalTagSettings(AgentPromptSettings(), search = { query, kind ->
                             queries += query to kind
@@ -169,7 +169,7 @@ class AgentPromptControlsTest {
         val view = ComposeView(controller.get())
         try {
             controller.get().setContentView(view)
-            view.setContent { PocketMaterialTheme {
+            view.setContent { MiuixTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     AgentOutputPromptPanel(AgentPromptOutput("cat, blue hair, rainy street",
                         "blurry, extra limbs", "已写入工作流反向输入（1 项）")) { _, _ -> }

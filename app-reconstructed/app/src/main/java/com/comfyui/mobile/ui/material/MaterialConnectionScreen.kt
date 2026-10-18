@@ -25,7 +25,6 @@ import kotlinx.coroutines.launch
 
 /** Activity-retained, not SavedState: rotation retains edits without serializing credentials. */
 class MaterialConnectionEditor : ViewModel() {
-    private var sessionOpen = false
     var baseline by mutableStateOf(DanbooruSettings())
         private set
     var draft by mutableStateOf(DanbooruSettings())
@@ -35,9 +34,7 @@ class MaterialConnectionEditor : ViewModel() {
     var busy by mutableStateOf(false)
     var status by mutableStateOf<String?>(null)
     val dirty get() = draft != baseline
-    fun begin(value: DanbooruSettings) { sessionOpen = true; baseline = value; draft = value; errors = emptyMap(); status = null }
-    fun beginIfNeeded(value: DanbooruSettings) { if (!sessionOpen) begin(value) }
-    fun finish() { sessionOpen = false; discard() }
+    fun begin(value: DanbooruSettings) { baseline = value; draft = value; errors = emptyMap(); status = null }
     fun edit(value: DanbooruSettings) { draft = value; errors = emptyMap(); status = null }
     fun validate(): DanbooruSettings? {
         val issues = mutableMapOf<String, String>()
@@ -110,41 +107,41 @@ internal fun MaterialConnectionScreen(
         Column(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Text(if (online) "独立账号和 HTTP 代理，仅作用于 Danbooru。"
+            Text(if (online) "使用现有独立账号和 HTTP 代理。保存后也会应用于原画廊。"
                 else "离线样板 · 仅保存于本次演示，不联网，不修改真实账号或代理。",
                 style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = { preferences = !preferences }) { Text(if (preferences) "收起偏好" else "偏好") }
-            if (!preferences) {
-                Text("账号", style = MaterialTheme.typography.titleMedium)
-                ConnectionField(draft.username, "用户名", !editor.busy, editor.errors["account"]) { editor.edit(draft.copy(username = it)) }
-                ConnectionField(draft.apiKey, "API Key", !editor.busy, editor.errors["account"],
-                    secret = !visible, keyboard = KeyboardType.Password) { editor.edit(draft.copy(apiKey = it)) }
-                Text("同时留空即可匿名浏览；测试成功不代表已保存。",
+            Text("账号", style = MaterialTheme.typography.titleMedium)
+            ConnectionField(draft.username, "用户名", !editor.busy, editor.errors["account"]) { editor.edit(draft.copy(username = it)) }
+            ConnectionField(draft.apiKey, "API Key", !editor.busy, editor.errors["account"],
+                secret = !visible, keyboard = KeyboardType.Password) { editor.edit(draft.copy(apiKey = it)) }
+            Text("同时留空即可匿名浏览；测试成功不代表已保存。",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (draft.username.isNotBlank() || draft.apiKey.isNotBlank()) TextButton(
+                enabled = !editor.busy, onClick = { editor.edit(draft.copy(username = "", apiKey = "")) }
+            ) { Text("清空账号，保存后退出") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { visible = !visible }, enabled = !editor.busy) { Text(if (visible) "隐藏密钥" else "显示密钥") }
+                OutlinedButton(onClick = {
+                    val value = editor.validate() ?: return@OutlinedButton
+                    action {
+                        editor.status = if (online) onTest(value) else { onTest(value); "离线校验通过；未联网验证账号，也未保存" }
+                    }
+                }, enabled = !editor.busy) { Text("测试当前输入") }
+            }
+            HorizontalDivider()
+            SettingSwitch("独立 HTTP 代理", draft.proxyEnabled, !editor.busy) { editor.edit(draft.copy(proxyEnabled = it)) }
+            if (draft.proxyEnabled) {
+                ConnectionField(draft.proxyAddress, "代理地址", !editor.busy, editor.errors["proxy"],
+                    keyboard = KeyboardType.Uri, placeholder = "http://主机:端口") { editor.edit(draft.copy(proxyAddress = it)) }
+                Text("127.0.0.1 指手机本机；电脑代理请填写局域网 IP。",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (draft.username.isNotBlank() || draft.apiKey.isNotBlank()) TextButton(
-                    enabled = !editor.busy, onClick = { editor.edit(draft.copy(username = "", apiKey = "")) }
-                ) { Text("清空账号，保存后退出") }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { visible = !visible }, enabled = !editor.busy) { Text(if (visible) "隐藏密钥" else "显示密钥") }
-                    OutlinedButton(onClick = {
-                        val value = editor.validate() ?: return@OutlinedButton
-                        action {
-                            editor.status = if (online) onTest(value) else { onTest(value); "离线校验通过；未联网验证账号，也未保存" }
-                        }
-                    }, enabled = !editor.busy) { Text("测试当前输入") }
-                }
-                HorizontalDivider()
-                SettingSwitch("独立 HTTP 代理", draft.proxyEnabled, !editor.busy) { editor.edit(draft.copy(proxyEnabled = it)) }
-                if (draft.proxyEnabled) {
-                    ConnectionField(draft.proxyAddress, "代理地址", !editor.busy, editor.errors["proxy"],
-                        keyboard = KeyboardType.Uri, placeholder = "http://主机:端口") { editor.edit(draft.copy(proxyAddress = it)) }
-                    Text("127.0.0.1 指手机本机；电脑代理请填写局域网 IP。",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    ConnectionField(draft.proxyUsername, "代理用户名（可选）", !editor.busy) { editor.edit(draft.copy(proxyUsername = it)) }
-                    ConnectionField(draft.proxyPassword, "代理密码（可选）", !editor.busy, secret = !visible,
-                        keyboard = KeyboardType.Password) { editor.edit(draft.copy(proxyPassword = it)) }
-                }
-            } else {
+                ConnectionField(draft.proxyUsername, "代理用户名（可选）", !editor.busy) { editor.edit(draft.copy(proxyUsername = it)) }
+                ConnectionField(draft.proxyPassword, "代理密码（可选）", !editor.busy, secret = !visible,
+                    keyboard = KeyboardType.Password) { editor.edit(draft.copy(proxyPassword = it)) }
+            }
+            HorizontalDivider()
+            TextButton(onClick = { preferences = !preferences }) { Text(if (preferences) "收起浏览与复制偏好" else "浏览与复制偏好") }
+            if (preferences) {
                 Text("默认内容评级", style = MaterialTheme.typography.titleSmall)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ContentFilter.entries.filter { it != ContentFilter.CUSTOM }.forEach { value ->

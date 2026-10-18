@@ -13,9 +13,9 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.lifecycle.SavedStateHandle
 import com.comfyui.mobile.danbooru.*
-import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
 import com.comfyui.mobile.ui.screens.gallery.GalleryHomeSource
 import com.comfyui.mobile.ui.screens.gallery.GallerySourcePicker
+import com.comfyui.mobile.ui.theme.ComfyControllerTheme
 import java.io.File
 import org.junit.Assert.*
 import org.junit.Rule
@@ -26,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
+import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
@@ -97,8 +98,12 @@ class DanbooruVisualTest {
         val view = ComposeView(activity)
         try {
             activity.setContentView(view.apply { setContent {
-                PocketMaterialTheme(dark) {
-                    DanbooruScreen(vm, runtime) { GallerySourcePicker(GalleryHomeSource.DANBOORU) {} }
+                // Native Robolectric Skia does not implement Miuix's AGSL color qualifier.
+                // Use its documented rounded-corner fallback for screenshot layout/typography.
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(dark) {
+                        DanbooruScreen(vm, runtime) { GallerySourcePicker(GalleryHomeSource.DANBOORU) {} }
+                    }
                 }
             } })
             compose.waitForIdle()

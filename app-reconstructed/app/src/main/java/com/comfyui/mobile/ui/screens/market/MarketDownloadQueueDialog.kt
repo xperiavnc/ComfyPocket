@@ -25,10 +25,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import java.util.Locale
 
 /** Scoped to the visible dialog; no permanent polling in MainViewModel. */
@@ -65,9 +65,9 @@ fun MarketDownloadQueueDialog(
     OverlayDialog(show = true, title = "电脑下载队列", onDismissRequest = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("由 Mobile Bridge 原生下载；受限模型请在 ComfyUI 设置 → Mobile Bridge → Civitai 配置电脑 Key。",
-                style = MaterialTheme.typography.bodySmall)
+                style = MiuixTheme.textStyles.footnote1)
             if (!connected) Text("请先连接 ComfyUI 电脑")
-            error?.let { Text(it, color = MaterialTheme.colorScheme.onSecondaryContainer) }
+            error?.let { Text(it, color = MiuixTheme.colorScheme.onSecondaryContainer) }
             if (connected && data == null && error == null) Text("正在读取下载队列…")
             if (connected && data?.queue?.isEmpty() == true) Text("暂无下载任务")
             LazyColumn(
@@ -76,7 +76,7 @@ fun MarketDownloadQueueDialog(
             ) {
                 items(data?.queue.orEmpty(), key = { it.download_id.orEmpty() }) { task ->
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(task.effectiveName, style = MaterialTheme.typography.bodyLarge)
+                        Text(task.effectiveName, style = MiuixTheme.textStyles.body1)
                         val label = when (task.status) {
                             "queued" -> "排队中"
                             "downloading" -> "下载中"
@@ -90,9 +90,9 @@ fun MarketDownloadQueueDialog(
                         val speed = (task.speed_bytes ?: 0.0) / (1024.0 * 1024.0)
                         Text("$label · ${String.format(Locale.US, "%.1f", task.progress ?: 0.0)}% · " +
                             "${String.format(Locale.US, "%.2f", speed)} MiB/s",
-                            style = MaterialTheme.typography.bodySmall)
+                            style = MiuixTheme.textStyles.footnote1)
                         task.error?.takeIf { it.isNotBlank() }?.let {
-                            Text(it, style = MaterialTheme.typography.bodySmall)
+                            Text(it, style = MiuixTheme.textStyles.footnote1)
                         }
                         val id = task.download_id
                         if (connected && !id.isNullOrBlank() &&

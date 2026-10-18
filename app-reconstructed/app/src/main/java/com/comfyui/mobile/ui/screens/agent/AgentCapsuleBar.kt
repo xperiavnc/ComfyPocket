@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens.agent
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.animation.core.spring
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
@@ -16,7 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-
+import top.yukonga.miuix.kmp.icon.extended.Delete
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -36,11 +34,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.ui.rememberAppHaptics
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ExpandMore
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** Layout: [Chat|绘图 toggle] ........ [model ▾][🗑] */
 @Composable
@@ -82,10 +80,10 @@ fun AgentCapsuleBar(
                 onClick = { haptics.tick(); onModelSwitchClick() }
     ) {
                 Icon(
-                    PocketIcons.ExpandMore,
+                    MiuixIcons.ExpandMore,
                     contentDescription = "切换模型与 API",
                     modifier = Modifier.size(12.dp),
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MiuixTheme.colorScheme.primary
     )
             }
             Box(
@@ -97,7 +95,7 @@ fun AgentCapsuleBar(
                 contentAlignment = Alignment.Center
     ) {
                 Icon(
-                    PocketIcons.Delete,
+                    MiuixIcons.Delete,
                     contentDescription = "重置对话",
                     modifier = Modifier.size(16.dp),
                     tint = DangerRed
@@ -115,7 +113,7 @@ private val DangerRed = Color(0xFFEF5350)
 /** Sliding segmented switch: tap a side or swipe horizontally. */
 @Composable
 private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val isDraw = mode != MainViewModel.AGENT_MODE_CHAT
     val thumbOffset by animateDpAsState(
         targetValue = if (isDraw) SegmentWidth else 0.dp,
@@ -164,7 +162,7 @@ private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
                     Text(
                         text = agentModeLabel(m),
                         color = if (selected) scheme.onPrimary else scheme.onSurface.copy(alpha = 0.72f),
-                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1
     )
                 }
@@ -182,7 +180,7 @@ fun AgentCapsule(
     modifier: Modifier = Modifier,
     trailing: (@Composable RowScope.() -> Unit)? = null
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     Row(
         modifier = modifier
             .height(CapsuleHeight)
@@ -197,7 +195,7 @@ fun AgentCapsule(
         Text(
             text = label,
             color = scheme.onSurface,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)

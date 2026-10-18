@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import android.content.Intent
 import android.os.Build
 import com.comfyui.mobile.diagnostics.NavigationDiagnostics
@@ -28,14 +26,15 @@ import com.comfyui.mobile.model.BackupExportOptions
 import com.comfyui.mobile.model.BackupRestoreOptions
 import com.comfyui.mobile.model.ParsedBackup
 import com.comfyui.mobile.ui.MainViewModelBackup
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.icon.extended.Download
+import top.yukonga.miuix.kmp.icon.extended.Import
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -55,24 +54,35 @@ import androidx.navigation.NavController
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.ui.rememberAppHaptics
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketArrowPreference as ArrowPreference
-import com.comfyui.mobile.ui.designsystem.PocketSwitchPreference as SwitchPreference
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Create
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Folder
+import top.yukonga.miuix.kmp.icon.extended.Info
+import top.yukonga.miuix.kmp.icon.extended.Link
+import top.yukonga.miuix.kmp.icon.extended.Photos
+import top.yukonga.miuix.kmp.icon.extended.Recent
+import top.yukonga.miuix.kmp.icon.extended.Theme
+import top.yukonga.miuix.kmp.preference.ArrowPreference
+import top.yukonga.miuix.kmp.preference.SwitchPreference
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     val haptics = rememberAppHaptics()
 
     val context = LocalContext.current
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
 
     // 服务器状态
     val servers by viewModel.servers.collectAsState()
@@ -86,16 +96,18 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     // 界面外观概要（二级页面详细配置）
     val themeMode by viewModel.themeMode.collectAsState()
     val themePaletteId by viewModel.themePaletteId.collectAsState()
+    val isLiquidGlassEnabled by viewModel.isLiquidGlassEnabled.collectAsState()
     val systemDark = isSystemInDarkTheme()
 
-    val themeSummary = remember(themeMode, themePaletteId, systemDark) {
+    val themeSummary = remember(themeMode, themePaletteId, isLiquidGlassEnabled, systemDark) {
         val modeStr = when (themeMode) {
             MainViewModel.THEME_FOLLOW_SYSTEM -> "跟随系统 (${if (systemDark) "深色" else "浅色"})"
             MainViewModel.THEME_LIGHT -> "浅色模式"
             else -> "深色模式"
         }
         val paletteName = com.comfyui.mobile.ui.theme.themePaletteById(themePaletteId).displayName
-        "$modeStr · $paletteName"
+        val glass = if (isLiquidGlassEnabled) " · 液态玻璃" else ""
+        "$modeStr · $paletteName$glass"
     }
 
     // Agent 状态
@@ -231,9 +243,10 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             TopAppBar(
                 title = "设置",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(PocketIcons.Back, contentDescription = "返回")
+                        Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 }
     )
@@ -242,6 +255,8 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp)
                 .padding(
@@ -259,7 +274,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = serverSummary,
                     startAction = {
                         Icon(
-                            PocketIcons.Link,
+                            MiuixIcons.Link,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -276,7 +291,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = themeSummary,
                     startAction = {
                         Icon(
-                            PocketIcons.Theme,
+                            MiuixIcons.Theme,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -300,7 +315,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = agentSummary,
                     startAction = {
                         Icon(
-                            PocketIcons.Create,
+                            MiuixIcons.Create,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -313,7 +328,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = "清空对话",
                     startAction = {
                         Icon(
-                            PocketIcons.Delete,
+                            MiuixIcons.Delete,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -333,7 +348,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = "完成后写入相册",
                     startAction = {
                         Icon(
-                            PocketIcons.Photos,
+                            MiuixIcons.Photos,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -347,7 +362,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = "系统相册",
                     startAction = {
                         Icon(
-                            PocketIcons.Folder,
+                            MiuixIcons.Folder,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -359,7 +374,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = cacheSizeText,
                     startAction = {
                         Icon(
-                            PocketIcons.Delete,
+                            MiuixIcons.Delete,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -379,7 +394,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = ".cui.bak",
                     startAction = {
                         Icon(
-                            PocketIcons.Download,
+                            MiuixIcons.Download,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -395,7 +410,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = ".cui.bak",
                     startAction = {
                         Icon(
-                            PocketIcons.Import,
+                            MiuixIcons.Import,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -414,7 +429,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = if (consoleLogs.isNotEmpty()) "${consoleLogs.size} 条日志" else "查看运行日志",
                     startAction = {
                         Icon(
-                            PocketIcons.Recent,
+                            MiuixIcons.Recent,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -444,7 +459,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     summary = if (versionName.contains("beta", ignoreCase = true)) "v$versionName" else "v$versionName · Beta",
                     startAction = {
                         Icon(
-                            PocketIcons.Info,
+                            MiuixIcons.Info,
                             contentDescription = null,
                             modifier = Modifier.padding(end = 8.dp),
                             tint = scheme.onBackground
@@ -467,13 +482,13 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
             Text(
                 text = "当前缓存占用：$cacheSizeText",
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
                 color = scheme.onBackground
     )
             Text(
                 text = "包含图片与视频加载缓存与节点预览图。\n清理后不会影响相册中的作品、已保存工作流及服务器配置。",
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant
+                style = MiuixTheme.textStyles.footnote1,
+                color = scheme.onSurfaceVariantSummary
     )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -530,8 +545,8 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     if (hasTasks) append(" · 任务记录")
                     if (nick.isNotBlank()) append(" · 个人信息")
                 },
-                style = MaterialTheme.typography.bodySmall,
-                color = scheme.onSurfaceVariant
+                style = MiuixTheme.textStyles.footnote1,
+                color = scheme.onSurfaceVariantSummary
     )
 
             BackupToggleRow(
@@ -617,7 +632,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                 Text(
                     text = dateStr,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = scheme.primary,
                     fontWeight = FontWeight.Medium
     )
@@ -632,20 +647,20 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                         val serverKeyExtra = if (backup.rhKeysCount > 0) " (含 ${backup.rhKeysCount} 个密钥)" else ""
                         Text(
                             text = "• 服务器 ${backup.servers?.size ?: 0}$serverKeyExtra",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MiuixTheme.textStyles.body2
     )
                         val llmKeyExtra = if (backup.llmKeysCount > 0) " (含 ${backup.llmKeysCount} 个密钥)" else ""
                         Text(
                             text = "• 模型 ${backup.llmProfiles?.size ?: 0}$llmKeyExtra",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MiuixTheme.textStyles.body2
     )
                         Text(
                             text = "• 角色 ${backup.characterLores?.size ?: 0}",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MiuixTheme.textStyles.body2
     )
                         Text(
                             text = "• Agent ${backup.agentPrefBag?.size ?: 0}",
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MiuixTheme.textStyles.body2
     )
                         if (!backup.profileNickname.isNullOrBlank() ||
                             !backup.profileBio.isNullOrBlank() ||
@@ -653,7 +668,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                         ) {
                             Text(
                                 text = "• 个人信息",
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MiuixTheme.textStyles.body2
     )
                         }
                         Text(
@@ -661,18 +676,18 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                                 workflowCount < 0 -> "• 工作流"
                                 else -> "• 工作流：$workflowCount 个"
                             },
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MiuixTheme.textStyles.body2
     )
                         if (backup.includeAiApps || parsed.hasPackage) {
                             Text(
                                 text = "• AI 应用",
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MiuixTheme.textStyles.body2
     )
                         }
                         if (backup.includeTaskHistory || parsed.hasPackage) {
                             Text(
                                 text = "• 任务记录",
-                                style = MaterialTheme.typography.bodyMedium
+                                style = MiuixTheme.textStyles.body2
     )
                         }
                     }
@@ -681,14 +696,14 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                 if (backup.totalKeysCount > 0) {
                     Text(
                         text = "含 ${backup.totalKeysCount} 个密钥",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MiuixTheme.textStyles.footnote1,
                         color = scheme.primary
     )
                 } else {
                     Text(
                         text = "不含密钥",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = scheme.onSurfaceVariant
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = scheme.onSurfaceVariantSummary
     )
                 }
 
@@ -707,7 +722,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "工作流",
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold)
     )
                             }
                             Switch(
@@ -733,7 +748,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "AI 应用",
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold)
     )
                             }
                             Switch(
@@ -759,7 +774,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "任务记录",
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold)
+                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold)
     )
                             }
                             Switch(
@@ -772,8 +787,8 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
 
                 Text(
                     text = "将覆盖同名数据",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = scheme.onSurfaceVariantSummary
     )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -818,6 +833,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     }
 }
 
+
 @Composable
 private fun BackupToggleRow(
     title: String,
@@ -825,7 +841,7 @@ private fun BackupToggleRow(
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
         cornerRadius = 14.dp,
@@ -839,7 +855,7 @@ private fun BackupToggleRow(
     ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
                 modifier = Modifier.weight(1f),
                     )
             Switch(

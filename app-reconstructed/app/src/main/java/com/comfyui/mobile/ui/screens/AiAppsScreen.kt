@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -55,19 +53,20 @@ import com.comfyui.mobile.ui.screens.aiapps.AiAppEditTitleDialog
 import com.comfyui.mobile.ui.screens.aiapps.AiAppEmptyCard
 import com.comfyui.mobile.ui.screens.aiapps.AiAppSettingsMenuDialog
 import kotlinx.coroutines.launch
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 
 @Composable
 fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
@@ -167,7 +166,8 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
         }
     )
 
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
 
     Scaffold(
@@ -175,11 +175,13 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
         topBar = {
             TopAppBar(
                 title = if (isCloudMode) "云端应用" else "AI应用",
+                largeTitle = if (isCloudMode) "云端应用" else "AI应用",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 actions = {
                     if (isCloudMode) {
                         IconButton(onClick = { showSyncDialog = true; syncError = null }) {
-                            Icon(PocketIcons.Add, contentDescription = "导入应用")
+                            Icon(MiuixIcons.Add, contentDescription = "导入应用")
                         }
                     }
                 }
@@ -205,8 +207,8 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
                         columns = GridCells.Adaptive(160.dp),
                         modifier = Modifier
                             .fillMaxSize()
-
-                            ,
+                            .overScrollVertical()
+                            .nestedScroll(scrollBehavior.nestedScrollConnection),
                         state = gridState,
                         contentPadding = PaddingValues(
                             top = 8.dp,
@@ -324,7 +326,7 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
             Text(
                 text = "粘贴应用链接或 ID：",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MiuixTheme.textStyles.body2,
                 color = scheme.onSecondaryContainer
     )
             Spacer(modifier = Modifier.height(8.dp))
@@ -332,6 +334,7 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
                 value = syncInput,
                 onValueChange = { syncInput = it; syncError = null },
                 label = if (currentSite != null) "${currentSite.displayName} 链接或 ID" else "链接或 ID",
+                useLabelAsPlaceholder = true,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
     )
@@ -339,7 +342,7 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = err,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = scheme.error,
                     fontSize = 12.sp
     )

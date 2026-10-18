@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import com.comfyui.mobile.ui.screens.control.ControlWorkflowHeaderCard
 import com.comfyui.mobile.ui.screens.control.ControlRunCard
 import com.comfyui.mobile.ui.screens.control.ControlLatestMediaCard
@@ -10,14 +8,14 @@ import com.comfyui.mobile.ui.screens.control.ControlQueueCard
 import com.comfyui.mobile.ui.screens.control.StackedParamEditorList
 import com.comfyui.mobile.ui.screens.control.compoundKeyOf
 import com.comfyui.mobile.ui.screens.control.CloudModelBrowserDialog
-
-
-
-
-
-
-
-
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Search
+import top.yukonga.miuix.kmp.icon.extended.Tune
+import top.yukonga.miuix.kmp.icon.extended.Edit
+import top.yukonga.miuix.kmp.icon.extended.File
+import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Ok
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.PickVisualMediaRequest
@@ -44,19 +42,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -95,10 +93,10 @@ import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.ui.ControlUi
 import kotlinx.coroutines.launch
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-
-
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
-
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import com.comfyui.mobile.ui.components.DialogFormColumn
 
 private val ControlCardRadius = 28.dp
@@ -120,7 +118,7 @@ fun ControlScreen(viewModel: ControlUi) {
     val baseUrl by viewModel.baseUrl.collectAsState()
     val batchCount by viewModel.batchCount.collectAsState()
     val focusManager = LocalFocusManager.current
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val cardColor = scheme.secondaryContainer
     val onCard = scheme.onSecondaryContainer
     val cardColors = CardDefaults.defaultColors(color = cardColor, contentColor = onCard)
@@ -134,7 +132,7 @@ fun ControlScreen(viewModel: ControlUi) {
     ) { uri ->
         aiAppCoverUri = uri
     }
-
+    
     // Saveable: the picker may recreate the activity; the target node/key must survive it.
     var currentUploadNodeId by rememberSaveable { mutableStateOf<String?>(null) }
     var currentUploadKey by rememberSaveable { mutableStateOf<String?>(null) }
@@ -177,6 +175,7 @@ fun ControlScreen(viewModel: ControlUi) {
                 onValueChange = { aiAppTitle = it },
                 singleLine = true,
                 label = "AI应用标题",
+                useLabelAsPlaceholder = true,
                 modifier = Modifier.fillMaxWidth()
     )
             Spacer(modifier = Modifier.height(12.dp))
@@ -204,11 +203,11 @@ fun ControlScreen(viewModel: ControlUi) {
                                 contentScale = ContentScale.Crop
     )
                         } else {
-                            Icon(PocketIcons.Image, contentDescription = null)
+                            Icon(MiuixIcons.Image, contentDescription = null)
                         }
                     }
                     Spacer(modifier = Modifier.width(10.dp))
-                    Text("封面", style = MaterialTheme.typography.bodyMedium)
+                    Text("封面", style = MiuixTheme.textStyles.body2)
                 }
                 TextButton(
                     text = "选择封面",
@@ -248,12 +247,12 @@ fun ControlScreen(viewModel: ControlUi) {
             }
         }
     }
-
+    
     LaunchedEffect(Unit) {
         viewModel.fetchQueue() // Init fetch
         viewModel.refreshSavedWorkflows()
     }
-
+    
     val servers by viewModel.servers.collectAsState()
     val currentServerId by viewModel.currentServerId.collectAsState()
     val currentServer = servers.firstOrNull { it.effectiveId == currentServerId || it.id == currentServerId }
@@ -285,7 +284,7 @@ fun ControlScreen(viewModel: ControlUi) {
     ) {
             Text(
                 text = "粘贴工作流链接或 ID。留空则清除。",
-                style = MaterialTheme.typography.bodyMedium
+                style = MiuixTheme.textStyles.body2
     )
             Spacer(modifier = Modifier.height(10.dp))
             TextField(
@@ -296,11 +295,12 @@ fun ControlScreen(viewModel: ControlUi) {
                 },
                 singleLine = true,
                 label = "工作流 ID 或链接",
+                useLabelAsPlaceholder = true,
                 modifier = Modifier.fillMaxWidth()
     )
             rhIdError?.let { err ->
                 Spacer(modifier = Modifier.height(6.dp))
-                Text(text = err, style = MaterialTheme.typography.bodyMedium, color = scheme.error)
+                Text(text = err, style = MiuixTheme.textStyles.body2, color = scheme.error)
             }
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -341,7 +341,7 @@ fun ControlScreen(viewModel: ControlUi) {
     var renamingTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
     var renamingText by remember { mutableStateOf("") }
 
-
+    
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
@@ -370,7 +370,7 @@ fun ControlScreen(viewModel: ControlUi) {
                 } else {
                     "确定删除「${pendingDeleteWorkflow?.name.orEmpty().removeSuffix(".json")}」吗？"
                 },
-                style = MaterialTheme.typography.bodyMedium
+                style = MiuixTheme.textStyles.body2
     )
             Spacer(modifier = Modifier.height(16.dp))
             Row(modifier = Modifier.fillMaxWidth()) {
@@ -409,7 +409,7 @@ fun ControlScreen(viewModel: ControlUi) {
                 if (localWorkflowFiles.isEmpty()) {
                     Text(
                         text = if (isCloudMode) "暂无云端存档" else "暂无本地存档",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MiuixTheme.textStyles.body2,
                         color = scheme.onSecondaryContainer
     )
                 } else {
@@ -451,6 +451,8 @@ fun ControlScreen(viewModel: ControlUi) {
                                     scheme.secondaryContainer
                                 }
     ),
+                            pressFeedbackType = PressFeedbackType.Tilt,
+                            showIndication = true,
                             onClick = {
                                 viewModel.loadLocalWorkflow(file)
                                 showLocalDialog = false
@@ -464,7 +466,7 @@ fun ControlScreen(viewModel: ControlUi) {
                                     horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
                                     Icon(
-                                        PocketIcons.File,
+                                        MiuixIcons.File,
                                         contentDescription = null,
                                         tint = if (current) {
                                             scheme.primary
@@ -476,7 +478,7 @@ fun ControlScreen(viewModel: ControlUi) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = displayName,
-                                            style = MaterialTheme.typography.bodyLarge.copy(
+                                            style = MiuixTheme.textStyles.body1.copy(
                                                 fontWeight = if (current) FontWeight.SemiBold else FontWeight.Medium
     ),
                                             maxLines = 2,
@@ -484,7 +486,7 @@ fun ControlScreen(viewModel: ControlUi) {
     )
                                         Text(
                                             text = "$sizeLabel$siteTag",
-                                            style = MaterialTheme.typography.bodySmall,
+                                            style = MiuixTheme.textStyles.footnote1,
                                             color = scheme.onSecondaryContainer
     )
                                     }
@@ -495,14 +497,14 @@ fun ControlScreen(viewModel: ControlUi) {
                                         }
     ) {
                                         Icon(
-                                            PocketIcons.Delete,
+                                            MiuixIcons.Delete,
                                             contentDescription = "删除",
                                             tint = scheme.onSecondaryContainer
     )
                                     }
                                     if (current) {
                                         Icon(
-                                            PocketIcons.Ok,
+                                            MiuixIcons.Ok,
                                             contentDescription = "当前",
                                             tint = scheme.primary,
                                             modifier = Modifier.size(22.dp)
@@ -534,6 +536,7 @@ fun ControlScreen(viewModel: ControlUi) {
                 value = syncInput,
                 onValueChange = { syncInput = it; syncError = null },
                 label = if (currentRhSite != null) "${currentRhSite.displayName} 链接或 ID" else "链接或 ID",
+                useLabelAsPlaceholder = true,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
     )
@@ -542,6 +545,7 @@ fun ControlScreen(viewModel: ControlUi) {
                 value = syncNameInput,
                 onValueChange = { syncNameInput = it },
                 label = "名称（可选）",
+                useLabelAsPlaceholder = true,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
     )
@@ -549,7 +553,7 @@ fun ControlScreen(viewModel: ControlUi) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = err,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = scheme.error,
                     fontSize = 12.sp
     )
@@ -630,7 +634,9 @@ fun ControlScreen(viewModel: ControlUi) {
                 onValueChange = { renamingText = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = "名称（留空恢复默认）")
+                label = "名称（留空恢复默认）",
+                useLabelAsPlaceholder = true
+    )
         }
     }
 
@@ -692,11 +698,12 @@ fun ControlScreen(viewModel: ControlUi) {
                 value = filterQuery,
                 onValueChange = { filterQuery = it },
                 label = "搜索节点 / 参数",
+                useLabelAsPlaceholder = true,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
                 singleLine = true,
                 leadingIcon = {
                     Icon(
-                        PocketIcons.Search,
+                        MiuixIcons.Search,
                         contentDescription = null,
                         modifier = Modifier.padding(start = 14.dp, end = 10.dp)
     )
@@ -705,7 +712,7 @@ fun ControlScreen(viewModel: ControlUi) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = if (filterQuery.isBlank()) "长按条目可拖动调整顺序" else "搜索时暂不可排序",
-                style = MaterialTheme.typography.bodySmall,
+                style = MiuixTheme.textStyles.footnote1,
                 color = scheme.onSecondaryContainer.copy(alpha = 0.75f)
     )
             Spacer(modifier = Modifier.height(10.dp))
@@ -889,7 +896,10 @@ fun ControlScreen(viewModel: ControlUi) {
                             }
     ),
                         holdDownState = false,
-                        onClick = null) {
+                        onClick = null,
+                        pressFeedbackType = PressFeedbackType.None,
+                        showIndication = false
+    ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -920,7 +930,7 @@ fun ControlScreen(viewModel: ControlUi) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = node.title,
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     color = scheme.onBackground.copy(
@@ -929,7 +939,7 @@ fun ControlScreen(viewModel: ControlUi) {
     )
                                 Text(
                                     text = node.classType,
-                                    style = MaterialTheme.typography.bodySmall,
+                                    style = MiuixTheme.textStyles.footnote1,
                                     color = scheme.onSecondaryContainer.copy(alpha = 0.7f),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -942,7 +952,7 @@ fun ControlScreen(viewModel: ControlUi) {
                                 }
     ) {
                                 Icon(
-                                    PocketIcons.Edit,
+                                    MiuixIcons.Edit,
                                     contentDescription = "重命名",
                                     tint = scheme.onSecondaryContainer
     )
@@ -965,6 +975,8 @@ fun ControlScreen(viewModel: ControlUi) {
             modifier = Modifier.fillMaxWidth()
     )
     }
+
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
     val controlListState = rememberLazyListState()
 
@@ -973,15 +985,18 @@ fun ControlScreen(viewModel: ControlUi) {
         topBar = {
             TopAppBar(
                 title = "控制器",
-                color = scheme.background)
+                largeTitle = "控制器",
+                color = scheme.background,
+                scrollBehavior = scrollBehavior
+    )
         }
     ) { innerPadding ->
     LazyColumn(
         state = controlListState,
         modifier = Modifier
             .fillMaxSize()
-
-            ,
+            .overScrollVertical()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
         contentPadding = PaddingValues(
             start = 20.dp,
             top = innerPadding.calculateTopPadding() + 8.dp,
@@ -1022,12 +1037,12 @@ fun ControlScreen(viewModel: ControlUi) {
                     ) {
                         Text(
                             "工作流参数",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                            style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
                             color = onCard,
                             modifier = Modifier.weight(1f),
                     )
                         IconButton(onClick = { showFilterDialog = true }) {
-                            Icon(PocketIcons.Tune, contentDescription = "管理参数", tint = onCard)
+                            Icon(MiuixIcons.Tune, contentDescription = "管理参数", tint = onCard)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))

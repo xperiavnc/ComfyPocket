@@ -1,9 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -41,23 +37,27 @@ import androidx.navigation.NavController
 import com.comfyui.mobile.network.RhTaskRecord
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import com.comfyui.mobile.ui.MainViewModel
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import com.comfyui.mobile.ui.designsystem.PocketSmallTitle as SmallTitle
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCircularProgressIndicator as CircularProgressIndicator
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Refresh
+import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.CircularProgressIndicator
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.material3.MaterialTheme
-
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -77,8 +77,9 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
     val currentServer = servers.firstOrNull { it.effectiveId == currentServerId || it.id == currentServerId }
 
     val context = LocalContext.current
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
 
     // 仅展示本机真实记录的云端任务（不再用 ComfyUI 历史合成记录、默认价格或当前时间）
     val combinedTasks = remember(rhTaskRecords) {
@@ -100,13 +101,14 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
     Scaffold(
         containerColor = scheme.background,
         topBar = {
-            TopAppBar(
+            top.yukonga.miuix.kmp.basic.TopAppBar(
                 title = "任务记录",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
-                            imageVector = PocketIcons.Back,
+                            imageVector = MiuixIcons.Back,
                             contentDescription = "返回"
     )
                     }
@@ -125,7 +127,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                             CircularProgressIndicator(strokeWidth = 2.dp, size = 20.dp)
                         } else {
                             Icon(
-                                imageVector = PocketIcons.Refresh,
+                                imageVector = MiuixIcons.Refresh,
                                 contentDescription = "刷新云端任务"
     )
                         }
@@ -135,7 +137,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                         enabled = combinedTasks.isNotEmpty()
     ) {
                         Icon(
-                            imageVector = PocketIcons.Delete,
+                            imageVector = MiuixIcons.Delete,
                             contentDescription = "清除全部任务记录"
     )
                     }
@@ -146,7 +148,8 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                ,
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(
                 start = 20.dp,
                 end = 20.dp,
@@ -170,7 +173,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                             Column {
                                 Text(
                                     text = "余额",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MiuixTheme.textStyles.body2,
                                     color = scheme.onSecondaryContainer.copy(alpha = 0.72f)
     )
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -180,20 +183,20 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                 } else "--"
                                 Text(
                                     text = coinsStr,
-                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                    style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
                                     color = scheme.onSecondaryContainer
     )
                             }
                             Column(horizontalAlignment = Alignment.End) {
                                 Text(
                                     text = "累计消耗",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MiuixTheme.textStyles.body2,
                                     color = scheme.onSecondaryContainer.copy(alpha = 0.72f)
     )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "-${String.format(Locale.US, "%.1f", totalCoinsSpent)} 币",
-                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                                    style = MiuixTheme.textStyles.title2.copy(fontWeight = FontWeight.Bold),
                                     color = scheme.primary
     )
                             }
@@ -224,12 +227,12 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     text = "暂无任务记录",
-                                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold)
+                                    style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold)
     )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = "跑过任务后会出现在这里",
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MiuixTheme.textStyles.body2,
                                     color = scheme.onSecondaryContainer.copy(alpha = 0.7f)
     )
                             }
@@ -241,6 +244,8 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.defaultColors(color = scheme.surfaceContainer),
+                        pressFeedbackType = PressFeedbackType.Tilt,
+                        showIndication = true,
                         onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             clipboard.setPrimaryClip(ClipData.newPlainText("Task ID", task.taskId))
@@ -271,7 +276,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
     ) {
                                         Text(
                                             text = task.taskStatus,
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                            style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium),
                                             color = if (task.taskStatus in setOf("已完成", "运行中", "排队中", "提交中", "已暂停")) scheme.primary else scheme.error,
                                             fontSize = 11.sp
     )
@@ -287,7 +292,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = displayName,
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                                            style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f, fill = false)
@@ -305,7 +310,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                             inProgress -> "进行中"
                                             else -> "消耗未知"
                                         },
-                                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                        style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.Bold),
                                         color = if (task.costEstimated) scheme.onSecondaryContainer.copy(alpha = 0.6f) else scheme.primary
     )
                                     val costNote = buildList {
@@ -319,7 +324,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                     if (costNote.isNotBlank()) {
                                         Text(
                                             text = costNote,
-                                            style = MaterialTheme.typography.bodyMedium,
+                                            style = MiuixTheme.textStyles.body2,
                                             color = scheme.onSecondaryContainer.copy(alpha = 0.6f),
                                             fontSize = 11.sp
     )
@@ -331,7 +336,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = task.errorMessage,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MiuixTheme.textStyles.body2,
                                     color = scheme.error,
                                     fontSize = 12.sp,
                                     maxLines = 3,
@@ -356,7 +361,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
     ) {
                                     Text(
                                         text = task.taskId,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                        style = MiuixTheme.textStyles.body2.copy(
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 12.sp
     ),
@@ -368,7 +373,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = "轻触复制",
-                                        style = MaterialTheme.typography.labelSmall,
+                                        style = MiuixTheme.textStyles.footnote2,
                                         color = scheme.onSecondaryContainer.copy(alpha = 0.6f),
                                         fontSize = 10.sp
     )
@@ -388,7 +393,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                 }
                                 Text(
                                     text = timeStr,
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = MiuixTheme.textStyles.body2,
                                     color = scheme.onSecondaryContainer.copy(alpha = 0.65f),
                                     fontSize = 11.sp
     )
@@ -399,7 +404,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                                 if (tierInfo.isNotBlank()) {
                                     Text(
                                         text = tierInfo,
-                                        style = MaterialTheme.typography.bodyMedium,
+                                        style = MiuixTheme.textStyles.body2,
                                         color = scheme.onSecondaryContainer.copy(alpha = 0.65f),
                                         fontSize = 11.sp
     )
@@ -420,7 +425,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
         Column {
             Text(
                 text = "清除本页 ${combinedTasks.size} 条记录。相册文件保留。",
-                style = MaterialTheme.typography.bodyLarge
+                style = MiuixTheme.textStyles.body1
     )
             if (unfinishedCount > 0 || rhAppRunning) {
                 Spacer(modifier = Modifier.height(10.dp))
@@ -429,7 +434,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                         if (unfinishedCount > 0) append("有 $unfinishedCount 个进行中，清除后不再跟踪。")
                         if (rhAppRunning) append("批量提交也会停止。")
                     },
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = scheme.error
     )
             }
@@ -443,7 +448,10 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                 Spacer(modifier = Modifier.width(12.dp))
                 TextButton(
                     text = "清除",
-                    colors = ButtonDefaults.textButtonColors(contentColor = scheme.error),
+                    colors = ButtonDefaults.textButtonColorsPrimary(
+                        color = scheme.error,
+                        textColor = scheme.onError
+    ),
                     onClick = {
                         showClearDialog = false
                         viewModel.clearRhTaskRecords()

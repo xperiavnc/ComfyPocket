@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -49,21 +47,23 @@ import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.model.LlmProfile
 import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.ui.screens.agent.AgentReasoningEffortSelector
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
-
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Edit
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.comfyui.mobile.ui.components.DialogFormColumn
 
 @Composable
@@ -80,7 +80,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     val tagSettings by viewModel.agentPromptSettings.collectAsState()
 
     val floatingNavClearance = LocalFloatingNavClearance.current
-    val scheme = MaterialTheme.colorScheme
+    val scrollBehavior = MiuixScrollBehavior()
+    val scheme = MiuixTheme.colorScheme
 
     var editingProfileId by remember(currentLlmProfileId) { mutableStateOf(currentLlmProfileId) }
     var profileName by remember(currentLlmProfileId, currentLlmProfile?.name) {
@@ -103,9 +104,10 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             TopAppBar(
                 title = "Agent 设置",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(PocketIcons.Back, contentDescription = "返回")
+                        Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 }
     )
@@ -114,6 +116,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp)
                 .padding(
@@ -132,7 +136,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "模型 API 配置",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MiuixTheme.textStyles.title3,
                         fontWeight = FontWeight.SemiBold
     )
 
@@ -210,6 +214,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         value = profileName,
                         onValueChange = { profileName = it },
                         label = "名称",
+                        useLabelAsPlaceholder = true,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
     )
@@ -217,8 +222,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                     // 常用服务商快速填入
                     Text(
                         text = "常用大模型服务商预设",
-                        color = scheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariantSummary,
+                        style = MiuixTheme.textStyles.body2,
                         fontSize = 12.sp
     )
                     Row(
@@ -248,7 +253,10 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                         }
                                         if (label.contains("RunningHub")) {
                                             val isOverseas = label.contains("海外")
-                                            val matchedRh = rhServers.firstOrNull {                                                if (isOverseas) it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.OVERSEAS_AI                                                else it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.DOMESTIC_CN                                            } // same-site profile only; never borrow another site's key
+                                            val matchedRh = rhServers.firstOrNull { 
+                                                if (isOverseas) it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.OVERSEAS_AI 
+                                                else it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.DOMESTIC_CN 
+                                            } // same-site profile only; never borrow another site's key
                                             if (matchedRh != null && apiKey.isBlank()) {
                                                 apiKey = matchedRh.effectiveRhApiKey
                                             }
@@ -270,13 +278,14 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         value = baseUrl,
                         onValueChange = { baseUrl = it },
                         label = "API Base URL",
+                        useLabelAsPlaceholder = true,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
     )
                     Text(
                         text = "兼容 OpenAI 规范，例如 https://api.deepseek.com/v1",
-                        color = scheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariantSummary,
+                        style = MiuixTheme.textStyles.body2,
                         fontSize = 12.sp
     )
 
@@ -284,6 +293,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         value = apiKey,
                         onValueChange = { apiKey = it },
                         label = "API Key",
+                        useLabelAsPlaceholder = true,
                         singleLine = true,
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth()
@@ -293,6 +303,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         value = model,
                         onValueChange = { model = it },
                         label = "模型名称",
+                        useLabelAsPlaceholder = true,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
     )
@@ -388,7 +399,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     ) {
                 Text(
                     text = "确定要将「$targetTitle」恢复为系统默认吗？\n当前自定义的内容将被清除覆盖，且无法撤销。",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = scheme.onSurface
     )
                 Row(
@@ -467,7 +478,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 Text(
                     text = "当前字数: ${draftPromptText.length}",
                     fontSize = 12.sp,
-                    color = scheme.onSurfaceVariant
+                    color = scheme.onSurfaceVariantSummary
     )
 
                 // 独立滚动文本编辑容器
@@ -514,7 +525,7 @@ private fun PromptCard(
     onEditClick: () -> Unit,
     onResetClick: () -> Unit
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val isCustomized = promptContent.trim() != defaultPrompt.trim()
 
     Card(
@@ -529,7 +540,7 @@ private fun PromptCard(
     ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleLarge,
+                    style = MiuixTheme.textStyles.title3,
                     fontWeight = FontWeight.SemiBold
     )
                 Box(
@@ -542,7 +553,7 @@ private fun PromptCard(
                         text = if (isCustomized) "自定义" else "默认",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Medium,
-                        color = if (isCustomized) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+                        color = if (isCustomized) scheme.onPrimaryContainer else scheme.onSurfaceVariantSummary
     )
                 }
             }
@@ -550,7 +561,7 @@ private fun PromptCard(
             Text(
                 text = description,
                 fontSize = 12.sp,
-                color = scheme.onSurfaceVariant,
+                color = scheme.onSurfaceVariantSummary,
                 lineHeight = 16.sp
     )
 
@@ -583,7 +594,7 @@ private fun PromptCard(
                     colors = ButtonDefaults.buttonColorsPrimary(),
                     modifier = Modifier.weight(1f),
                     ) {
-                    Icon(PocketIcons.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(MiuixIcons.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("编辑提示词", fontSize = 13.sp)
                 }

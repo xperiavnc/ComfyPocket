@@ -17,10 +17,10 @@ import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.agent.AgentPromptBinding
 import com.comfyui.mobile.agent.PromptBindingMode
 import com.comfyui.mobile.model.EditableNode
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun AgentPromptBindingPanel(
@@ -43,9 +43,9 @@ internal fun AgentPromptBindingPanel(
                 Text("反向节点")
             }
         }
-        Text("正向：${positive.label}\n反向：${negative.label}", style = MaterialTheme.typography.bodySmall)
+        Text("正向：${positive.label}\n反向：${negative.label}", style = MiuixTheme.textStyles.footnote1)
         Text("按具体字段分别绑定。支持同节点的不同文本槽；正反向不可使用同一字段，连线槽不列入。",
-            style = MaterialTheme.typography.bodySmall)
+            style = MiuixTheme.textStyles.footnote1)
         LazyColumn(Modifier.fillMaxWidth().heightIn(max = 300.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             item {

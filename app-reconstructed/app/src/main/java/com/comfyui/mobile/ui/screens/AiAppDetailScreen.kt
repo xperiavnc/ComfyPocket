@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -80,29 +78,29 @@ import com.comfyui.mobile.ui.screens.control.ParamRowItem
 import com.comfyui.mobile.ui.screens.control.buildParamRowItems
 import com.comfyui.mobile.ui.screens.control.compoundKeyOf
 import com.comfyui.mobile.ui.screens.control.rememberSyncedEditableNodes
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-import com.comfyui.mobile.ui.designsystem.PocketLinearProgressIndicator as LinearProgressIndicator
-
-import com.comfyui.mobile.ui.designsystem.PocketProgressDefaults as ProgressIndicatorDefaults
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextButton as TextButton
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import com.comfyui.mobile.ui.designsystem.PocketTopAppBar as TopAppBar
-
-
-
-
-
-
-import com.comfyui.mobile.ui.designsystem.PocketDialog as OverlayDialog
-import androidx.compose.material3.MaterialTheme
-
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
+import top.yukonga.miuix.kmp.basic.MiuixScrollBehavior
+import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
+import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TopAppBar
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.icon.extended.Pause
+import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.comfyui.mobile.ui.components.DialogFormColumn
 
 
@@ -131,8 +129,9 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     val cover = app?.let { viewModel.getAiAppCoverFile(it) }
 
     val context = LocalContext.current
+    val scrollBehavior = MiuixScrollBehavior()
     val floatingNavClearance = LocalFloatingNavClearance.current
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val cardColor = scheme.secondaryContainer
     val onCard = scheme.onSecondaryContainer
     val cardColors = CardDefaults.defaultColors(color = cardColor, contentColor = onCard)
@@ -376,15 +375,17 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
         topBar = {
             TopAppBar(
                 title = app?.title ?: "AI应用",
+                largeTitle = app?.title ?: "AI应用",
                 color = scheme.background,
+                scrollBehavior = scrollBehavior,
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(PocketIcons.Back, contentDescription = "返回")
+                        Icon(MiuixIcons.Back, contentDescription = "返回")
                     }
                 },
                 actions = {
                     IconButton(onClick = { showSettingsMenu = true }) {
-                        Icon(PocketIcons.Settings, contentDescription = "应用设置")
+                        Icon(MiuixIcons.Settings, contentDescription = "应用设置")
                     }
                 }
     )
@@ -394,7 +395,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-
+                    .overScrollVertical()
                     .padding(horizontal = 20.dp)
                     .padding(top = innerPadding.calculateTopPadding() + 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -415,8 +416,8 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
-
-
+                .overScrollVertical()
+                .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .onGloballyPositioned { coords ->
                     val pos = coords.positionInRoot()
                     val size = coords.size
@@ -444,7 +445,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                         Column(modifier = Modifier.padding(14.dp)) {
                             Text(
                                 text = "请重新导入此应用",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                style = MiuixTheme.textStyles.subtitle.copy(fontWeight = FontWeight.Bold),
                                 color = scheme.error
     )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -453,7 +454,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                     "旧版导入结构缺少必须的云端应用元数据，无法直接运行。请重新从云端导入后删除此项。"
                                 else
                                     "此应用属于 RunningHub 云端应用，请切换到 RunningHub 服务器后再导入运行。",
-                                style = MaterialTheme.typography.bodySmall,
+                                style = MiuixTheme.textStyles.footnote1,
                                 color = onCard.copy(alpha = 0.85f)
     )
                         }
@@ -505,7 +506,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     ) {
                                 Text(
                                     text = statusLabel,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Medium),
                                     color = statusColor
     )
                             }
@@ -518,7 +519,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     ) {
                                     Text(
                                         text = "云端",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MiuixTheme.textStyles.footnote1,
                                         color = onCard.copy(alpha = 0.75f)
     )
                                 }
@@ -538,13 +539,13 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     ) {
                                     Text(
                                         text = "-",
-                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                        style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.Bold),
                                         color = if (batchCount > 1) onCard else onCard.copy(alpha = 0.25f)
     )
                                 }
                                 Text(
                                     text = "×$batchCount",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
                                     color = onCard,
                                     modifier = Modifier.padding(horizontal = 4.dp)
     )
@@ -555,7 +556,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     ) {
                                     Text(
                                         text = "+",
-                                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                        style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.Bold),
                                         color = if (batchCount < 8) onCard else onCard.copy(alpha = 0.25f)
     )
                                 }
@@ -582,7 +583,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                             }
     ) {
                             Icon(
-                                if (rhBusy) PocketIcons.Pause else PocketIcons.Play,
+                                if (rhBusy) MiuixIcons.Pause else MiuixIcons.Play,
                                 contentDescription = null,
                                 modifier = Modifier.size(16.dp)
     )
@@ -594,7 +595,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                     executionStatus == "RUNNING" -> "加入队列 ×$batchCount"
                                     else -> if (batchCount > 1) "运行应用 ×$batchCount" else "运行应用"
                                 },
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                                style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold)
     )
                         }
 
@@ -614,7 +615,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                 if (!rhAppStatus.isNullOrBlank()) {
                                     Text(
                                         text = rhAppStatus ?: "",
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MiuixTheme.textStyles.footnote1,
                                         color = onCard.copy(alpha = 0.7f)
     )
                                 }
@@ -635,7 +636,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                 if (executingNodeName.isNotBlank()) {
                                     Text(
                                         text = executingNodeName,
-                                        style = MaterialTheme.typography.bodySmall,
+                                        style = MiuixTheme.textStyles.footnote1,
                                         color = onCard.copy(alpha = 0.7f)
     )
                                 }
@@ -656,7 +657,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     ) {
                     Text(
                         text = "参数 (${visibleNodes.size})",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
+                        style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
                         color = onCard
     )
                     TextButton(
@@ -676,7 +677,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     ) {
                         Text(
                             text = "暂无显示的参数，点击右上角设置或“显示管理”进行勾选",
-                            style = MaterialTheme.typography.bodyMedium,
+                            style = MiuixTheme.textStyles.body2,
                             color = onCard.copy(alpha = 0.6f),
                             modifier = Modifier.padding(16.dp)
     )
@@ -870,13 +871,13 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                             if (isSlotHover) {
                                                 Text(
                                                     text = "放置于此",
-                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    style = MiuixTheme.textStyles.footnote2.copy(fontWeight = FontWeight.Bold),
                                                     color = scheme.primary
     )
                                             } else if (draggingKey != null && draggingKey != kh) {
                                                 Text(
                                                     text = "+ 放置空位",
-                                                    style = MaterialTheme.typography.labelSmall,
+                                                    style = MiuixTheme.textStyles.footnote2,
                                                     color = onCard.copy(alpha = 0.45f)
     )
                                             }
@@ -994,12 +995,12 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
     ) {
                             Text(
                                 text = opt,
-                                style = MaterialTheme.typography.bodyLarge,
+                                style = MiuixTheme.textStyles.body1,
                                 color = if (selected) scheme.primary else onCard
     )
                             if (selected) {
                                 Icon(
-                                    PocketIcons.Ok,
+                                    MiuixIcons.Ok,
                                     contentDescription = null,
                                     tint = scheme.primary,
                                     modifier = Modifier.size(18.dp)
@@ -1064,7 +1065,9 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                     onValueChange = { renamingText = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = "名称（留空恢复默认）")
+                    label = "名称（留空恢复默认）",
+                    useLabelAsPlaceholder = true
+    )
             }
         }
 

@@ -10,6 +10,9 @@ import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.ui.rememberAppHaptics
 import com.comfyui.mobile.ui.screens.*
 import com.comfyui.mobile.ui.screens.gallery.GalleryHomeScreen
+import com.comfyui.mobile.ui.theme.ComfyControllerTheme
+import top.yukonga.miuix.kmp.basic.Scaffold as LegacyScaffold
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun PocketApp(viewModel: MainViewModel) {
@@ -24,7 +27,12 @@ internal fun PocketApp(viewModel: MainViewModel) {
     val haptics = rememberAppHaptics()
     PocketAppTheme(dark, palette) {
         PocketNavigationShell(nav, viewModel.userMessage, haptics::tick) { entry ->
-            val page: @Composable () -> Unit = {
+            // A deliberate migration boundary: old screens get only their original theme.
+            // Material navigation and feedback are siblings, never children of MiuixTheme.
+            ComfyControllerTheme(dark, palette, manageSystemBars = false) {
+              // Legacy OverlayDialog siblings rely on an enclosing Miuix root scaffold.
+              // Keep that overlay/back owner inside this destination, not above Material.
+              LegacyScaffold(containerColor = MiuixTheme.colorScheme.background) { _ ->
                 when (entry.destination.route) {
                     Screen.Dashboard.route -> DashboardScreen(nav, viewModel)
                     Screen.Control.route -> ControlScreen(viewModel)
@@ -41,8 +49,8 @@ internal fun PocketApp(viewModel: MainViewModel) {
                     "cloud_tasks" -> RhTaskRecordsScreen(nav, viewModel)
                     "model_hub" -> ModelHubScreen(nav, viewModel)
                 }
+              }
             }
-            page()
         }
     }
 }

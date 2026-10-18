@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens.control
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -35,17 +33,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.launch
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import com.comfyui.mobile.ui.designsystem.PocketCardDefaults as CardDefaults
-import androidx.compose.material3.Icon
-import com.comfyui.mobile.ui.designsystem.PocketIconButton as IconButton
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import androidx.compose.material3.TextFieldDefaults as MaterialTextFieldDefaults
-
-
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardDefaults
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.IconButton
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.TextFieldDefaults
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Ok
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 @Composable
 fun FullScreenTextEditorDialog(
@@ -68,7 +67,10 @@ fun FullScreenTextEditorDialog(
             modifier = Modifier.fillMaxSize(),
             cornerRadius = 0.dp,
             colors = CardDefaults.defaultColors(color = Color.Black),
-            onClick = null) {
+            onClick = null,
+            pressFeedbackType = PressFeedbackType.Tilt,
+            showIndication = true
+    ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier
@@ -80,15 +82,15 @@ fun FullScreenTextEditorDialog(
                     Text(
                         text = title,
                         color = Color.White,
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MiuixTheme.textStyles.title3,
                         modifier = Modifier.weight(1f),
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     IconButton(onClick = { onConfirm(text) }) {
-                        Icon(PocketIcons.Ok, contentDescription = "Save", tint = Color.White)
+                        Icon(MiuixIcons.Ok, contentDescription = "Save", tint = Color.White)
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(PocketIcons.Close, contentDescription = "Close", tint = Color.White)
+                        Icon(MiuixIcons.Close, contentDescription = "Close", tint = Color.White)
                     }
                 }
 
@@ -104,16 +106,12 @@ fun FullScreenTextEditorDialog(
                                 .fillMaxSize()
                                 .padding(end = 22.dp),
                             label = "",
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Color.White),
-                             colors = MaterialTextFieldDefaults.colors(
-                                 focusedContainerColor = Color.Transparent,
-                                 unfocusedContainerColor = Color.Transparent,
-                                 focusedTextColor = Color.White,
-                                 unfocusedTextColor = Color.White,
-                                 focusedIndicatorColor = Color.White.copy(alpha = 0.35f),
-                                 unfocusedIndicatorColor = Color.White.copy(alpha = 0.35f),
-                                 focusedLabelColor = Color.White.copy(alpha = 0.5f),
-                                 unfocusedLabelColor = Color.White.copy(alpha = 0.5f)
+                            useLabelAsPlaceholder = true,
+                            textStyle = MiuixTheme.textStyles.body1.copy(color = Color.White),
+                            colors = TextFieldDefaults.textFieldColors(
+                                backgroundColor = Color.Transparent,
+                                labelColor = Color.White.copy(alpha = 0.5f),
+                                borderColor = Color.White.copy(alpha = 0.35f)
     )
     )
 

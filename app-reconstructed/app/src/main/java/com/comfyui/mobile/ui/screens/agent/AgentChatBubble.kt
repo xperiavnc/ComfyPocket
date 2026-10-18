@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens.agent
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,11 +26,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.comfyui.mobile.model.AgentChatMessage
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
-
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.ExpandMore
+import top.yukonga.miuix.kmp.icon.extended.Report
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 fun FrostedChip(
@@ -41,7 +40,7 @@ fun FrostedChip(
     enabled: Boolean = true,
     onClick: () -> Unit
     ) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     Box(
         modifier = modifier
             .height(34.dp)
@@ -58,7 +57,7 @@ fun FrostedChip(
         Text(
             text = text,
             color = scheme.onSurface,
-            style = MaterialTheme.typography.bodySmall,
+            style = MiuixTheme.textStyles.footnote1,
             maxLines = 1
     )
     }
@@ -66,7 +65,7 @@ fun FrostedChip(
 
 @Composable
 fun AgentBubble(msg: AgentChatMessage) {
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
     val isUser = msg.role == "user"
     val bubbleColor = if (isUser) {
         scheme.primaryContainer
@@ -109,7 +108,7 @@ fun AgentBubble(msg: AgentChatMessage) {
                 if (msg.isThinking) {
                     Text(
                         text = "✨深度求索中...",
-                        style = MaterialTheme.typography.bodyMedium.copy(
+                        style = MiuixTheme.textStyles.body2.copy(
                             fontWeight = FontWeight.Medium,
                             color = scheme.primary
     )
@@ -118,10 +117,10 @@ fun AgentBubble(msg: AgentChatMessage) {
                         SelectionContainer {
                             Text(
                                 text = msg.thinkingContent,
-                                style = MaterialTheme.typography.bodySmall.copy(
+                                style = MiuixTheme.textStyles.footnote1.copy(
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp,
-                                    color = scheme.onSurfaceVariant
+                                    color = scheme.onSurfaceVariantSummary
     ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -151,7 +150,7 @@ fun AgentBubble(msg: AgentChatMessage) {
                                 fontWeight = FontWeight.Medium
     )
                             Icon(
-                                PocketIcons.ExpandMore,
+                                MiuixIcons.ExpandMore,
                                 contentDescription = null,
                                 modifier = Modifier.size(12.dp),
                                 tint = scheme.primary
@@ -163,10 +162,10 @@ fun AgentBubble(msg: AgentChatMessage) {
                         SelectionContainer {
                             Text(
                                 text = msg.thinkingContent,
-                                style = MaterialTheme.typography.bodySmall.copy(
+                                style = MiuixTheme.textStyles.footnote1.copy(
                                     fontSize = 11.sp,
                                     lineHeight = 16.sp,
-                                    color = scheme.onSurfaceVariant
+                                    color = scheme.onSurfaceVariantSummary
     ),
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -184,10 +183,12 @@ fun AgentBubble(msg: AgentChatMessage) {
                         Text(
                             text = msg.content,
                             color = bubbleFg,
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MiuixTheme.textStyles.body2
     )
                     }
                 }
+
+
 
 
                 if (!isUser) {
@@ -205,7 +206,7 @@ fun AgentBubble(msg: AgentChatMessage) {
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
                         Icon(
-                            PocketIcons.Report,
+                            MiuixIcons.Report,
                             contentDescription = null,
                             modifier = Modifier.size(13.dp),
                             tint = scheme.error
@@ -213,7 +214,7 @@ fun AgentBubble(msg: AgentChatMessage) {
                         SelectionContainer {
                             Text(
                                 text = msg.errorMessage,
-                                style = MaterialTheme.typography.bodySmall.copy(
+                                style = MiuixTheme.textStyles.footnote1.copy(
                                     fontSize = 11.sp,
                                     lineHeight = 15.sp
     ),

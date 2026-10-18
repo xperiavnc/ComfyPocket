@@ -22,8 +22,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
-import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
-import com.comfyui.mobile.ui.designsystem.PocketScaffold as Scaffold
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.Scaffold
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -52,7 +52,7 @@ class DanbooruUiTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         var selected = GalleryHomeSource.SERVER
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 GallerySourcePicker(GalleryHomeSource.SERVER) { selected = it }
             } } })
             compose.waitForIdle()
@@ -66,7 +66,7 @@ class DanbooruUiTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val copied = mutableListOf<CopiedTags>()
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     DanbooruTagPanel(post, TagCopyOptions(), emptySet(), {}, {}, {}) { copied += it }
                 }
@@ -86,7 +86,7 @@ class DanbooruUiTest {
         var group: TagGroup? = null
         var cleared = false
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     DanbooruTagPanel(post, TagCopyOptions(), setOf("cloud"), {}, { group = it }, { cleared = true }) {}
                 }
@@ -102,7 +102,7 @@ class DanbooruUiTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val vm = DanbooruViewModel(SavedStateHandle(), Service(post))
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) {}
             } } })
             compose.waitForIdle()
@@ -121,7 +121,7 @@ class DanbooruUiTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val vm = DanbooruViewModel(SavedStateHandle(), Service(post))
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) {}
             } } })
             compose.waitForIdle(); compose.runOnIdle { vm.open(post) }; compose.waitForIdle()
@@ -138,7 +138,7 @@ class DanbooruUiTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val vm = DanbooruViewModel(SavedStateHandle(), Service(post))
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) {}
             } } })
             compose.waitForIdle()
@@ -162,7 +162,7 @@ class DanbooruUiTest {
         val service = Service(post)
         val vm = DanbooruViewModel(SavedStateHandle(), service)
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) {}
             } } })
             compose.waitForIdle()
@@ -179,7 +179,7 @@ class DanbooruUiTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         var saved: DanbooruSettings? = null
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 Scaffold {
                     DanbooruSettingsDialog(DanbooruSettings(proxyEnabled = true, proxyAddress = "http://127.0.0.1:2080"),
                         DanbooruState(DanbooruQuery.resolve("", ContentFilter.GENERAL)), {},
@@ -202,7 +202,7 @@ class DanbooruUiTest {
     @Test fun tagFormattingSwitchesAreCollapsedUntilRequested() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
                     DanbooruTagPanel(post, TagCopyOptions(), emptySet(), {}, {}, {}) {}
                 }
@@ -219,7 +219,7 @@ class DanbooruUiTest {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val vm = DanbooruViewModel(SavedStateHandle(), Service(post))
         try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { PocketMaterialTheme {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
                 DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) {}
             } } })
             compose.waitForIdle()

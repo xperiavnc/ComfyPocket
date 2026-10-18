@@ -25,13 +25,13 @@ import com.comfyui.mobile.taglib.LocalTagLibrary
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import com.comfyui.mobile.ui.designsystem.PocketTextField as TextField
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.Switch
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun AgentLocalTagSettings(
@@ -62,19 +62,19 @@ internal fun AgentLocalTagSettings(
     }
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("本地词库", style = MaterialTheme.typography.titleMedium)
+            Text("本地词库", style = MiuixTheme.textStyles.title4)
             Text("人设只管对话，分镜负责编写正向和反向；JSON 格式由 App 统一。",
-                style = MaterialTheme.typography.bodySmall)
+                style = MiuixTheme.textStyles.footnote1)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("绘图前查询本地词库", Modifier.weight(1f))
                 Switch(checked = draft.useLocalLibrary, onCheckedChange = { draft = draft.copy(useLocalLibrary = it) })
             }
             Text("内置 ${String.format(Locale.ROOT, "%,d", counts.first)} 个标签、${String.format(Locale.ROOT, "%,d", counts.second)} 个角色，均有中文对照。中文、英文和别名均可离线查询，再由 Agent 编写正向和反向；不访问 Danbooru、不增加模型修订轮次。部分翻译可能有误，未命中保留原词。",
-                style = MaterialTheme.typography.bodySmall)
+                style = MiuixTheme.textStyles.footnote1)
             Button(onClick = { onSave(draft) }, colors = ButtonDefaults.buttonColorsPrimary()) {
                 Text("保存词库设置")
             }
-            Text("本地查词（不调用 AI、不出图）", style = MaterialTheme.typography.bodyMedium)
+            Text("本地查词（不调用 AI、不出图）", style = MiuixTheme.textStyles.body2)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf("tag" to "普通词", "character" to "角色").forEach { (id, title) ->
                     Button(onClick = { kind = id },
@@ -85,7 +85,7 @@ internal fun AgentLocalTagSettings(
             }
             TextField(value = query, onValueChange = { query = it.take(96) }, label = "中文 / 英文 / 别名",
                 singleLine = true, modifier = Modifier.fillMaxWidth())
-            Text(status, style = MaterialTheme.typography.bodySmall)
+            Text(status, style = MiuixTheme.textStyles.footnote1)
             if (results.isNotEmpty()) Column(
                 Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -93,7 +93,7 @@ internal fun AgentLocalTagSettings(
                 results.forEach { entry -> LocalTagEntryText(entry) }
             }
             Text("来源：ai-tag-toolbox 与 ffdkj Danbooru 中英对照固定快照；角色身份与可选外貌分开。来源、翻译限制和重建方式见项目词库说明。",
-                style = MaterialTheme.typography.bodySmall)
+                style = MiuixTheme.textStyles.footnote1)
         }
     }
 }

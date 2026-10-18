@@ -1,7 +1,5 @@
 package com.comfyui.mobile.ui.screens.control
 
-import com.comfyui.mobile.ui.designsystem.PocketIcons
-
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,18 +17,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.comfyui.mobile.ui.designsystem.PocketButton as Button
-import com.comfyui.mobile.ui.designsystem.PocketButtonDefaults as ButtonDefaults
-import com.comfyui.mobile.ui.designsystem.PocketCard as Card
-import androidx.compose.material3.CardColors
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Text
-
-
-
-
-import androidx.compose.material3.MaterialTheme
+import top.yukonga.miuix.kmp.basic.Button
+import top.yukonga.miuix.kmp.basic.ButtonDefaults
+import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardColors
+import top.yukonga.miuix.kmp.basic.Icon
+import top.yukonga.miuix.kmp.basic.Slider
+import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.FileDownloads
+import top.yukonga.miuix.kmp.icon.extended.Pause
+import top.yukonga.miuix.kmp.icon.extended.Play
+import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 @Composable
 fun ControlRunCard(
@@ -51,26 +50,29 @@ fun ControlRunCard(
     ) {
     val haptics = rememberAppHaptics()
 
-    val scheme = MaterialTheme.colorScheme
+    val scheme = MiuixTheme.colorScheme
 
     Card(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = 18.dp,
         colors = cardColors,
-        onClick = null) {
+        onClick = null,
+        pressFeedbackType = PressFeedbackType.None,
+        showIndication = false
+    ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
             Text(
                 text = "运行",
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
                 color = onCard
     )
             if (!statusText.isNullOrBlank()) {
                 Text(
                     text = statusText,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = scheme.primary
     )
             }
@@ -83,13 +85,13 @@ fun ControlRunCard(
     ) {
                     Text(
                         text = cloudIdLabel,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MiuixTheme.textStyles.body2,
                         color = onCard.copy(alpha = 0.75f)
     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = cloudIdText,
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MiuixTheme.textStyles.body2,
                         color = scheme.primary
     )
                 }
@@ -100,13 +102,13 @@ fun ControlRunCard(
     ) {
                 Text(
                     text = "批量",
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MiuixTheme.textStyles.body2,
                     color = onCard.copy(alpha = 0.75f)
     )
                 Spacer(modifier = Modifier.weight(1f))
                 Text(
                     text = "×$batchCount",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                    style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
                     color = onCard
     )
             }
@@ -126,11 +128,11 @@ fun ControlRunCard(
                 cornerRadius = 12.dp,
                 colors = ButtonDefaults.buttonColorsPrimary()
     ) {
-                Icon(PocketIcons.Play, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(MiuixIcons.Play, contentDescription = null, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
                     text = if (batchCount > 1) "运行 ×$batchCount" else "运行",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
+                    style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold)
     )
             }
             Row(
@@ -148,9 +150,9 @@ fun ControlRunCard(
                         contentColor = scheme.error
     )
     ) {
-                    Icon(PocketIcons.Pause, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(MiuixIcons.Pause, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("停止", style = MaterialTheme.typography.bodyMedium)
+                    Text("停止", style = MiuixTheme.textStyles.body2)
                 }
                 Button(
                     onClick = { haptics.confirm(); onSaveClick() },
@@ -163,9 +165,9 @@ fun ControlRunCard(
                         contentColor = onCard
     )
     ) {
-                    Icon(PocketIcons.FileDownloads, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(MiuixIcons.FileDownloads, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("保存", style = MaterialTheme.typography.bodyMedium)
+                    Text("保存", style = MiuixTheme.textStyles.body2)
                 }
             }
         }

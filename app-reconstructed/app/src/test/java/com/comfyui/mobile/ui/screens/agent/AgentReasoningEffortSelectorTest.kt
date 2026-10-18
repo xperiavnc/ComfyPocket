@@ -17,7 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
-import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -32,7 +32,7 @@ class AgentReasoningEffortSelectorTest {
         val selected = mutableStateOf(AgentReasoningEffort.DEFAULT)
         try {
             activity.setContentView(ComposeView(activity).apply {
-                setContent { PocketMaterialTheme { AgentReasoningEffortSelector(selected.value) { selected.value = it } } }
+                setContent { MiuixTheme { AgentReasoningEffortSelector(selected.value) { selected.value = it } } }
             })
             compose.waitForIdle()
             AgentReasoningEffort.entries.forEach { compose.onNodeWithText(it.label).assertExists() }
