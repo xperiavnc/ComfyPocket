@@ -11,6 +11,7 @@ import androidx.navigation.compose.rememberNavController
 import com.comfyui.mobile.ComfyApplication
 import com.comfyui.mobile.data.AppModule
 import com.comfyui.mobile.market.MarketCatalogState
+import com.comfyui.mobile.market.MarketCatalogController
 import com.comfyui.mobile.market.MarketViewModel
 import com.comfyui.mobile.model.CivitaiDownloadTaskItem
 import com.comfyui.mobile.model.CivitaiModelItem
@@ -133,9 +134,10 @@ class ModelCenterScrollTest {
     }
 
     @Test fun onlineMarketScrollsByTouchInsideRealModelHub() = screen { fixture ->
-        val flow = ReflectionHelpers.getField<MutableStateFlow<MarketCatalogState>>(fixture.market.catalog, "mutableState")
+        val catalog = ReflectionHelpers.getField<MarketCatalogController>(fixture.market.catalog, "standard")
+        val flow = ReflectionHelpers.getField<MutableStateFlow<MarketCatalogState>>(catalog, "mutableState")
         compose.runOnIdle {
-            ReflectionHelpers.setField(fixture.market.catalog, "loaded", true)
+            ReflectionHelpers.setField(catalog, "loaded", true)
             flow.value = MarketCatalogState(items = (0 until 40).map {
                 CivitaiModelItem(id = it.toLong(), name = "在线模型 $it", creator = "测试作者")
             }, loadedPage = 1)
@@ -145,6 +147,22 @@ class ModelCenterScrollTest {
         compose.onNodeWithText("在线集市").assertIsSelected()
         compose.onNodeWithText("本地模型").performClick()
         compose.onNodeWithText("本地模型").assertIsSelected()
+    }
+
+    @Test fun dualSectionMarketStillScrollsByTouchInsideRealModelHub() = screen { fixture ->
+        compose.runOnIdle {
+            fixture.market.catalog.invalidate(includeMature = true)
+            for ((index, name) in listOf("standard", "mature").withIndex()) {
+                val catalog = ReflectionHelpers.getField<MarketCatalogController>(fixture.market.catalog, name)
+                ReflectionHelpers.setField(catalog, "loaded", true)
+                val flow = ReflectionHelpers.getField<MutableStateFlow<MarketCatalogState>>(catalog, "mutableState")
+                flow.value = MarketCatalogState(items = (1..40).map {
+                    CivitaiModelItem(id = (index * 100 + it).toLong(), name = "分区模型 $index-$it", creator = "测试作者")
+                }, loadedPage = 1)
+            }
+        }
+        compose.onNodeWithText("在线集市").performClick()
+        swipeBothWays("online-market-dual")
     }
 
     @Test fun downloadQueueScrollsByTouchInsideRealModelHub() {

@@ -7,6 +7,7 @@ import coil.request.ImageRequest
 import com.comfyui.mobile.data.ComfyRepository
 import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import com.comfyui.mobile.model.CivitaiModelItem
+import com.comfyui.mobile.model.CivitaiContentChannel
 import com.comfyui.mobile.model.CivitaiSearchPageData
 import com.comfyui.mobile.model.CivitaiVersionItem
 import com.comfyui.mobile.modelcenter.LocalModelSource
@@ -129,21 +130,24 @@ class CivitaiRepository(
     ): MarketSearchResult = withContext(Dispatchers.IO) {
         val config = settings
         val identity = bridgeIdentity
-        val key = "${config.cacheNamespace(identity)}|search-v3|${gson.toJson(query)}|$page|$cursor"
+        val key = "${config.cacheNamespace(identity)}|search-v4|${gson.toJson(query)}|$page|$cursor"
+        fun visible(page: CivitaiSearchPageData) = MarketModelFilters.page(page.copy(
+            items = page.items.mapNotNull { MarketContentPolicy.model(it, query.channel, config.includeMatureContent) }
+        ), query)
         if (config.mode == MarketConnectionMode.BRIDGE) {
             check(bridgeAvailable) { "请先连接 ComfyUI 电脑，或在集市设置中切换为手机直连" }
             val result = cached(key, CivitaiSearchPageData::class.java, forceRefresh) {
                 val value = bridge.searchCivitai(
                     query.keyword, query.type, query.baseModel.takeUnless { it == "全部" },
                     page, cursor, 20, query.sort.apiValue, query.author.trim().removePrefix("@"),
-                    query.period.apiValue, config.includeMatureContent,
+                    query.period.apiValue, query.channel.includeMature && config.includeMatureContent,
                     CivitaiJson.modelId(query.keyword)?.toString()
                 )
                 currentCoroutineContext().ensureActive()
                 value.getOrThrow()
             }
             return@withContext MarketSearchResult(
-                MarketModelFilters.page(result.value, query), result.fromCache, result.warning
+                visible(result.value), result.fromCache, result.warning
             )
         }
         val http = activeClient()
@@ -151,31 +155,45 @@ class CivitaiRepository(
             CivitaiJson.page(CivitaiHttp.text(http,
                 CivitaiHttp.request(CivitaiJson.searchUrl(query, page, cursor, config))), page)
         }
-        MarketSearchResult(MarketModelFilters.page(result.value, query), result.fromCache, result.warning)
+        MarketSearchResult(visible(result.value), result.fromCache, result.warning)
     }
 
+    suspend fun openModel(reference: CivitaiModelReference): MarketDetailResult =
+        details(CivitaiModelItem(id = reference.modelId), reference.versionId,
+            forceRefresh = true, directLookup = true)
+
     suspend fun details(
-        original: CivitaiModelItem, versionId: Long?, forceRefresh: Boolean = false
+        original: CivitaiModelItem, versionId: Long?, forceRefresh: Boolean = false,
+        directLookup: Boolean = false
     ): MarketDetailResult = withContext(Dispatchers.IO) {
         val config = settings.copy(mode = MarketConnectionMode.DIRECT)
         val namespace = config.cacheNamespace()
         val http = activeClient()
-        val model = cached("$namespace|model|${original.id}",
+        val model = cached("$namespace|model-v2|${original.id}",
             CivitaiModelItem::class.java, forceRefresh) {
             CivitaiJson.model(CivitaiHttp.text(http,
                 CivitaiHttp.request(CivitaiJson.endpoint("models/${original.id}")))).also {
                 check(it.id == original.id) { "Civitai 返回了不同的模型，请重试" }
             }
         }
-        val selected = model.value.versions.firstOrNull { it.id == versionId }
-            ?: model.value.versions.firstOrNull()
-            ?: return@withContext MarketDetailResult(model.value, model.warning)
+        val requested = if (directLookup && config.includeMatureContent)
+            CivitaiContentChannel.MATURE else original.contentChannel
+        val visibleModel = MarketContentPolicy.model(model.value, requested, config.includeMatureContent)
+            ?: throw MarketAccessException("该模型不属于当前可展示的内容范围，请检查集市内容设置")
+        val channel = visibleModel.contentChannel
+        val detailNamespace = config.copy(includeMatureContent = channel.includeMature).cacheNamespace()
+        if (directLookup && versionId != null && visibleModel.versions.none { it.id == versionId }) {
+            throw MarketAccessException("链接指定的版本不属于此模型，或当前账号不可见")
+        }
+        val selected = visibleModel.versions.firstOrNull { it.id == versionId }
+            ?: visibleModel.versions.firstOrNull()
+            ?: return@withContext MarketDetailResult(visibleModel, model.warning)
         var warning = model.warning
         val fullVersion = try {
-            val result = cached("$namespace|version|${selected.id}",
+            val result = cached("$detailNamespace|version-v2|${selected.id}",
                 CivitaiVersionItem::class.java, forceRefresh) {
-                var version = CivitaiJson.version(CivitaiHttp.text(http,
-                    CivitaiHttp.request(CivitaiJson.endpoint("model-versions/${selected.id}"))))
+                var version = MarketContentPolicy.version(CivitaiJson.version(CivitaiHttp.text(http,
+                    CivitaiHttp.request(CivitaiJson.endpoint("model-versions/${selected.id}")))), channel)
                 check(version.id == selected.id) { "Civitai 返回了不同的版本，请重试" }
                 if (version.images.none { it.prompt.isNotBlank() || it.negativePrompt.isNotBlank() }) {
                     val examplesUrl = CivitaiJson.endpoint("images").newBuilder()
@@ -183,12 +201,12 @@ class CivitaiRepository(
                         .addQueryParameter("limit", "8")
                         .addQueryParameter("type", "image")
                         .addQueryParameter("withMeta", "true")
-                        .addQueryParameter("nsfw", config.includeMatureContent.toString()).build()
+                        .addQueryParameter("nsfw", channel.includeMature.toString()).build()
                     try {
                         val examples = CivitaiJson.examples(CivitaiHttp.text(http,
                             CivitaiHttp.request(examplesUrl)))
-                        version = version.copy(images =
-                            (version.images + examples).distinctBy { it.url })
+                        version = MarketContentPolicy.version(version.copy(images =
+                            (version.images + examples).distinctBy { it.url }), channel)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (_: Exception) {
@@ -198,7 +216,7 @@ class CivitaiRepository(
                 version
             }
             warning = result.warning ?: warning
-            result.value
+            MarketContentPolicy.version(result.value, channel)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Exception) {
@@ -206,9 +224,10 @@ class CivitaiRepository(
             selected
         }
         MarketDetailResult(
-            model.value.copy(versions = model.value.versions.map {
+            visibleModel.copy(versions = visibleModel.versions.map {
                 if (it.id == fullVersion.id) fullVersion else it
-            }), warning ?: if (model.fromCache) "正在显示本地缓存的详情" else null
+            }, previewUrl = CivitaiJson.thumbnail(fullVersion.previewUrl ?: visibleModel.previewUrl, 450)),
+            warning ?: if (model.fromCache) "正在显示本地缓存的详情" else null
         )
     }
 

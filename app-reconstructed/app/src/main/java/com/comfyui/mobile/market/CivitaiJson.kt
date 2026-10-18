@@ -1,6 +1,7 @@
 package com.comfyui.mobile.market
 
 import com.comfyui.mobile.model.CivitaiFileItem
+import com.comfyui.mobile.model.CivitaiContentChannel
 import com.comfyui.mobile.model.CivitaiModelItem
 import com.comfyui.mobile.model.CivitaiPreviewItem
 import com.comfyui.mobile.model.CivitaiSearchPageData
@@ -18,8 +19,11 @@ data class MarketQuery(
     val baseModel: String = "全部",
     val author: String = "",
     val sort: MarketSort = MarketSort.DEFAULT,
-    val period: MarketPeriod = MarketPeriod.ALL_TIME
+    val period: MarketPeriod = MarketPeriod.ALL_TIME,
+    val channel: CivitaiContentChannel = CivitaiContentChannel.STANDARD
 )
+
+data class CivitaiModelReference(val modelId: Long, val versionId: Long? = null)
 
 enum class MarketSort(val label: String, val apiValue: String) {
     DEFAULT("默认", "Highest Rated"), NEWEST("日期", "Newest"),
@@ -41,7 +45,7 @@ internal object CivitaiJson {
         query: MarketQuery, page: Int, cursor: String?, settings: CivitaiSettings
     ): HttpUrl = endpoint("models").newBuilder().apply {
         addQueryParameter("limit", "20")
-        addQueryParameter("nsfw", settings.includeMatureContent.toString())
+        addQueryParameter("nsfw", (query.channel.includeMature && settings.includeMatureContent).toString())
         val id = modelId(query.keyword)
         val keyword = query.keyword.trim().takeUnless { id != null }.orEmpty()
         if (id != null) addQueryParameter("ids", id.toString())
@@ -71,15 +75,24 @@ internal object CivitaiJson {
         baseModels(query.baseModel).forEach { addQueryParameter("baseModels", it) }
     }.build()
 
-    internal fun modelId(value: String): Long? {
+    internal fun modelId(value: String): Long? = modelReference(value)?.modelId
+
+    internal fun modelReference(value: String): CivitaiModelReference? {
         val text = value.trim()
         fun validId(value: String) = value.toLongOrNull()?.takeIf { it in 1..9_007_199_254_740_991L }
-        if (text.matches(Regex("""#?\d+"""))) return validId(text.removePrefix("#"))
+        if (text.matches(Regex("""#?\d+"""))) return validId(text.removePrefix("#"))?.let {
+            CivitaiModelReference(it)
+        }
         val url = text.toHttpUrlOrNull() ?: return null
-        if (url.host !in setOf("civitai.com", "www.civitai.com") || url.scheme != "https") return null
+        if (url.host !in setOf("civitai.com", "www.civitai.com", "civitai.red", "www.civitai.red") ||
+            !url.isHttps || url.port != 443 || url.username.isNotEmpty() || url.password.isNotEmpty()) return null
         val parts = url.pathSegments
         if (parts.firstOrNull() != "models") return null
-        return parts.getOrNull(1)?.let(::validId)
+        val id = parts.getOrNull(1)?.let(::validId) ?: return null
+        val rawVersion = url.queryParameter("modelVersionId")
+        val version = rawVersion?.let(::validId)
+        if (rawVersion != null && version == null) return null
+        return CivitaiModelReference(id, version)
     }
 
     internal fun baseModels(tag: String): List<String> = when (tag) {
@@ -136,6 +149,8 @@ internal object CivitaiJson {
             rating = stats.double("rating"), thumbsUpCount = stats.long("thumbsUpCount"),
             publishedAt = versions.map { it.publishedAt }.filter { it.isNotBlank() }.maxOrNull().orEmpty(),
             tags = value.strings("tags"), versions = versions,
+            nsfw = value.boolean("nsfw"), nsfwLevel = value.intOrNull("nsfwLevel"),
+            minor = value.boolean("minor"), sfwOnly = value.boolean("sfwOnly"),
             previewUrl = thumbnail(versions.firstNotNullOfOrNull { it.previewUrl }, 450)
         )
     }
@@ -187,7 +202,8 @@ internal object CivitaiJson {
             prompt = meta.string("prompt"),
             negativePrompt = meta.string("negativePrompt").ifBlank { meta.string("negative prompt") },
             sampler = meta.string("sampler"), steps = meta.string("steps"),
-            seed = meta.string("seed"), cfgScale = meta.string("cfgScale")
+            seed = meta.string("seed"), cfgScale = meta.string("cfgScale"),
+            nsfwLevel = image.intOrNull("nsfwLevel"), minor = image.boolean("minor")
         )
     }
 
@@ -215,6 +231,7 @@ internal object CivitaiJson {
             it.takeIf(JsonElement::isJsonPrimitive)?.asString?.takeIf(String::isNotBlank)
         }.orEmpty()
     private fun JsonObject.long(key: String) = string(key).toLongOrNull() ?: 0L
+    private fun JsonObject.intOrNull(key: String) = string(key).toIntOrNull()
     private fun JsonObject.double(key: String) = string(key).toDoubleOrNull() ?: 0.0
     private fun JsonObject.boolean(key: String): Boolean? = string(key).toBooleanStrictOrNull()
 }

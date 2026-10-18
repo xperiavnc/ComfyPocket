@@ -1,6 +1,7 @@
 package com.comfyui.mobile.market
 
 import com.comfyui.mobile.model.CivitaiModelItem
+import com.comfyui.mobile.model.CivitaiContentChannel
 import com.comfyui.mobile.model.CivitaiSearchPageData
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -27,8 +28,12 @@ data class MarketCatalogState(
     val error: String? = null,
     val notice: String? = null,
     val loadedPage: Int = 0,
-    val hasNextPage: Boolean = false
+    val hasNextPage: Boolean = false,
+    val sections: List<MarketCatalogSection> = emptyList(),
+    val matureEnabled: Boolean = false
 )
+
+data class MarketCatalogSection(val channel: CivitaiContentChannel, val state: MarketCatalogState)
 
 /** Android-free state holder: one active search, isolated generations, stable de-duplicated IDs. */
 class MarketCatalogController(
@@ -56,19 +61,19 @@ class MarketCatalogController(
         mutableState.value = state.value.copy(author = value)
     }
 
-    fun ordering(sort: MarketSort = state.value.sort, period: MarketPeriod = state.value.period) {
+    fun ordering(sort: MarketSort = state.value.sort, period: MarketPeriod = state.value.period, reload: Boolean = true) {
         mutableState.value = state.value.copy(sort = sort, period = period)
-        load(reset = true)
+        if (reload) load(reset = true)
     }
 
-    fun clearFilters() {
+    fun clearFilters(reload: Boolean = true) {
         mutableState.value = state.value.copy(type = "ALL", baseModel = "全部", author = "")
-        load(reset = true)
+        if (reload) load(reset = true)
     }
 
-    fun filter(type: String = state.value.type, baseModel: String = state.value.baseModel) {
+    fun filter(type: String = state.value.type, baseModel: String = state.value.baseModel, reload: Boolean = true) {
         mutableState.value = state.value.copy(type = type, baseModel = baseModel)
-        load(reset = true)
+        if (reload) load(reset = true)
     }
 
     fun ensureLoaded() {

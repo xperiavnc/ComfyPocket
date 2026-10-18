@@ -70,8 +70,15 @@ data class CivitaiPreviewItem(
     val steps: String = "",
     val seed: String = "",
     val cfgScale: String = "",
-    val communityExample: Boolean = false
+    val communityExample: Boolean = false,
+    val nsfwLevel: Int? = null,
+    val minor: Boolean? = null
 )
+
+enum class CivitaiContentChannel(val label: String, val includeMature: Boolean) {
+    STANDARD("普通内容", false),
+    MATURE("成人浏览范围", true)
+}
 
 data class CivitaiVersionItem(
     val id: Long = 0,
@@ -108,7 +115,12 @@ data class CivitaiModelItem(
     val tags: List<String> = emptyList(),
     val previewUrl: String? = null,
     val versions: List<CivitaiVersionItem> = emptyList(),
-    val publishedAt: String = ""
+    val publishedAt: String = "",
+    val nsfw: Boolean? = null,
+    val nsfwLevel: Int? = null,
+    val minor: Boolean? = null,
+    val sfwOnly: Boolean? = null,
+    val contentChannel: CivitaiContentChannel = CivitaiContentChannel.STANDARD
 )
 
 data class CivitaiSearchPageData(

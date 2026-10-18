@@ -658,6 +658,22 @@ class BridgeTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status, 400)
         self.assertFalse(self.requests)
 
+    async def test_search_preserves_model_and_preview_content_classifications(self):
+        _, app = self.load_plugin()
+        self.catalog = {"items": [{"id": 2779381, "nsfw": False, "nsfwLevel": 1,
+            "minor": True, "sfwOnly": True, "modelVersions": [dict(self.version, images=[
+                {"id": 1, "url": "https://image.civitai.com/fixture.jpg",
+                 "nsfwLevel": 1, "minor": True, "meta": {"prompt": "fixture"}}
+            ])]}]}
+        async with TestClient(TestServer(app)) as client:
+            response = await client.get("/api/mobile/civitai/search?nsfw=false")
+            self.assertEqual(response.status, 200)
+            model = (await response.json())["data"]["items"][0]
+        self.assertEqual({key: model[key] for key in ("nsfw", "nsfwLevel", "minor", "sfwOnly")},
+                         dict(nsfw=False, nsfwLevel=1, minor=True, sfwOnly=True))
+        self.assertEqual(model["versions"][0]["images"][0]["nsfwLevel"], 1)
+        self.assertIs(model["versions"][0]["images"][0]["minor"], True)
+
     async def test_bridge_search_rejects_external_next_url_and_handles_null_meta(self):
         _, app = self.load_plugin()
         self.catalog = {

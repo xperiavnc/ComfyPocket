@@ -1,5 +1,6 @@
 package com.comfyui.mobile.market
 
+import com.comfyui.mobile.model.CivitaiContentChannel
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -105,12 +106,31 @@ class CivitaiJsonTest {
     }
 
     @Test fun filtersUseCanonicalApiValuesAndDoNotCarryTheKey() {
-        val url = CivitaiJson.searchUrl(MarketQuery(baseModel = "Flux"), 1, null,
+        val url = CivitaiJson.searchUrl(MarketQuery(baseModel = "Flux", channel = CivitaiContentChannel.MATURE), 1, null,
             CivitaiSettings(apiKey = "private-key", includeMatureContent = true))
         assertTrue("Flux.1 D" in url.queryParameterValues("baseModels"))
         assertEquals("true", url.queryParameter("nsfw"))
         assertFalse(url.toString().contains("private-key"))
         assertNull(url.queryParameter("token"))
+    }
+
+    @Test fun ordinaryChannelRemainsOrdinaryWhenMatureBrowsingIsEnabled() {
+        val settings = CivitaiSettings(includeMatureContent = true)
+        assertEquals("false", CivitaiJson.searchUrl(MarketQuery(), 1, null, settings).queryParameter("nsfw"))
+        assertEquals("true", CivitaiJson.searchUrl(MarketQuery(channel = CivitaiContentChannel.MATURE),
+            1, null, settings).queryParameter("nsfw"))
+        assertEquals("false", CivitaiJson.searchUrl(MarketQuery(channel = CivitaiContentChannel.MATURE),
+            1, null, settings.copy(includeMatureContent = false)).queryParameter("nsfw"))
+    }
+
+    @Test fun directReferencesKeepVersionButNeverTreatTheInputAsARequestDestination() {
+        assertEquals(CivitaiModelReference(2779381, 3130085), CivitaiJson.modelReference(
+            "https://civitai.red/models/2779381/sample?modelVersionId=3130085"))
+        for (input in listOf("https://civitai.red:444/models/1",
+            "https://user@civitai.com/models/1", "https://civitai.com/models/1?modelVersionId=oops",
+            "https://civitai.red.evil.invalid/models/1", "http://civitai.red/models/1")) {
+            assertNull(input, CivitaiJson.modelReference(input))
+        }
     }
 
     @Test fun krea2FilterUsesCanonicalApiValue() {

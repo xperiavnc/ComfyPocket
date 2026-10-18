@@ -17,7 +17,8 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     private val mutableSettings = MutableStateFlow(store.load())
     val settings = mutableSettings.asStateFlow()
     val repository = CivitaiRepository(application, settings.value, AppModule.provideRepository())
-    val catalog = MarketCatalogController(viewModelScope, repository::search)
+    val catalog = MarketBrowseController(viewModelScope, settings.value.includeMatureContent, repository::search)
+    val opener = MarketModelOpener(viewModelScope, repository::openModel)
 
     fun bridgeContext(identity: String, available: Boolean) {
         if (repository.bridgeContext(identity, available) &&
@@ -30,9 +31,10 @@ class MarketViewModel(application: Application) : AndroidViewModel(application) 
     suspend fun saveSettings(value: CivitaiSettings): Result<Unit> = try {
         val checked = value.validated()
         withContext(Dispatchers.IO) { store.save(checked) }
+        opener.invalidate()
         repository.updateSettings(checked)
         mutableSettings.value = checked
-        catalog.invalidate()
+        catalog.invalidate(checked.includeMatureContent)
         catalog.ensureLoaded()
         Result.success(Unit)
     } catch (cancelled: CancellationException) {

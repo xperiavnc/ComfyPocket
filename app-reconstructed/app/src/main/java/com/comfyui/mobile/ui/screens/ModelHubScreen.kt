@@ -129,6 +129,7 @@ fun ModelHubScreen(
     val localState by models.state.collectAsState()
     val marketSettings by market.settings.collectAsState()
     val catalog by market.catalog.state.collectAsState()
+    val directOpen by market.opener.state.collectAsState()
     val gridState = rememberLazyGridState()
     // Catalog fallback mode does not turn external covers/details into computer-proxied requests.
     val marketImageLoader = market.repository.imageLoader
@@ -156,6 +157,7 @@ fun ModelHubScreen(
     var showDownloadQueue by remember { mutableStateOf(false) }
 
     var selectedModelDetail by remember { mutableStateOf<CivitaiModelItem?>(null) }
+    var detailUsesCatalogFilters by remember { mutableStateOf(true) }
     var selectedVersion by remember { mutableStateOf<CivitaiVersionItem?>(null) }
     var selectedFile by remember { mutableStateOf<CivitaiFileItem?>(null) }
     var isSubmittingDownload by remember { mutableStateOf(false) }
@@ -218,8 +220,11 @@ fun ModelHubScreen(
         if (selectedTabIndex == 3 && remoteReady) viewModel.fetchAssetsSummary()
     }
     LaunchedEffect(selectedTabIndex, selectedType, selectedFilterTag,
-        hasNextPage, isSearching, searchError, catalog.loadedPage) {
-        if (selectedTabIndex != 1 || !hasNextPage || isSearching || searchError != null) return@LaunchedEffect
+        hasNextPage, isSearching, searchError, catalog.loadedPage, catalog.matureEnabled) {
+        // Two visible sections have explicit independent load-more controls. Growing the first
+        // automatically would keep pushing the second section out of reach.
+        if (selectedTabIndex != 1 || catalog.matureEnabled || !hasNextPage || isSearching || searchError != null)
+            return@LaunchedEffect
         snapshotFlow {
             val layout = gridState.layoutInfo
             layout.totalItemsCount > 0 &&
@@ -227,6 +232,16 @@ fun ModelHubScreen(
         }.distinctUntilChanged().collect { nearEnd ->
             if (nearEnd) market.catalog.load(reset = false)
         }
+    }
+    LaunchedEffect(directOpen.model) {
+        val model = directOpen.model ?: return@LaunchedEffect
+        detailUsesCatalogFilters = false
+        selectedModelDetail = model
+        selectedVersion = model.versions.firstOrNull { it.id == directOpen.versionId } ?: model.versions.firstOrNull()
+        selectedFile = selectedVersion?.preferredFile()
+        detailAttempt = 0
+        detailError = directOpen.warning
+        market.opener.consume()
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(lifecycle, remoteReady, selectedTabIndex, localState.identity) {
@@ -253,7 +268,7 @@ fun ModelHubScreen(
         detailError = null
         try {
             val result = market.details(model, selectedVersion?.id, detailAttempt > 0)
-            val filtered = MarketModelFilters.model(
+            val filtered = if (!detailUsesCatalogFilters) result.model else MarketModelFilters.model(
                 result.model, MarketQuery(type = selectedType, baseModel = selectedFilterTag)
             ) ?: error("详情中没有符合当前分类与标签的版本，请返回更换筛选")
             selectedModelDetail = filtered
@@ -349,9 +364,13 @@ fun ModelHubScreen(
                     onSort = { market.catalog.ordering(sort = it); scope.launch { gridState.scrollToItem(0) } },
                     onPeriod = { market.catalog.ordering(period = it); scope.launch { gridState.scrollToItem(0) } },
                     onClearFilters = market.catalog::clearFilters,
-                    onSearch = { loadCivitai(reset = true) }, onRetry = market.catalog::retry,
+                    onSearch = { loadCivitai(reset = true) }, onRetry = { market.catalog.retry() },
                     onMore = { loadCivitai(reset = false) },
+                    openState = directOpen, onOpenLink = { market.opener.open(catalog.keyword) },
+                    onMoreSection = market.catalog::loadMore,
+                    onRetrySection = { market.catalog.retry(it) },
                     onOpen = { item ->
+                        detailUsesCatalogFilters = true
                         selectedModelDetail = item; selectedVersion = item.versions.firstOrNull()
                         selectedFile = item.versions.firstOrNull()?.preferredFile()
                         detailAttempt = 0; detailError = null
@@ -560,6 +579,10 @@ fun ModelHubScreen(
                     style = MiuixTheme.textStyles.footnote1,
                     color = scheme.onSecondaryContainer
                 )
+                Text(if (model.sfwOnly == true || model.minor == true)
+                    "仅普通内容 · 示例图保持普通内容范围"
+                    else "${model.contentChannel.label} · 依照站点分级展示预览",
+                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
 
                 // 版本选择胶囊
                 if (model.versions.size > 1) {

@@ -8,6 +8,8 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import coil.ImageLoader
 import com.comfyui.mobile.market.MarketCatalogState
+import com.comfyui.mobile.market.MarketCatalogSection
+import com.comfyui.mobile.model.CivitaiContentChannel
 import com.comfyui.mobile.market.MarketPeriod
 import com.comfyui.mobile.market.MarketSort
 import com.comfyui.mobile.ui.screens.modelcenter.ModelMarketPage
@@ -28,6 +30,39 @@ import org.robolectric.annotation.LooperMode
 @LooperMode(LooperMode.Mode.PAUSED)
 class MarketSearchControlsTest {
     @get:Rule val compose = createEmptyComposeRule()
+
+    @Test fun bothSectionsHaveIndependentContinuationAndLinkLookupIsAnExplicitAction() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val activity = controller.get()
+        val loader = ImageLoader.Builder(activity).build()
+        val sections = CivitaiContentChannel.entries.map {
+            MarketCatalogSection(it, MarketCatalogState(hasNextPage = true, loadedPage = 1))
+        }
+        val requests = mutableListOf<CivitaiContentChannel>()
+        var opens = 0
+        try {
+            activity.setContent {
+                ComfyControllerTheme(darkTheme = true, manageSystemBars = false) {
+                    ModelMarketPage(MarketCatalogState(keyword = "2779381", matureEnabled = true, sections = sections),
+                        rememberLazyGridState(), emptyList(), loader, { null }, { it },
+                        {}, {}, {}, {}, {}, {}, {}, {},
+                        onOpenLink = { opens++ }, onMoreSection = { requests += it })
+                }
+            }
+            compose.onNodeWithTag("market-open-link").performClick()
+            assertEquals(1, opens)
+            for (channel in CivitaiContentChannel.entries) {
+                val tag = "market-footer-$channel"
+                compose.onNodeWithTag("market-grid").performScrollToNode(hasTestTag(tag))
+                compose.onNode(hasAnyAncestor(hasTestTag(tag)) and hasClickAction()).performClick()
+            }
+            assertEquals(CivitaiContentChannel.entries, requests)
+            println("MARKET_DUAL_UI ordinary + mature independent load-more; explicit link action PASS")
+        } finally {
+            loader.shutdown()
+            controller.pause().stop().destroy()
+        }
+    }
 
     @Test fun authorSearchOrderingAndEmptyPageContinuationAreReachableInRealPage() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()

@@ -45,9 +45,9 @@ class ModelCenterDirectRegressionTest {
     @Test fun bridgeCatalogStillFetchesActualModelIntroductionOnPhone() = runBlocking {
         MockWebServer().use { server ->
             server.enqueue(MockResponse().setBody("""{"id":818,"name":"模型","description":"真正的模型简介",
-                "modelVersions":[{"id":819,"name":"v1","images":[{"url":"https://image.civitai.com/a.jpeg","meta":{"prompt":"fixture"}}]}]}"""))
+                "modelVersions":[{"id":819,"name":"v1","images":[{"url":"https://image.civitai.com/a.jpeg","nsfwLevel":1,"meta":{"prompt":"fixture"}}]}]}"""))
             server.enqueue(MockResponse().setBody("""{"id":819,"name":"v1","description":"这是版本说明",
-                "images":[{"url":"https://image.civitai.com/a.jpeg","meta":{"prompt":"fixture"}}]}"""))
+                "images":[{"url":"https://image.civitai.com/a.jpeg","nsfwLevel":1,"meta":{"prompt":"fixture"}}]}"""))
             val repo = CivitaiRepository(RuntimeEnvironment.getApplication(),
                 CivitaiSettings(mode = MarketConnectionMode.BRIDGE), AppModule.provideRepository())
             val client = ReflectionHelpers.getField<OkHttpClient>(repo, "client")

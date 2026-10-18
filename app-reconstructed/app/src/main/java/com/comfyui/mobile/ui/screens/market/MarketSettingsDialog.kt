@@ -159,9 +159,11 @@ fun MarketSettingsDialog(
                 style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer
             )
             Spacer(Modifier.height(8.dp))
-            SettingSwitch("显示成人内容（直连，遵循账号与地区限制）", draft.includeMatureContent) {
+            SettingSwitch("显示成人内容（遵循账号与地区限制）", draft.includeMatureContent) {
                 if (!saving && !testing) draft = draft.copy(includeMatureContent = it)
             }
+            Text("开启后增加独立的成人浏览范围分区，普通内容仍单独查询。两区各自翻页并去重；仅普通内容模型的预览不会扩大分级。",
+                style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
             TextButton(
                 text = if (testing) "测试中…" else "测试手机直连与 Key",
                 onClick = {

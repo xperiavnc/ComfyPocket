@@ -26,6 +26,7 @@ import com.comfyui.mobile.data.AppModule
 import com.comfyui.mobile.market.CivitaiRepository
 import com.comfyui.mobile.market.CivitaiSettings
 import com.comfyui.mobile.market.MarketCatalogState
+import com.comfyui.mobile.market.MarketCatalogSection
 import com.comfyui.mobile.model.*
 import com.comfyui.mobile.modelcenter.*
 import com.comfyui.mobile.ui.screens.market.MarketDownloadQueuePanel
@@ -83,6 +84,33 @@ class ModelCenterVisualTest {
     private var imageServer: MockWebServer? = null
     private var host: ComponentActivity? = null
     private val successfulImages = AtomicInteger()
+
+    @Test fun dualChannelMarketShowsDistinctScrollableSectionsWithoutChangingTheNavigationShell() {
+        val cover = fixtureCover()
+        val ordinary = CivitaiModelItem(id = 1, name = "普通内容示例", creator = "示例作者",
+            sfwOnly = true, minor = true, previewUrl = cover,
+            versions = listOf(CivitaiVersionItem(baseModel = "Anima")))
+        val extra = CivitaiModelItem(id = 2, name = "浏览范围示例", creator = "示例作者", previewUrl = cover,
+            versions = listOf(CivitaiVersionItem(baseModel = "Illustrious")))
+        val state = MarketCatalogState(matureEnabled = true, items = listOf(ordinary, extra),
+            sections = listOf(
+                MarketCatalogSection(CivitaiContentChannel.STANDARD, MarketCatalogState(items = listOf(ordinary))),
+                MarketCatalogSection(CivitaiContentChannel.MATURE, MarketCatalogState(items = listOf(extra)))))
+        screen(1) {
+            ModelMarketPage(state, rememberLazyGridState(), listOf("Anima", "Illustrious"),
+                Coil.imageLoader(app), { it.previewUrl }, { it }, {}, {}, {}, {}, {}, {}, {}, {})
+        }.use {
+            compose.onNodeWithTag("market-grid").performScrollToNode(hasTestTag("market-section-STANDARD"))
+            compose.waitUntil(15_000) {
+                compose.waitForIdle()
+                successfulImages.get() >= 1
+            }
+            capture("online-market-dual-ordinary")
+            compose.onNodeWithTag("market-grid").performScrollToNode(hasTestTag("market-section-MATURE"))
+            compose.onNodeWithText("成人浏览范围", substring = false).assertIsDisplayed()
+            capture("online-market-dual-mature")
+        }
+    }
 
     @Before fun imageDiagnostics() {
         ShadowLog.stream = System.out

@@ -146,7 +146,7 @@ private fun AnnotationSummary(vm: ModelCenterViewModel, item: LocalModel, writab
         if (lines.isEmpty()) {
             Text("添加用途、角色或使用心得，方便下次查找。", style = MiuixTheme.textStyles.footnote1,
                 color = MiuixTheme.colorScheme.onSecondaryContainer)
-            ModelAction("添加标注", writable, edit)
+            ModelAction("添加标注", writable, onClick = edit)
         } else SelectionContainer { Text(lines.joinToString("\n"), style = MiuixTheme.textStyles.body2) }
         if (item.revision > 0) {
             val scope = rememberCoroutineScope()

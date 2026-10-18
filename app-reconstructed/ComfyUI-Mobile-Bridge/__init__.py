@@ -452,7 +452,7 @@ def _list_native_models(
 async def handle_mobile_status(request: web.Request) -> web.Response:
     return web.json_response({
         "code": 0, "msg": "success", "data": {
-            "version": "2.2.3", "name": "ComfyUI-Mobile-Bridge",
+            "version": "2.2.4", "name": "ComfyUI-Mobile-Bridge",
             "loraManagerInstalled": False,
             "capabilities": ["native-civitai-downloads", "civitai-server-settings", "system-monitor",
                              "model-center-v1"],
@@ -931,6 +931,8 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
                             "steps": str((image.get("meta") or {}).get("steps") or ""),
                             "seed": str((image.get("meta") or {}).get("seed")) if (image.get("meta") or {}).get("seed") is not None else "",
                             "cfgScale": str((image.get("meta") or {}).get("cfgScale")) if (image.get("meta") or {}).get("cfgScale") is not None else "",
+                            "nsfwLevel": image.get("nsfwLevel"),
+                            "minor": image.get("minor"),
                         }
                         for image in images[:12]
                         if isinstance(image, dict)
@@ -943,6 +945,10 @@ async def handle_civitai_search(request: web.Request) -> web.Response:
                 "id": m_id,
                 "name": name,
                 "type": model_type,
+                "nsfw": it.get("nsfw"),
+                "nsfwLevel": it.get("nsfwLevel"),
+                "minor": it.get("minor"),
+                "sfwOnly": it.get("sfwOnly"),
                 "creator": creator,
                 "description": m_desc,
                 "downloadCount": stats.get("downloadCount") or 0,

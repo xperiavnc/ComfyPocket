@@ -118,9 +118,9 @@ fun ModelCenterSearch(
 }
 
 @Composable
-internal fun ModelAction(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun ModelAction(text: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = MiuixTheme.colorScheme
-    Box(Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
+    Box(modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
         .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
         .padding(horizontal = 10.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
         Text(text, style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium,
