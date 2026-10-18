@@ -317,7 +317,10 @@ fun ModelHubScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
+                // Only the plugin page has a collapsing TopAppBar that measures a
+                // height limit. Attaching it to the fixed model toolbar leaves the
+                // default unbounded limit and consumes upward gestures indefinitely.
+                .then(if (pluginPage) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier)
                 .padding(top = innerPadding.calculateTopPadding(), bottom = innerPadding.calculateBottomPadding())
         ) {
             if (!pluginPage && localState.detail == null)
