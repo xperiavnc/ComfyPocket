@@ -28,8 +28,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
 import com.comfyui.mobile.Screen
 import com.comfyui.mobile.ui.designsystem.PocketMaterialTheme
+import com.comfyui.mobile.ui.feedback.AppToast
 import com.comfyui.mobile.ui.theme.BottomBarStyle
-import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -37,12 +37,12 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
 class PocketShellTest {
     @get:Rule val compose = createEmptyComposeRule()
-    private val messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
     private lateinit var nav: NavHostController
     private var leafBacks = 0
     private var selections = 0
@@ -52,7 +52,7 @@ class PocketShellTest {
         val controller = rememberNavController()
         SideEffect { nav = controller }
         PocketMaterialTheme(false) {
-            PocketNavigationShell(controller, messages, { selections++ }, bottomBarStyle = barStyle.value) { entry ->
+            PocketNavigationShell(controller, { selections++ }, bottomBarStyle = barStyle.value) { entry ->
                 val route = entry.destination.route.orEmpty()
                 var input by rememberSaveable { mutableStateOf("") }
                 var panel by rememberSaveable { mutableStateOf(false) }
@@ -242,14 +242,18 @@ class PocketShellTest {
         val activity = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         try {
             host(activity.get())
-            compose.runOnIdle { messages.tryEmit("已保存配置") }
+            ShadowToast.reset()
+            compose.runOnIdle { AppToast.show(activity.get(), "已保存配置") }
             compose.waitForIdle()
-            compose.onNodeWithText("已保存配置").assertIsDisplayed()
+            assertEquals("已保存配置", ShadowToast.getTextOfLatestToast())
+            assertEquals(1, ShadowToast.shownToastCount())
             tab(2)
-            compose.onNodeWithText("已保存配置").assertIsDisplayed()
-            compose.runOnIdle { messages.tryEmit("保存失败，草稿已保留") }
+            assertEquals(1, ShadowToast.shownToastCount())
+            compose.runOnIdle { AppToast.show(activity.get(), "保存失败，草稿已保留") }
             compose.waitForIdle()
-            compose.onNodeWithText("保存失败，草稿已保留").assertIsDisplayed()
+            assertEquals("保存失败，草稿已保留", ShadowToast.getTextOfLatestToast())
+            assertEquals(2, ShadowToast.shownToastCount())
+            compose.onNodeWithTag("pocket-feedback").assertDoesNotExist()
             compose.onNodeWithText("已保存配置").assertDoesNotExist()
         } finally { activity.pause().stop().destroy() }
     }

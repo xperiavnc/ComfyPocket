@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -150,7 +150,7 @@ private fun outputMime(media: MediaOutput): String = when (media.mediaType) {
 fun openOutputFile(context: Context, media: MediaOutput) {
     val uri = shareableUri(context, media.localUri)
     if (uri == null) {
-        Toast.makeText(context, "文件尚未下载到本机", Toast.LENGTH_SHORT).show()
+        AppToast.show(context, "文件尚未下载到本机")
         return
     }
     val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -160,9 +160,9 @@ fun openOutputFile(context: Context, media: MediaOutput) {
     try {
         context.startActivity(Intent.createChooser(intent, "打开 ${media.filename}").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (_: ActivityNotFoundException) {
-        Toast.makeText(context, "没有可以打开此文件的应用", Toast.LENGTH_SHORT).show()
+        AppToast.show(context, "没有可以打开此文件的应用")
     } catch (_: Exception) {
-        Toast.makeText(context, "无法打开此文件", Toast.LENGTH_SHORT).show()
+        AppToast.show(context, "无法打开此文件")
     }
 }
 
@@ -170,7 +170,7 @@ fun openOutputFile(context: Context, media: MediaOutput) {
 fun shareOutputFile(context: Context, media: MediaOutput) {
     val uri = shareableUri(context, media.localUri)
     if (uri == null) {
-        Toast.makeText(context, "文件尚未下载到本机", Toast.LENGTH_SHORT).show()
+        AppToast.show(context, "文件尚未下载到本机")
         return
     }
     val intent = Intent(Intent.ACTION_SEND).apply {
@@ -181,7 +181,7 @@ fun shareOutputFile(context: Context, media: MediaOutput) {
     try {
         context.startActivity(Intent.createChooser(intent, "分享 ${media.filename}").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     } catch (_: Exception) {
-        Toast.makeText(context, "无法分享此文件", Toast.LENGTH_SHORT).show()
+        AppToast.show(context, "无法分享此文件")
     }
 }
 

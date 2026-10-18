@@ -1,7 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import android.content.Intent
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,7 +78,7 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
             }
             context.startActivity(Intent.createChooser(intent, "导出运行日志"))
         } catch (e: Exception) {
-            Toast.makeText(context, "导出失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            AppToast.show(context, "导出失败: ${e.message}")
         }
     }
 
@@ -110,7 +110,7 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
                     // 顶栏清除
                     IconButton(onClick = {
                         viewModel.clearConsoleLog()
-                        Toast.makeText(context, "已清空运行日志", Toast.LENGTH_SHORT).show()
+                        AppToast.show(context, "已清空运行日志")
                     }) {
                         Icon(
                             MiuixIcons.Delete,

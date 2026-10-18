@@ -3,7 +3,7 @@ package com.comfyui.mobile.ui.screens.modelcenter
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.*
@@ -118,7 +118,7 @@ private fun TriggerWords(item: LocalModel) {
             if (words.isNotBlank()) ModelAction("复制触发词") {
                 (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
                     .setPrimaryClip(ClipData.newPlainText("触发词", words))
-                Toast.makeText(context, "触发词已复制", Toast.LENGTH_SHORT).show()
+                AppToast.show(context, "触发词已复制")
             }
         }
         SelectionContainer {

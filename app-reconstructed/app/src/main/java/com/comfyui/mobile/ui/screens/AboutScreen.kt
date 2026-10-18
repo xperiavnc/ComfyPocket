@@ -4,7 +4,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -81,7 +81,7 @@ fun AboutScreen(navController: NavController) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
         } catch (_: Exception) {
-            Toast.makeText(context, "无法打开浏览器链接", Toast.LENGTH_SHORT).show()
+            AppToast.show(context, "无法打开浏览器链接")
         }
     }
 

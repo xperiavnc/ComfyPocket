@@ -13,7 +13,7 @@ import com.comfyui.mobile.network.ConnectionState
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -326,7 +326,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 },
                 onResetChatClick = {
                     viewModel.clearAgentChat()
-                    Toast.makeText(context, "已重置对话", Toast.LENGTH_SHORT).show()
+                    AppToast.show(context, "已重置对话")
                 }
     )
 
@@ -657,7 +657,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         AgentOutputPromptPanel(promptOutput) { label, text ->
             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText(label, text))
-            Toast.makeText(context, "已复制$label", Toast.LENGTH_SHORT).show()
+            AppToast.show(context, "已复制$label")
         }
         TextButton(text = "关闭", onClick = { showPromptDialog = false })
     }
@@ -1081,7 +1081,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                     viewModel.addOrUpdateCharacterLore(lore.name, clean, lore.id, lore.isEnabled)
                                     quickEditTriggerLore = null
                                 } else {
-                                    Toast.makeText(context, "触发词不能为空", Toast.LENGTH_SHORT).show()
+                                    AppToast.show(context, "触发词不能为空")
                                 }
                             },
                             modifier = Modifier.weight(1f),

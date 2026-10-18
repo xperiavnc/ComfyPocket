@@ -36,11 +36,11 @@ internal fun PocketApp(viewModel: MainViewModel) {
     PocketAppTheme(dark, palette) {
       Box(Modifier.fillMaxSize()) {
         PocketNavigationShell(
-            nav, viewModel.userMessage, haptics::tick,
+            nav, haptics::tick,
             bottomBarStyle = bottomBarStyle, darkTheme = dark, paletteId = palette
         ) { entry ->
             // A deliberate migration boundary: old screens get only their original theme.
-            // Material navigation and feedback are siblings, never children of MiuixTheme.
+            // Material navigation stays outside MiuixTheme; feedback uses the original system Toast.
             ComfyControllerTheme(dark, palette, manageSystemBars = false) {
               // Own overlay state inside this destination; portal only its rendering
               // above the shell so neither bar can cover dialog actions or receive taps.

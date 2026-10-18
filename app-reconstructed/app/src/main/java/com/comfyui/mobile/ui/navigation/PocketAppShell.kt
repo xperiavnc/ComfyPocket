@@ -37,9 +37,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -52,10 +49,7 @@ import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import com.comfyui.mobile.ui.theme.BottomBarStyle
 import com.comfyui.mobile.ui.theme.ThemePaletteIds
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
 
@@ -169,7 +163,6 @@ private fun PocketNavigationItems(
 @Composable
 internal fun PocketNavigationShell(
     navController: NavHostController = rememberNavController(),
-    messages: Flow<String> = remember { emptyFlow() },
     onTabSelected: () -> Unit = {},
     bottomBarStyle: BottomBarStyle = BottomBarStyle.MATERIAL,
     darkTheme: Boolean = false,
@@ -183,18 +176,6 @@ internal fun PocketNavigationShell(
     val destinationContent by rememberUpdatedState(content)
     val route = entry?.destination?.route
     val showBar = pocketTabs.any { it.route == route } && !WindowInsets.isImeVisible
-    val snackbar = remember { SnackbarHostState() }
-    val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(messages, lifecycle) {
-        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            messages.collectLatest { message ->
-                if (message.isNotBlank()) {
-                    snackbar.currentSnackbarData?.dismiss()
-                    snackbar.showSnackbar(message, withDismissAction = true)
-                }
-            }
-        }
-    }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(entry?.id) { focus.clearFocus(); keyboard?.hide() }
@@ -224,9 +205,6 @@ internal fun PocketNavigationShell(
         Scaffold(
             modifier = Modifier.fillMaxSize().imePadding().testTag("pocket-shell"),
             contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-            snackbarHost = {
-                SnackbarHost(snackbar, Modifier.padding(bottom = floatingClearance).testTag("pocket-feedback"))
-            },
             bottomBar = {
                 if (showBar && !floating) NavigationBar(
                     modifier = Modifier.testTag("pocket-navigation"),

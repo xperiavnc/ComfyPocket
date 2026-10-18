@@ -20,6 +20,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import org.robolectric.util.ReflectionHelpers
+import org.robolectric.shadows.ShadowToast
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
@@ -36,6 +37,7 @@ class BottomBarStyleIntegrationTest {
         prefs.edit().clear().putInt("theme_mode", 2).commit()
         RuntimeEnvironment.getApplication().getSharedPreferences("civitai_market", Context.MODE_PRIVATE)
             .edit().putString("mode", "BRIDGE").commit()
+        ShadowToast.reset()
     }
 
     private fun back(activity: MainActivity) {
@@ -56,9 +58,12 @@ class BottomBarStyleIntegrationTest {
             appearance()
             compose.onNodeWithTag("bottom-bar-style-classic").performScrollTo().performClick().assertIsSelected()
             assertEquals("classic", prefs.getString(BottomBarStyle.PREFERENCE_KEY, null))
-            compose.onNodeWithText("底栏风格已切换：经典悬浮").assertIsDisplayed()
+            assertEquals("底栏风格已切换：经典悬浮", ShadowToast.getTextOfLatestToast())
+            assertEquals(1, ShadowToast.shownToastCount())
+            compose.onNodeWithTag("pocket-feedback").assertDoesNotExist()
             controller.recreate()
             compose.waitForIdle()
+            assertEquals(1, ShadowToast.shownToastCount())
             compose.onNodeWithTag("bottom-bar-style-classic").performScrollTo().assertIsSelected()
             back(controller.get()); back(controller.get())
             compose.onNodeWithTag("pocket-classic-navigation").assertIsDisplayed()
@@ -68,6 +73,8 @@ class BottomBarStyleIntegrationTest {
             compose.onNodeWithTag("pocket-tab-0").performClick()
             appearance()
             compose.onNodeWithTag("bottom-bar-style-material").performScrollTo().performClick().assertIsSelected()
+            assertEquals("底栏风格已切换：${BottomBarStyle.MATERIAL.title}", ShadowToast.getTextOfLatestToast())
+            assertEquals(2, ShadowToast.shownToastCount())
             back(controller.get()); back(controller.get())
             compose.onNodeWithTag("pocket-classic-navigation").assertDoesNotExist()
             compose.onNodeWithTag("pocket-navigation-indicator").assertExists()

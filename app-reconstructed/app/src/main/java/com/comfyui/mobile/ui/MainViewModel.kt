@@ -27,7 +27,6 @@ import com.comfyui.mobile.model.AiApp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -155,9 +154,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     override val queueList = _queueList.asStateFlow()
 
     val consoleMessages = consoleLog.messages
-
-    private val _userMessage = MutableSharedFlow<String>()
-    val userMessage = _userMessage.asSharedFlow()
 
     internal val _savedScheme = MutableStateFlow(prefs.getString("scheme", "http") ?: "http")
     val savedScheme = _savedScheme.asStateFlow()
@@ -2558,18 +2554,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     }
 
     override fun showToast(msg: String) {
-        viewModelScope.launch(Dispatchers.Main) {
-            // One foreground shell owns visible feedback, not one collector per page.
-            // Keep the Toast fallback for background operations and standalone legacy screens.
-            if (_userMessage.subscriptionCount.value > 0) {
-                _userMessage.emit(msg)
-            } else {
-                try {
-                    android.widget.Toast.makeText(getApplication(), msg, android.widget.Toast.LENGTH_SHORT).show()
-                } catch (_: Exception) {
-                }
-            }
-        }
+        com.comfyui.mobile.ui.feedback.AppToast.show(getApplication(), msg)
     }
     
     fun interrupt() {

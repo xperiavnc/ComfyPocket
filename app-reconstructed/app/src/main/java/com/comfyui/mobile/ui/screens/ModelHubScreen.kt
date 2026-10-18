@@ -1,6 +1,6 @@
 package com.comfyui.mobile.ui.screens
 
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -709,7 +709,7 @@ fun ModelHubScreen(
                     showIndication = true,
                     onClick = {
                         if (!remoteReady) {
-                            Toast.makeText(context, "请先连接 ComfyUI 电脑", Toast.LENGTH_SHORT).show()
+                            AppToast.show(context, "请先连接 ComfyUI 电脑")
                             return@Card
                         }
                         if (!downloadReady) return@Card
@@ -728,7 +728,7 @@ fun ModelHubScreen(
                             )
                             isSubmittingDownload = false
                             res.onSuccess { msg ->
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                AppToast.show(context, msg)
                                 selectedModelDetail = null
                                  showDownloadQueue = true
                             }.onFailure { err ->

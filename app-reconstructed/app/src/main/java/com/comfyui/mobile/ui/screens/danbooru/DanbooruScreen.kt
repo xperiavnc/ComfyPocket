@@ -1,6 +1,6 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
@@ -51,7 +51,7 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
         onDispose { lifecycle.removeObserver(observer); vm.setActive(false) }
     }
     LaunchedEffect(state.message) {
-        state.message?.let { Toast.makeText(context, it, Toast.LENGTH_SHORT).show(); vm.consumeMessage() }
+        state.message?.let { AppToast.show(context, it); vm.consumeMessage() }
     }
     // The settings overlay owns Back; otherwise one completed gesture consumes one layer.
     PredictiveBackHandler(enabled = !state.settingsOpen && (vm.hasDetail || state.selected.isNotEmpty())) { events ->

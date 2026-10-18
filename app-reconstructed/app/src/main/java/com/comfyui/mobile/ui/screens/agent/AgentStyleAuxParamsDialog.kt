@@ -1,6 +1,6 @@
 package com.comfyui.mobile.ui.screens.agent
 
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -181,7 +181,7 @@ fun AgentStyleAuxParamsDialog(
                                     if (cur.isNotBlank()) {
                                         onAddFavoriteArtist(cur)
                                     } else {
-                                        Toast.makeText(context, "请先在左侧输入画师名", Toast.LENGTH_SHORT).show()
+                                        AppToast.show(context, "请先在左侧输入画师名")
                                     }
                                 },
                                 modifier = Modifier.height(42.dp),
@@ -223,7 +223,7 @@ fun AgentStyleAuxParamsDialog(
                                         .clickable {
                                             onArtistChange(boundArtistNode.nodeId, boundArtistNode.key, artist)
                                             artistInput = TextFieldValue(artist, TextRange(artist.length))
-                                            Toast.makeText(context, "已切换画师: $artist", Toast.LENGTH_SHORT).show()
+                                            AppToast.show(context, "已切换画师: $artist")
                                         }
                                         .padding(start = 8.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,

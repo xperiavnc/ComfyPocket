@@ -3,7 +3,7 @@ package com.comfyui.mobile.ui.screens.market
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -45,7 +45,7 @@ fun MarketModelInformation(
     fun copy(label: String, value: String) {
         (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager)
             .setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(context, "已复制$label", Toast.LENGTH_SHORT).show()
+        AppToast.show(context, "已复制$label")
     }
     val intro = remember(model.description) { descriptionText(model.description) }
     val versionIntro = remember(version?.description) { descriptionText(version?.description.orEmpty()) }

@@ -6,7 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.webkit.MimeTypeMap
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -58,7 +58,7 @@ internal fun DanbooruDetailScreen(
     DisposableEffect(post.id, namespace) {
         onDispose { transfer?.cancel() }
     }
-    fun toast(text: String) { Toast.makeText(context, text, Toast.LENGTH_SHORT).show() }
+    fun toast(text: String) { AppToast.show(context, text) }
     fun download(share: Boolean) {
         if (busy) return
         busy = true
@@ -170,5 +170,5 @@ private fun openWeb(context: Context, url: String) {
     val uri = Uri.parse(url)
     if (uri.scheme != "https" && uri.scheme != "http") return
     try { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
-    catch (_: Exception) { Toast.makeText(context, "没有可用的浏览器", Toast.LENGTH_SHORT).show() }
+    catch (_: Exception) { AppToast.show(context, "没有可用的浏览器") }
 }

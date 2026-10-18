@@ -3,7 +3,7 @@ package com.comfyui.mobile.ui.screens.control
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -485,7 +485,7 @@ fun CloudModelBrowserDialog(
                             onClick = {
                                 val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 cm.setPrimaryClip(ClipData.newPlainText("lora_trigger", triggers))
-                                Toast.makeText(context, "已复制触发词", Toast.LENGTH_SHORT).show()
+                                AppToast.show(context, "已复制触发词")
                             }
                         )
                     }

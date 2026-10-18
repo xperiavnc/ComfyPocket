@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.lifecycle.ViewModelProvider
 import com.comfyui.mobile.MainActivity
 import com.comfyui.mobile.ui.MainViewModel
+import com.comfyui.mobile.ui.theme.BottomBarStyle
 import com.comfyui.mobile.model.AgentChatMessage
 import org.junit.Assert.*
 import org.junit.Before
@@ -84,16 +85,49 @@ class PocketAppIntegrationTest {
         } finally { controller.pause().stop().destroy() }
     }
 
-    @Test fun foregroundViewModelFeedbackIsOneSnackbarNotDuplicateToast() {
+    @Test fun foregroundViewModelFeedbackUsesOriginalToastForBothBars() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup().visible()
         try {
             compose.waitForIdle()
-            ShadowToast.reset()
             val vm = ViewModelProvider(controller.get())[MainViewModel::class.java]
-            compose.runOnIdle { vm.showUserMessage("已保存 P2 验证配置") }
+            for (style in BottomBarStyle.entries) {
+                compose.runOnIdle { vm.setBottomBarStyle(style) }
+                compose.onNodeWithTag("pocket-tab-2").performClick()
+                ShadowToast.reset()
+                compose.runOnIdle { vm.showUserMessage("已重置并保存") }
+                compose.waitForIdle()
+                assertEquals(1, ShadowToast.shownToastCount())
+                assertEquals("已重置并保存", ShadowToast.getTextOfLatestToast())
+                compose.onNodeWithText("已重置并保存").assertDoesNotExist()
+                compose.onNodeWithTag("pocket-feedback").assertDoesNotExist()
+                compose.onNodeWithTag("pocket-tab-2").assertIsSelected()
+                println("APP_FEEDBACK style=$style message=已重置并保存 toastCount=1 snackbar=absent")
+            }
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun feedbackIsNotReplayedByTabSwitchRecreationOrResume() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).setup().visible()
+        try {
             compose.waitForIdle()
-            compose.onNodeWithText("已保存 P2 验证配置").assertIsDisplayed()
-            assertEquals(0, ShadowToast.shownToastCount())
+            val vm = ViewModelProvider(controller.get())[MainViewModel::class.java]
+            ShadowToast.reset()
+            compose.runOnIdle { vm.showToast("已保存配置") }
+            compose.waitForIdle()
+            assertEquals(1, ShadowToast.shownToastCount())
+            compose.onNodeWithTag("pocket-tab-2").performClick()
+            compose.onNodeWithTag("pocket-tab-4").performClick()
+            controller.recreate()
+            compose.waitForIdle()
+            controller.pause().stop().start().resume().visible()
+            compose.waitForIdle()
+            assertEquals(1, ShadowToast.shownToastCount())
+            compose.runOnIdle { vm.showToast("保存失败，草稿已保留") }
+            compose.waitForIdle()
+            assertEquals(2, ShadowToast.shownToastCount())
+            assertEquals("保存失败，草稿已保留", ShadowToast.getTextOfLatestToast())
+            compose.onNodeWithTag("pocket-feedback").assertDoesNotExist()
+            println("APP_FEEDBACK lifecycle initial=1 afterTabRecreateResume=1 nextAction=2")
         } finally { controller.pause().stop().destroy() }
     }
 

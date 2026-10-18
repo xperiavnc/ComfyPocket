@@ -1,6 +1,6 @@
 package com.comfyui.mobile.ui.screens.agent
 
-import android.widget.Toast
+import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -141,7 +141,7 @@ fun AgentCharacterLoreDialog(
                                 newCharName = ""
                                 newCharTriggers = ""
                             } else {
-                                Toast.makeText(context, "请填写角色名与触发词", Toast.LENGTH_SHORT).show()
+                                AppToast.show(context, "请填写角色名与触发词")
                             }
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -310,7 +310,7 @@ fun AgentCharacterLoreDialog(
                                         onSaveLore(name, triggers, targetLore.id, targetLore.isEnabled)
                                         editingLoreTarget = null
                                     } else {
-                                        Toast.makeText(context, "请填写角色名与触发词", Toast.LENGTH_SHORT).show()
+                                        AppToast.show(context, "请填写角色名与触发词")
                                     }
                                 },
                                 modifier = Modifier.weight(1f),
