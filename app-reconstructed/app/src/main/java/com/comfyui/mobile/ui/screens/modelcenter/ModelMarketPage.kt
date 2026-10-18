@@ -57,14 +57,9 @@ fun ModelMarketPage(
         item(key = "market-controls", span = { GridItemSpan(maxLineSpan) }) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    ModelCenterSearch(state.keyword, onKeyword, "名称 / 模型编号 / Civitai 链接",
+                    ModelCenterSearch(state.keyword, onKeyword, "名称 / 编号 / 链接",
                         Modifier.weight(1f).testTag("market-keyword"), onSearch)
                     ModelAction("搜索", onClick = onSearch)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("已知链接或编号？可直接读取公开详情",
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSecondaryContainer,
-                        modifier = Modifier.weight(1f))
                     ModelAction(if (openState.loading) "正在打开…" else "直达详情",
                         enabled = !openState.loading && state.keyword.isNotBlank(),
                         onClick = onOpenLink, modifier = Modifier.testTag("market-open-link"))
@@ -73,7 +68,7 @@ fun ModelMarketPage(
                     Text(it, color = colors.error, style = MiuixTheme.textStyles.footnote2,
                         modifier = Modifier.testTag("market-open-error"))
                 }
-                ModelCenterSearch(state.author, onAuthor, "按作者用户名筛选（可与名称组合）",
+                ModelCenterSearch(state.author, onAuthor, "作者用户名",
                     Modifier.fillMaxWidth().testTag("market-author"), onSearch)
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     (listOf("ALL" to "全部类型") + MODEL_RESOURCE_TYPE_TABS).forEach { (key, title) ->
@@ -89,18 +84,11 @@ fun ModelMarketPage(
                         ModelChip(period.label, state.period == period) { onPeriod(period) }
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("筛选：${if (state.type == "ALL") "全部类型" else state.type} · ${state.baseModel}" +
-                        state.author.takeIf { it.isNotBlank() }?.let { " · 作者 $it" }.orEmpty(),
-                        style = MiuixTheme.textStyles.footnote2, modifier = Modifier.weight(1f))
-                    if (state.type != "ALL" || state.baseModel != "全部" || state.author.isNotBlank()) {
+                if (state.type != "ALL" || state.baseModel != "全部" || state.author.isNotBlank()) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         ModelAction("清除筛选", onClick = onClearFilters)
                     }
                 }
-                Text(if (state.matureEnabled)
-                    "普通内容与成人浏览范围分别查询、分别翻页；重复模型优先保留在普通内容区。网页与 API 的可见范围可能不同。"
-                    else "作者使用个人主页的用户名。链接直达支持 civitai.com / civitai.red，遵循模型内容分级与账号可见范围。",
-                    style = MiuixTheme.textStyles.footnote2, color = colors.onSecondaryContainer)
                 (state.notice ?: state.error?.takeIf { state.items.isNotEmpty() })
                     ?.takeIf { state.sections.isEmpty() }?.let { message ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -118,12 +106,8 @@ fun ModelMarketPage(
         if (state.sections.isNotEmpty()) item(key = "market-heading-$channel", span = { GridItemSpan(maxLineSpan) }) {
             Row(Modifier.fillMaxWidth().testTag("market-section-$channel"),
                 verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(channel.label, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
-                    Text(if (channel == CivitaiContentChannel.STANDARD) "普通内容范围 · 预览仅展示 PG 分级"
-                        else "此范围可能含普通模型 · 已与上方去重",
-                        style = MiuixTheme.textStyles.footnote2, color = colors.onSecondaryContainer)
-                }
+                Text(channel.label, style = MiuixTheme.textStyles.body1,
+                    fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                 Text("${content.items.size} 个", style = MiuixTheme.textStyles.footnote2,
                     color = colors.onSecondaryContainer)
             }
