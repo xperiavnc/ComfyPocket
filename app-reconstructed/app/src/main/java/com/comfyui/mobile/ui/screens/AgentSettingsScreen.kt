@@ -65,6 +65,7 @@ import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.comfyui.mobile.ui.components.DialogFormColumn
+import com.comfyui.mobile.ui.components.rememberDialogDismiss
 
 @Composable
 fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) {
@@ -386,12 +387,15 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
 
     // 恢复默认二次确认弹窗，杜绝手滑误触导致自定义提示词瞬间丢失
     confirmResetTarget?.let { target ->
+        val dismissal = rememberDialogDismiss { confirmResetTarget = null }
         val isSystem = target == PromptTarget.SYSTEM
         val targetTitle = if (isSystem) "系统人设提示词" else "画图分镜规则"
         OverlayDialog(
-            show = true,
+            show = dismissal.show,
+            modifier = dismissal.modifier,
             title = "恢复默认确认",
-            onDismissRequest = { confirmResetTarget = null }
+            onDismissRequest = dismissal::dismiss,
+            onDismissFinished = dismissal::onDismissFinished
     ) {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -409,12 +413,13 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                     TextButton(
                         modifier = Modifier.weight(1f),
                         text = "取消",
-                        onClick = { confirmResetTarget = null }
+                        onClick = dismissal::dismiss
     )
                     Button(
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(),
                         onClick = {
+                            if (!dismissal.show) return@Button
                             if (isSystem) {
                                 viewModel.resetAgentSystemPrompt()
                                 viewModel.showUserMessage("已恢复默认人设")
@@ -422,7 +427,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                 viewModel.resetAgentDrawPrompt()
                                 viewModel.showUserMessage("已恢复默认画图规则")
                             }
-                            confirmResetTarget = null
+                            dismissal.dismiss()
                         }
     ) {
                         Text("确认恢复", color = scheme.error)
@@ -434,13 +439,16 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
 
     // 独立富文本提示词编辑器弹窗
     if (editDialogTarget != null) {
+        val dismissal = rememberDialogDismiss { editDialogTarget = null }
         val target = editDialogTarget!!
         val dialogTitle = if (target == PromptTarget.SYSTEM) "编辑系统人设" else "编辑画图规则"
 
         OverlayDialog(
-            show = true,
+            show = dismissal.show,
+            modifier = dismissal.modifier,
             title = dialogTitle,
-            onDismissRequest = { editDialogTarget = null }
+            onDismissRequest = dismissal::dismiss,
+            onDismissFinished = dismissal::onDismissFinished
     ) {
             DialogFormColumn(
                 footer = {
@@ -451,13 +459,14 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         TextButton(
                             modifier = Modifier.weight(1f),
                             text = "取消",
-                            onClick = { editDialogTarget = null }
+                            onClick = dismissal::dismiss
     )
                         TextButton(
                             modifier = Modifier.weight(1f),
                             text = "保存生效",
                             colors = ButtonDefaults.textButtonColorsPrimary(),
                             onClick = {
+                                if (!dismissal.show) return@TextButton
                                 val trimmed = draftPromptText.trim()
                                 if (trimmed.isEmpty()) {
                                     viewModel.showUserMessage("提示词内容不能为空，如需恢复默认请使用「恢复默认」")
@@ -469,7 +478,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     viewModel.setAgentDrawPrompt(draftPromptText)
                                 }
                                 viewModel.showUserMessage("已保存提示词")
-                                editDialogTarget = null
+                                dismissal.dismiss()
                             }
     )
                     }

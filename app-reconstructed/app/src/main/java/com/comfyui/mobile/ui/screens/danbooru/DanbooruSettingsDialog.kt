@@ -13,6 +13,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.danbooru.*
+import com.comfyui.mobile.ui.components.rememberDialogDismiss
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.*
@@ -29,6 +30,7 @@ internal fun DanbooruSettingsDialog(
     // Credentials stay out of SavedState, as in the original connection form.
     var draft by remember { mutableStateOf(initial) }
     var visible by remember { mutableStateOf(false) }
+    val dismissal = rememberDialogDismiss(onDismiss)
     var busy by remember { mutableStateOf(false) }
     var preferences by remember { mutableStateOf(false) }
     var help by remember { mutableStateOf(false) }
@@ -36,7 +38,7 @@ internal fun DanbooruSettingsDialog(
     val scope = rememberCoroutineScope()
     val transform = if (visible) VisualTransformation.None else PasswordVisualTransformation()
     fun action(block: suspend () -> Unit) {
-        if (busy) return
+        if (busy || !dismissal.show) return
         busy = true
         scope.launch {
             try { block() } catch (e: CancellationException) { throw e }
@@ -45,9 +47,10 @@ internal fun DanbooruSettingsDialog(
         }
     }
     OverlayDialog(
-        show = true, title = "Danbooru 设置",
+        show = dismissal.show, modifier = dismissal.modifier, title = "Danbooru 设置",
         summary = state.account.title + state.identity?.let { " · ${it.name}" }.orEmpty(),
-        onDismissRequest = { if (!busy) onDismiss() }
+        onDismissRequest = { if (!busy) dismissal.dismiss() },
+        onDismissFinished = dismissal::onDismissFinished
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -121,10 +124,10 @@ internal fun DanbooruSettingsDialog(
                 Text(it, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceSecondary)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                DanbooruSmallAction("取消", Modifier.weight(1f), enabled = !busy, onClick = onDismiss)
+                DanbooruSmallAction("取消", Modifier.weight(1f), enabled = !busy, onClick = dismissal::dismiss)
                 DanbooruSmallAction(if (busy) "处理中…" else "保存", Modifier.weight(1f), primary = true, enabled = !busy) {
                     action {
-                        onSave(draft.validated()).onSuccess { onDismiss() }
+                        onSave(draft.validated()).onSuccess { dismissal.dismiss() }
                             .onFailure { status = it.message ?: "保存失败" }
                     }
                 }

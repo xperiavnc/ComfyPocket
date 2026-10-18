@@ -31,6 +31,7 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Search
+import com.comfyui.mobile.ui.components.rememberDialogDismiss
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -103,10 +104,18 @@ internal fun DanbooruRatingFilter(filter: ContentFilter, onFilter: (ContentFilte
     var filtersOpen by remember { mutableStateOf(false) }
     DanbooruBrowseChip(filter.title, false, dropdown = true,
         modifier = Modifier.testTag("danbooru-rating-filter")) { filtersOpen = true }
-    if (filtersOpen) OverlayDialog(show = true, title = "内容评级", onDismissRequest = { filtersOpen = false }) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            ContentFilter.entries.filter { it != ContentFilter.CUSTOM }.forEach { value ->
-                DanbooruPill(value.title, filter == value) { onFilter(value); filtersOpen = false }
+    if (filtersOpen) {
+        val dismissal = rememberDialogDismiss { filtersOpen = false }
+        OverlayDialog(
+            show = dismissal.show, modifier = dismissal.modifier, title = "内容评级",
+            onDismissRequest = dismissal::dismiss, onDismissFinished = dismissal::onDismissFinished
+        ) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ContentFilter.entries.filter { it != ContentFilter.CUSTOM }.forEach { value ->
+                    DanbooruPill(value.title, filter == value) {
+                        if (dismissal.show) { onFilter(value); dismissal.dismiss() }
+                    }
+                }
             }
         }
     }

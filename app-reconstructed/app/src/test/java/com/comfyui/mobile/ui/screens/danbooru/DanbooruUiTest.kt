@@ -234,6 +234,66 @@ class DanbooruUiTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun cancellingSettingsAnimatesBeforeUnmountAndRapidBackDoesNotLeaveTheDetail() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val service = Service(post)
+        val vm = DanbooruViewModel(SavedStateHandle(), service)
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
+                DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) {}
+            } } })
+            compose.waitForIdle()
+            compose.runOnIdle { vm.open(post); vm.showSettings() }
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithText("取消").performTouchInput { click() }
+            compose.waitForIdle(); compose.mainClock.advanceTimeBy(80)
+            assertTrue("Keep the settings owner alive until exit completes", vm.state.value.settingsOpen)
+            compose.runOnIdle { controller.get().onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle(); compose.mainClock.advanceTimeBy(600)
+            compose.mainClock.autoAdvance = true; compose.waitForIdle()
+            assertFalse(vm.state.value.settingsOpen)
+            assertTrue(vm.hasDetail); assertFalse(controller.get().isFinishing)
+            assertEquals(DanbooruSettings(), service.settings)
+            compose.runOnIdle { controller.get().onBackPressedDispatcher.onBackPressed() }
+            compose.waitForIdle()
+            assertFalse(vm.hasDetail); assertFalse(controller.get().isFinishing)
+        } finally {
+            compose.mainClock.autoAdvance = true
+            controller.pause().stop().destroy()
+        }
+    }
+
+    @Test fun ratingSelectionWaitsForExitBeforeReopeningAndDoesNotChangeTheChosenFilterTwice() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        var filter by mutableStateOf(ContentFilter.GENERAL)
+        var selections = 0
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
+                Scaffold {
+                    DanbooruRatingFilter(filter) { filter = it; selections++ }
+                }
+            } } })
+            compose.waitForIdle()
+            compose.onNodeWithTag("danbooru-rating-filter").performTouchInput { click() }
+            compose.waitForIdle()
+            compose.mainClock.autoAdvance = false
+            compose.onNodeWithText(ContentFilter.SENSITIVE.title).performTouchInput { click() }
+            compose.waitForIdle(); compose.mainClock.advanceTimeBy(80)
+            assertEquals(ContentFilter.SENSITIVE, filter); assertEquals(1, selections)
+            compose.mainClock.advanceTimeBy(600)
+            compose.mainClock.autoAdvance = true; compose.waitForIdle()
+            compose.onNodeWithText("内容评级").assertDoesNotExist()
+            compose.onNodeWithTag("danbooru-rating-filter").performTouchInput { click() }
+            compose.waitForIdle()
+            compose.onNodeWithText("内容评级").assertIsDisplayed()
+            assertEquals(1, selections)
+        } finally {
+            compose.mainClock.autoAdvance = true
+            controller.pause().stop().destroy()
+        }
+    }
+
     @Test fun tappingToViewTagsAndReturningAnimateWithoutResettingTheGridOrAnimatingSelection() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val vm = DanbooruViewModel(SavedStateHandle(), Service(post))

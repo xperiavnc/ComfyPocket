@@ -22,6 +22,17 @@ internal fun pocketPageMotion(pop: Boolean, rtl: Boolean = false): PocketPageMot
     else PocketPageMotion(5 * sign, -8 * sign)
 }
 
+/**
+ * Saved tab stacks can be restored by either a navigate or a pop operation.
+ * Their visual direction follows the bar order, not NavController's operation.
+ * Secondary pages retain the original push/pop behavior.
+ */
+internal fun pocketNavigationIsBackwards(from: String?, to: String?, pop: Boolean): Boolean {
+    val fromIndex = pocketTabs.indexOfFirst { it.route == from }
+    val toIndex = pocketTabs.indexOfFirst { it.route == to }
+    return if (fromIndex >= 0 && toIndex >= 0 && fromIndex != toIndex) toIndex < fromIndex else pop
+}
+
 internal fun pocketPageEnter(pop: Boolean, rtl: Boolean = false): EnterTransition {
     val motion = pocketPageMotion(pop, rtl)
     return slideInHorizontally(tween(motion.durationMillis), motion::enterOffset) +

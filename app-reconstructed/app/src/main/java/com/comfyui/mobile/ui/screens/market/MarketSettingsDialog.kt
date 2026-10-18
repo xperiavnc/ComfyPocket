@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.market.CivitaiSettings
 import com.comfyui.mobile.market.MarketConnectionMode
 import com.comfyui.mobile.ui.components.DialogFormColumn
+import com.comfyui.mobile.ui.components.rememberDialogDismiss
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -41,6 +42,7 @@ fun MarketSettingsDialog(
     onTest: suspend (CivitaiSettings) -> String
 ) {
     // Do not use rememberSaveable for credentials (SavedState is not a secret store).
+    val dismissal = rememberDialogDismiss(onDismiss)
     var draft by remember { mutableStateOf(initial) }
     var showSecrets by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
@@ -51,9 +53,11 @@ fun MarketSettingsDialog(
     val passwordTransformation = if (showSecrets) VisualTransformation.None else PasswordVisualTransformation()
 
     OverlayDialog(
-        show = true,
+        show = dismissal.show,
+        modifier = dismissal.modifier,
         title = "集市连接设置",
-        onDismissRequest = { if (!saving) onDismiss() }
+        onDismissRequest = { if (!saving) dismissal.dismiss() },
+        onDismissFinished = dismissal::onDismissFinished
     ) {
         DialogFormColumn(
             footer = {
@@ -65,16 +69,16 @@ fun MarketSettingsDialog(
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(text = "取消", onClick = { if (!saving) onDismiss() })
+                    TextButton(text = "取消", onClick = { if (!saving) dismissal.dismiss() })
                     TextButton(
                         text = if (saving) "保存中…" else "保存",
                         colors = ButtonDefaults.textButtonColorsPrimary(),
                         onClick = {
-                            if (!saving && !testing) {
+                            if (!saving && !testing && dismissal.show) {
                                 saving = true
                                 scope.launch {
                                     try {
-                                        onSave(draft).onSuccess { onDismiss() }.onFailure {
+                                        onSave(draft).onSuccess { dismissal.dismiss() }.onFailure {
                                             status = it.message ?: "保存失败，请重试"
                                         }
                                     } finally {

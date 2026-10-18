@@ -241,10 +241,14 @@ internal fun PocketNavigationShell(
                 .clipToBounds().testTag("pocket-content")) {
                 NavHost(
                     navController, startDestination = Screen.Dashboard.route,
-                    enterTransition = { pocketPageEnter(pop = false, rtl = rtl) },
-                    exitTransition = { pocketPageExit(pop = false, rtl = rtl) },
-                    popEnterTransition = { pocketPageEnter(pop = true, rtl = rtl) },
-                    popExitTransition = { pocketPageExit(pop = true, rtl = rtl) }
+                    enterTransition = { pocketPageEnter(pocketNavigationIsBackwards(
+                        initialState.destination.route, targetState.destination.route, pop = false), rtl) },
+                    exitTransition = { pocketPageExit(pocketNavigationIsBackwards(
+                        initialState.destination.route, targetState.destination.route, pop = false), rtl) },
+                    popEnterTransition = { pocketPageEnter(pocketNavigationIsBackwards(
+                        initialState.destination.route, targetState.destination.route, pop = true), rtl) },
+                    popExitTransition = { pocketPageExit(pocketNavigationIsBackwards(
+                        initialState.destination.route, targetState.destination.route, pop = true), rtl) }
                 ) {
                     (pocketTabs.map { it.route } + pocketSecondaryRoutes).forEach { destination ->
                         composable(destination) { backStack ->

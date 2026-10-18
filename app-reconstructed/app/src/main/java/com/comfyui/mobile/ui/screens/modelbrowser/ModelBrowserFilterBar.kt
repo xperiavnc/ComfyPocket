@@ -37,6 +37,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import com.comfyui.mobile.ui.components.rememberDialogDismiss
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -198,12 +199,15 @@ fun ModelBrowserManageFilterDialog(
     context: Context = LocalContext.current
 ) {
     if (!show) return
+    val dismissal = rememberDialogDismiss(onDismiss)
     val scheme = MiuixTheme.colorScheme
 
     OverlayDialog(
-        show = true,
+        show = dismissal.show,
+        modifier = dismissal.modifier,
         title = title,
-        onDismissRequest = onDismiss
+        onDismissRequest = dismissal::dismiss,
+        onDismissFinished = dismissal::onDismissFinished
     ) {
         Column(
             modifier = Modifier
@@ -248,8 +252,9 @@ fun ModelBrowserManageFilterDialog(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clickable {
+                                                if (!dismissal.show) return@clickable
                                                 onFilterTagSelected(tag)
-                                                onDismiss()
+                                                dismissal.dismiss()
                                             }
                                             .padding(vertical = 8.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -322,7 +327,7 @@ fun ModelBrowserManageFilterDialog(
                 TextButton(
                     text = "完成",
                     colors = ButtonDefaults.textButtonColorsPrimary(),
-                    onClick = onDismiss,
+                    onClick = dismissal::dismiss,
                     modifier = Modifier.weight(1f)
                 )
             }
