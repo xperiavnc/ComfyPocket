@@ -1,6 +1,5 @@
 package com.comfyui.mobile.ui.screens.modelcenter
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -14,12 +13,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -161,8 +158,8 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
                                 if (state.fromCache) "\n仅查询已浏览缓存，文件状态需联网确认。" else "",
                                 style = MiuixTheme.textStyles.footnote2,
                                 color = MiuixTheme.colorScheme.onSecondaryContainer)
-                            ModelAction("补全本页资料", state.connected && !state.fromCache && state.page.items.isNotEmpty()) {
-                                vm.enrich(state.page.items.filter { it.present }.map { it.id }.take(100))
+                            ModelAction("手机补全本页资料", state.sourceScope.isNotBlank() && state.page.items.isNotEmpty()) {
+                                vm.enrich(state.page.items.map { it.id }.take(100), refresh = true)
                             }
                         }
                     }
@@ -185,6 +182,7 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
             }
         }
         items(state.page.items, key = { it.id }) { model ->
+            LaunchedEffect(model.id, model.sha256, state.sourceScope, state.sourceTransport) { vm.requestSource(model.id) }
             LocalModelCard(model, coverUrl(model), state.compact, state.fromCache) { vm.openDetail(model.id) }
         }
         if (state.page.hasMore) item(span = { GridItemSpan(maxLineSpan) }) {
@@ -298,92 +296,7 @@ private fun ModelFiltersDialog(state: ModelCenterState, onDismiss: () -> Unit, o
 }
 
 @Composable
-private fun LocalModelDetails(vm: ModelCenterViewModel, state: ModelCenterState, item: LocalModel) {
-    var editing by remember(item.id) { mutableStateOf(false) }
-    BackHandler(enabled = !editing && state.detail?.id == item.id) { vm.openDetail(null) }
-    val writable = state.connected && !state.fromCache && !state.detailLoading
-    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(text = "返回列表", onClick = { vm.openDetail(null) })
-            Spacer(Modifier.weight(1f))
-            TextButton(text = "编辑标注", enabled = writable, onClick = { editing = true })
-        }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(item.displayName, style = MiuixTheme.textStyles.title3, modifier = Modifier.testTag("local-model-detail"))
-            LocalModelCover(item, vm.preview(item), state.fromCache,
-                Modifier.fillMaxWidth().height(260.dp), contentScale = ContentScale.Fit)
-            Text(when (item.preview?.source) { "local" -> "本地封面"; "provider" -> "来源封面"; else -> "模型预览" },
-                style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer)
-            state.notice?.let { Text(it, color = MiuixTheme.colorScheme.primary) }
-            if (state.detailLoading) Text("正在刷新资料…")
-            DetailSection("文件位置与指纹") {
-                SelectionContainer { Text("${modelCategoryLabel(item.category)} · ${item.format}\n" +
-                    "${item.rootPath}/${item.relativePath}\n${modelBytes(item.size)} · 修改 ${modelTime(item.mtime)}\n" +
-                    "SHA-256：${item.sha256 ?: "后台计算中 / 尚未计算"}\n" +
-                    modelLoadStatus(item, state.fromCache) + "\n最近使用：${modelTime(item.lastUsed)}",
-                    style = MiuixTheme.textStyles.footnote1) }
-            }
-            DetailSection("用户标注 · ${if (item.annotation.classificationSource == "ai-suggestion") "AI 建议，待确认" else "人工资料"}") {
-                val ann = item.annotation
-                Text("别名：${ann.alias.ifBlank { "未填写" }}\n其他别名：${ann.aliases.joinToString(" / ").ifBlank { "未填写" }}\n" +
-                    "用途：${ann.useCases.mapNotNull(modelUseCases::get).joinToString(" / ").ifBlank { "待分类" }}\n" +
-                    "角色 / 作品：${ann.character.ifBlank { "未知" }}\n服装 / 形态：${ann.outfit.ifBlank { "未知" }}\n" +
-                    "标签：${ann.tags.joinToString(" / ").ifBlank { "无" }}\n" +
-                    "底模覆盖：${ann.baseModel.ifBlank { "未填写" }}\n常用权重：${ann.preferredStrength ?: "未知"}\n" +
-                    "备注：${ann.notes.ifBlank { "无" }}\n修订：${item.revision}" +
-                    if (ann.favorite) " · 已收藏" else "", style = MiuixTheme.textStyles.footnote1)
-                if (item.revision > 0) {
-                    val scope = rememberCoroutineScope()
-                    var error by remember { mutableStateOf<String?>(null) }
-                    TextButton(text = "撤销上次标注", enabled = writable, onClick = {
-                        scope.launch { vm.save(item.annotation, undo = true).onFailure { error = it.message } }
-                    })
-                    error?.let { Text(it, color = MiuixTheme.colorScheme.error) }
-                }
-            }
-            DetailSection("该文件的触发词") {
-                Text("来源：" + if (item.annotation.trainedWords.isNotEmpty() || "trainedWords" in item.annotation.fieldLocks)
-                    "用户明确标注" else if (item.provider != null) "Civitai 文件 SHA-256 匹配" else "未知",
-                    style = MiuixTheme.textStyles.footnote1)
-                SelectionContainer { Text(item.triggerWords.joinToString("\n").ifBlank { "尚无已确认触发词，可手工填写；未知不代表无需触发词。" }) }
-            }
-            DetailSection("提供方资料 · 与人工标注分开保存") {
-                val provider = item.provider
-                if (provider == null) Text("未匹配来源。私人 / 自训模型也可保存人工资料。")
-                else {
-                    Text("${provider.name}\n版本：${provider.version.ifBlank { "未知" }}\n作者：${provider.author.ifBlank { "来源未提供" }}\n" +
-                        "底模：${provider.baseModel.ifBlank { "未知" }}\n" +
-                        "model ${provider.modelId} / version ${provider.versionId} / file ${provider.fileId}\n" +
-                        "更新：${modelTime(provider.fetchedAt)}", style = MiuixTheme.textStyles.footnote1)
-                    SelectionContainer { Text(android.text.Html.fromHtml(provider.description,
-                        android.text.Html.FROM_HTML_MODE_LEGACY).toString().ifBlank { "来源未提供简介" }) }
-                    SelectionContainer { Text(provider.source, style = MiuixTheme.textStyles.footnote1) }
-                }
-                TextButton(text = if (provider == null) "补全资料" else "刷新来源资料", enabled = writable && item.present,
-                    onClick = { vm.enrich(listOf(item.id), refresh = provider != null) })
-                Text("请求由电脑发出，使用 ComfyUI 中已配置的 Key / 代理。只上传哈希，不上传模型；图片失败不影响文字资料。",
-                    style = MiuixTheme.textStyles.footnote1)
-            }
-            Text("本批提供资料管理；Agent 接线与写角色词库在后续阶段接入。当前操作不会修改工作流或提交生图。",
-                style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSecondaryContainer)
-        }
-    }
-    if (editing) AnnotationDialog(item, onDismiss = { editing = false }, onSave = vm::save)
-}
-
-@Composable
-private fun DetailSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold))
-            content()
-        }
-    }
-}
-
-@Composable
-private fun AnnotationDialog(item: LocalModel, onDismiss: () -> Unit,
+internal fun AnnotationDialog(item: LocalModel, onDismiss: () -> Unit,
                              onSave: suspend (ModelAnnotation, Boolean) -> Result<Unit>) {
     val dismiss = rememberDialogDismiss(onDismiss)
     var ann by remember { mutableStateOf(item.annotation) }

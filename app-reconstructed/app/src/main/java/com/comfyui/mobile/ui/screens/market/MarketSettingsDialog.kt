@@ -102,10 +102,13 @@ fun MarketSettingsDialog(
             }
             Text(
                 if (draft.mode == MarketConnectionMode.DIRECT)
-                    "手机独立浏览 Civitai，无需电脑在线；安装模型仍交给电脑下载。"
-                else "浏览经由当前 ComfyUI 电脑转发，使用电脑自己的网络与 Key。",
+                    "手机优先直连：搜索、简介、版本、触发词和网络预览均使用下面的代理与 Key；电脑只处理本地文件与模型下载。"
+                else "仅在线列表经电脑转发（备用模式）。模型简介、版本详情、本地模型补全和网络预览仍由手机直连，使用下面的代理与 Key。",
                 style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer
             )
+            Text("本地模型按完整 SHA-256 精确匹配；资料缓存在手机，不用文件名猜来源，也不覆盖人工标注。",
+                style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer,
+                modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(12.dp))
             SettingSwitch("启用自定义 HTTP 代理（手机直连）", draft.proxyEnabled) {
                 if (!saving && !testing) draft = draft.copy(proxyEnabled = it)

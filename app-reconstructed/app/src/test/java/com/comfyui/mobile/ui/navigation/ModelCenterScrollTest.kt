@@ -194,7 +194,7 @@ class ModelCenterScrollTest {
         }
         compose.onNodeWithTag("local-model-detail").assertExists()
         swipeBothWays("local-details")
-        compose.onNodeWithText("返回列表").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
         compose.onNodeWithTag("local-model-list").assertExists()
     }
 }

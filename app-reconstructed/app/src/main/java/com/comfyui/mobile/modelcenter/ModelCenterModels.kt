@@ -24,7 +24,10 @@ data class ModelProvider(
     val name: String = "", val version: String = "", val author: String = "",
     val baseModel: String = "", val trainedWords: List<String> = emptyList(),
     val description: String = "", val fetchedAt: Long = 0, val source: String = "",
-    val images: List<ModelPreview> = emptyList()
+    val images: List<ModelPreview> = emptyList(),
+    // `description` remains the version description for schema-v1 Bridge compatibility.
+    val modelDescription: String = "", val modelDescriptionFetched: Boolean = false,
+    val fetchedBy: String = "", val cacheScope: String = ""
 )
 data class ModelPreview(val url: String = "")
 data class ModelPreviewInfo(val source: String = "", val version: String = "")

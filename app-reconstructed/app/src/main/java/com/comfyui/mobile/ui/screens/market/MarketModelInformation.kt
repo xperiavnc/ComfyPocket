@@ -120,7 +120,7 @@ private fun CopyableText(title: String, value: String, onCopy: (() -> Unit)?) {
 }
 
 /** Render HTML as inert, selectable text: no WebView, scripts, remote embeds or link execution. */
-private fun descriptionText(html: String): String {
+internal fun descriptionText(html: String): String {
     if (!Regex("</?[a-zA-Z][^>]*>").containsMatchIn(html)) return html
     val stripped = html.replace(Regex("<(script|style)\\b[^>]*>.*?</\\1>",
         setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")

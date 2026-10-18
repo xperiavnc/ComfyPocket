@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -52,8 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import coil.Coil
-import com.comfyui.mobile.market.MarketConnectionMode
 import com.comfyui.mobile.market.MarketModelFilters
 import com.comfyui.mobile.market.MarketQuery
 import com.comfyui.mobile.market.MarketViewModel
@@ -63,6 +62,8 @@ import com.comfyui.mobile.ui.screens.modelcenter.ModelTasksPage
 import com.comfyui.mobile.ui.screens.modelcenter.ModelCenterToolbar
 import com.comfyui.mobile.ui.screens.modelcenter.ModelCenterTabs
 import com.comfyui.mobile.ui.screens.modelcenter.ModelMarketPage
+import com.comfyui.mobile.ui.screens.modelcenter.LocalPhoneModelImages
+import com.comfyui.mobile.ui.screens.modelcenter.PhoneModelImages
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -129,10 +130,13 @@ fun ModelHubScreen(
     val marketSettings by market.settings.collectAsState()
     val catalog by market.catalog.state.collectAsState()
     val gridState = rememberLazyGridState()
-    val marketImageLoader = if (marketSettings.mode == MarketConnectionMode.DIRECT)
-        market.repository.imageLoader else Coil.imageLoader(context)
-    fun imageRequest(url: String): Any = if (marketSettings.mode == MarketConnectionMode.DIRECT)
-        market.repository.imageRequest(url) else url
+    // Catalog fallback mode does not turn external covers/details into computer-proxied requests.
+    val marketImageLoader = market.repository.imageLoader
+    fun imageRequest(url: String): Any = market.repository.imageRequest(url)
+    val phoneImages = remember(marketSettings) {
+        PhoneModelImages(market.repository.imageLoader, market.repository.transportScope, market.repository::imageRequest)
+    }
+    LaunchedEffect(marketSettings) { models.source(market.repository) }
 
     val assetsSummary by viewModel.assetsSummary.collectAsState()
 
@@ -272,6 +276,7 @@ fun ModelHubScreen(
         containerColor = scheme.background,
         topBar = {
             if (!pluginPage) ModelCenterToolbar(
+                title = if (selectedTabIndex == 0 && localState.detail != null) "模型详情" else "模型中心",
                 onBack = { returnFromMarket(NavigationDiagnostics.Event.MARKET_BACK_TOOLBAR) },
                 onSettings = { showMarketSettings = true },
                 onRefresh = {
@@ -279,7 +284,7 @@ fun ModelHubScreen(
                     if (selectedTabIndex == 1) loadCivitai(reset = true, forceRefresh = true)
                     if (selectedTabIndex == 0) {
                         models.refresh()
-                        localState.detail?.let { models.openDetail(it.id) }
+                        localState.detail?.let { models.openDetail(it.id); models.enrich(listOf(it.id), refresh = true) }
                     }
                     if (selectedTabIndex == 2) scope.launch { models.pollTasks() }
                 }
@@ -328,7 +333,9 @@ fun ModelHubScreen(
 
             when (selectedTabIndex) {
                 0 -> androidx.compose.runtime.key(localState.identity) {
-                    LocalModelsPage(models, localState)
+                    CompositionLocalProvider(LocalPhoneModelImages provides phoneImages) {
+                        LocalModelsPage(models, localState)
+                    }
                 }
                 2 -> ModelTasksPage(models, localState, market)
                 1 -> ModelMarketPage(

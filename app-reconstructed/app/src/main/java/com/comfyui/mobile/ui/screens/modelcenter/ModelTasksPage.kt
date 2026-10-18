@@ -24,7 +24,8 @@ fun ModelTasksPage(vm: ModelCenterViewModel, state: ModelCenterState, market: Ma
         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             ModelChip("模型下载", !metadata) { metadata = false }
-            ModelChip("资料补全" + state.tasks.enrichment.size.takeIf { it > 0 }?.let { " · $it" }.orEmpty(), metadata) {
+            ModelChip("资料补全" + (state.tasks.enrichment.size + state.sourceTasks.size)
+                .takeIf { it > 0 }?.let { " · $it" }.orEmpty(), metadata) {
                 metadata = true
             }
         }
@@ -34,17 +35,39 @@ fun ModelTasksPage(vm: ModelCenterViewModel, state: ModelCenterState, market: Ma
         } else LazyColumn(contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
             item {
-                Text("轻量资料任务 · 与模型权重下载独立", style = MiuixTheme.textStyles.footnote1,
+                Text("资料与网络预览由手机直连 · 模型权重仍下载到电脑", style = MiuixTheme.textStyles.footnote1,
                     color = MiuixTheme.colorScheme.onSecondaryContainer)
                 state.notice?.let { Text(it, style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.primary) }
             }
-            if (state.tasks.enrichment.isEmpty()) item {
+            if (state.tasks.enrichment.isEmpty() && state.sourceTasks.isEmpty()) item {
                 Column(Modifier.fillMaxWidth().padding(vertical = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("暂无资料补全任务", style = MiuixTheme.textStyles.body2)
                     Text("在本地模型详情中补全，或批量补全本页资料",
                         style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(top = 6.dp))
                 }
+            }
+            items(state.sourceTasks.entries.toList(), key = { "phone-${it.key}" }) { (hash, task) ->
+                val model = state.page.items.firstOrNull { modelHash(it.sha256) == hash }
+                    ?: state.detail?.takeIf { modelHash(it.sha256) == hash }
+                Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(model?.displayName ?: "${hash.take(16)}…", style = MiuixTheme.textStyles.body2,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                            ModelStatusBadge("手机直连", task.status == "ready")
+                        }
+                        Text(task.message, style = MiuixTheme.textStyles.footnote1,
+                            color = MiuixTheme.colorScheme.onSecondaryContainer)
+                        if (!task.active && model != null) ModelAction("重新查询") {
+                            vm.enrich(listOf(model.id), refresh = true)
+                        }
+                    }
+                }
+            }
+            if (state.tasks.enrichment.isNotEmpty()) item {
+                Text("电脑端历史资料任务", style = MiuixTheme.textStyles.footnote2,
+                    color = MiuixTheme.colorScheme.onSecondaryContainer)
             }
             items(state.tasks.enrichment, key = { it.id }) { task ->
                 val name = state.page.items.firstOrNull { it.id == task.locationId }?.displayName

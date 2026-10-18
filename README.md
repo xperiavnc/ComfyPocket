@@ -21,6 +21,9 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 
 手机可独立直连 Civitai，支持自定义 HTTP 代理和 Key，查看模型简介、触发词、
 示例图正反提示词。模型安装仍下发给 ComfyUI 电脑。
+本地模型按完整 SHA-256 由手机自动获取模型简介、版本说明、作者与网络预览，
+保存到手机资料缓存；电脑刷新不会抹掉这些资料或人工标注。
+网络封面同样复用手机代理，即使电脑断开也可继续读取。详见 `app-reconstructed/MODEL_CENTER.md`。
 
 配套 Bridge 2.0 已去除 Lora Manager 依赖，使用原生校验下载队列。
 电脑 Key 在 **ComfyUI 设置 → Mobile Bridge → Civitai** 配置，支持保存、测试和清除，
@@ -53,6 +56,15 @@ cd app-reconstructed
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
 
 ## 当前验证状态
+
+- `0.0.27-model-center-direct`（versionCode 29）：本地模型资料与网络预览改为手机直连，
+  复用集市 HTTP 代理和 Civitai Key；按文件哈希精确匹配并缓存模型总简介、版本说明、
+  作者、底模和触发词。详情改为紧凑封面、简介与触发词优先、文件信息默认折叠。
+  在线列表保留显式电脑桥接备用模式，但详情和网络预览不再随它绕电脑。
+  保留上一版触摸滚动修复、两种底栏与原切换动画；Bridge 2.2.1 不变。
+  完整 debug 构建及 86 套 / 543 项测试通过，0 失败 / 错误 / 跳过；
+  包含手机代理取图、代理变更重试、简介缓存重启和六类触摸滚动回归。
+  自动化验证结果和实际设备验收边界见 `app-reconstructed/MODEL_CENTER.md`。
 
 - `0.0.26-model-center-scroll`（versionCode 28）：修复模型中心三个分页不能触摸滚动的回归。
   固定工具栏不再挂载旧折叠标题栏的 nested-scroll 拦截；该连接仅保留给原插件页。

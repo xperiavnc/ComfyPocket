@@ -22,7 +22,9 @@ data class ModelCenterState(
     val query: LocalModelQuery = LocalModelQuery(), val compact: Boolean = false,
     val scrollIndex: Int = 0, val scrollOffset: Int = 0,
     val detail: LocalModel? = null, val detailLoading: Boolean = false,
-    val tasks: ModelTasks = ModelTasks(), val error: String? = null, val notice: String? = null
+    val tasks: ModelTasks = ModelTasks(), val error: String? = null, val notice: String? = null,
+    val sourceScope: String = "", val sourceTransport: String = "",
+    val sourceTasks: Map<String, ModelSourceTask> = emptyMap()
 )
 
 class ModelCenterViewModel(application: Application) : AndroidViewModel(application) {
@@ -38,6 +40,55 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
     private var contextKey = ""
     private var negotiated = false
     private val cacheWrites = Mutex()
+    private var phoneSource: LocalModelSource? = null
+    private val sourceLoader = ModelSourceLoader(viewModelScope,
+        onStatus = { hash, task ->
+            mutable.value = state.value.copy(sourceTasks = state.value.sourceTasks + (hash to task))
+        },
+        onResult = { hash, provider ->
+            if (provider.cacheScope == state.value.sourceScope) {
+                snapshot = snapshot.copy(phoneSources = snapshot.phoneSources + (hash to provider),
+                    savedAt = System.currentTimeMillis())
+                publishSources()
+                persist()
+            }
+        })
+
+    /** The same phone transport as the online market, regardless of its optional Bridge-list mode. */
+    fun source(value: LocalModelSource) {
+        val namespace = value.sourceScope
+        if (phoneSource === value && state.value.sourceScope == namespace &&
+            state.value.sourceTransport == value.transportScope) return
+        phoneSource = value
+        snapshot = snapshot.copy(phoneSources = snapshot.phoneSources.filterValues { it.cacheScope == namespace })
+        mutable.value = state.value.copy(sourceScope = namespace, sourceTransport = value.transportScope, sourceTasks = emptyMap())
+        bindSources()
+        publishSources()
+        if (state.value.restored) persist()
+    }
+
+    private fun bindSources() = sourceLoader.bind("$contextKey|$generation|${snapshot.bridgeServerId}", phoneSource)
+    private fun resolved(item: LocalModel) = item.withPhoneSource(snapshot.phoneSources, state.value.sourceScope)
+    private fun cachedPage(query: LocalModelQuery, page: Int) =
+        LocalModelCache.page(snapshot.withPhoneSources(state.value.sourceScope), query, page)
+
+    private fun publishSources() {
+        fun raw(item: LocalModel): LocalModel = snapshot.items.firstOrNull { it.id == item.id } ?: item
+        mutable.value = state.value.copy(
+            page = state.value.page.copy(items = state.value.page.items.map { resolved(raw(it)) }),
+            detail = state.value.detail?.let { resolved(raw(it)) })
+    }
+
+    fun requestSource(id: String, refresh: Boolean = false): Boolean {
+        val item = snapshot.items.firstOrNull { it.id == id }
+            ?: state.value.page.items.firstOrNull { it.id == id }
+            ?: state.value.detail?.takeIf { it.id == id } ?: return false
+        val hash = modelHash(item.sha256) ?: return false
+        val saved = snapshot.phoneSources[hash]
+        if (!refresh && saved?.cacheScope == state.value.sourceScope && saved.modelDescriptionFetched &&
+            System.currentTimeMillis() - saved.fetchedAt < 24 * 60 * 60_000L) return false
+        return sourceLoader.request(hash, refresh)
+    }
 
     fun context(identity: String, label: String, baseUrl: String?, connected: Boolean) {
         val key = "$identity|$baseUrl|$connected"
@@ -53,19 +104,24 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
             LocalModelRepository(cacheDir, identity, it, AppModule.provideRepository().hostAwareCallFactory)
         }
         // Immediately remove the previous server's data, before any disk/network suspension.
-        mutable.value = ModelCenterState(identity = identity, serverLabel = label, connected = connected)
+        mutable.value = ModelCenterState(identity = identity, serverLabel = label, connected = connected,
+            sourceScope = phoneSource?.sourceScope.orEmpty(), sourceTransport = phoneSource?.transportScope.orEmpty())
         snapshot = ModelCacheSnapshot()
+        bindSources()
         loadJob = viewModelScope.launch {
             val stored = cacheWrites.withLock {
                 withContext(Dispatchers.IO) { LocalModelCache(cacheDir, identity).load() }
             }
             if (token != generation) return@launch
-            snapshot = stored
+            snapshot = stored.copy(phoneSources = stored.phoneSources.filterValues {
+                state.value.sourceScope.isBlank() || it.cacheScope == state.value.sourceScope
+            })
+            bindSources()
             mutable.value = mutable.value.copy(
                 restored = true,
                 query = stored.query, compact = stored.compact, scrollIndex = stored.scrollIndex,
                 scrollOffset = stored.scrollOffset, cacheAt = stored.savedAt,
-                capabilities = stored.capabilities, page = LocalModelCache.page(stored, stored.query, 1))
+                capabilities = stored.capabilities, page = cachedPage(stored.query, 1))
             if (connected && repository != null) refresh()
         }
     }
@@ -111,7 +167,7 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
         val query = state.value.query
         val nextPage = if (append) state.value.page.page + 1 else 1
         if (!state.value.connected || repo == null) {
-            val cached = LocalModelCache.page(snapshot, query, nextPage)
+            val cached = cachedPage(query, nextPage)
             mutable.value = state.value.copy(
                 fromCache = true, loading = false, error = null,
                 page = if (append) cached.copy(items = state.value.page.items + cached.items) else cached)
@@ -125,19 +181,27 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
                 check(result.schemaVersion == 1 && result.serverId == cap.serverId) { "模型中心服务器身份不一致，请重新连接" }
                 if (generation != token || epoch != queryEpoch) return@launch
                 negotiated = true
-                if (snapshot.bridgeServerId != cap.serverId) snapshot = ModelCacheSnapshot(query = query, compact = state.value.compact)
+                if (snapshot.bridgeServerId != cap.serverId) {
+                    snapshot = ModelCacheSnapshot(bridgeServerId = cap.serverId, query = query, compact = state.value.compact)
+                    mutable.value = state.value.copy(sourceTasks = emptyMap(), detail = null, detailLoading = false)
+                    bindSources()
+                }
                 val merged = (snapshot.items + result.items).associateBy { it.id }.values.toList()
                 snapshot = snapshot.copy(bridgeServerId = cap.serverId, capabilities = cap, items = merged,
                     savedAt = System.currentTimeMillis(), lastSync = result.lastSync, query = query)
-                val visible = if (append) result.copy(
-                    items = (state.value.page.items + result.items).distinctBy { it.id }) else result
+                val resolvedResult = result.copy(items = result.items.map(::resolved))
+                val visible = if (append) resolvedResult.copy(
+                    items = (state.value.page.items + resolvedResult.items).distinctBy { it.id }) else resolvedResult
                 mutable.value = state.value.copy(page = visible, capabilities = cap, loading = false,
-                    fromCache = false, cacheAt = snapshot.savedAt, error = null)
+                    fromCache = false, cacheAt = snapshot.savedAt, error = null,
+                    detail = state.value.detail?.let { detail ->
+                        result.items.firstOrNull { it.id == detail.id }?.let(::resolved) ?: detail
+                    })
                 persist()
             } catch (cancelled: CancellationException) { throw cancelled
             } catch (error: Exception) {
                 if (generation != token || epoch != queryEpoch) return@launch
-                val cached = LocalModelCache.page(snapshot, query, 1)
+                val cached = cachedPage(query, 1)
                 mutable.value = state.value.copy(page = cached, loading = false, fromCache = true,
                     error = error.message ?: "读取模型列表失败，已保留缓存")
             }
@@ -152,8 +216,13 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
             return
         }
         val existing = state.value.page.items.firstOrNull { it.id == id } ?: snapshot.items.firstOrNull { it.id == id }
-        mutable.value = state.value.copy(detail = existing, detailLoading = state.value.connected, notice = null)
-        val repo = repository ?: return
+        mutable.value = state.value.copy(detail = existing?.let(::resolved),
+            detailLoading = state.value.connected, notice = null)
+        requestSource(id)
+        val repo = repository ?: run {
+            mutable.value = state.value.copy(detailLoading = false)
+            return
+        }
         if (!state.value.connected || !negotiated) {
             mutable.value = state.value.copy(detailLoading = false)
             return
@@ -161,7 +230,10 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch {
             try {
                 val item = repo.detail(id)
-                if (token == generation && epoch == detailEpoch) updateDetail(item)
+                if (token == generation && epoch == detailEpoch) {
+                    updateDetail(item)
+                    requestSource(id)
+                }
             } catch (cancelled: CancellationException) { throw cancelled
             } catch (error: Exception) {
                 if (token == generation && epoch == detailEpoch) mutable.value = state.value.copy(
@@ -173,8 +245,9 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
     private fun updateDetail(item: LocalModel) {
         snapshot = snapshot.copy(items = (snapshot.items.filterNot { it.id == item.id } + item),
             savedAt = System.currentTimeMillis())
-        mutable.value = state.value.copy(detail = item, detailLoading = false,
-            page = state.value.page.copy(items = state.value.page.items.map { if (it.id == item.id) item else it }))
+        val visible = resolved(item)
+        mutable.value = state.value.copy(detail = visible, detailLoading = false,
+            page = state.value.page.copy(items = state.value.page.items.map { if (it.id == item.id) visible else it }))
         persist()
     }
 
@@ -204,14 +277,11 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun enrich(ids: List<String>, refresh: Boolean = false) = action { repo ->
-        val result = repo.enrich(ids, refresh)
-        if (repo === repository) {
-            mutable.value = state.value.copy(notice = if (result.errors.isEmpty())
-                "已处理 ${result.tasks.size} 项资料请求 · 使用电脑端 Key / 代理"
-            else result.errors.joinToString("\n") { it.message })
-            pollTasks()
-        }
+    fun enrich(ids: List<String>, refresh: Boolean = false) {
+        val queued = ids.distinct().count { requestSource(it, refresh) }
+        mutable.value = state.value.copy(notice = if (queued > 0)
+            "手机直连补全 $queued 项 · 使用手机 HTTP 代理与 Civitai Key，结果保存在手机"
+        else "已有资料 / 正在查询；缺少 SHA-256 的文件请先连接电脑同步指纹，可在详情中重试")
     }
 
     fun taskAction(id: String, operation: String) = action { repo ->
@@ -249,7 +319,12 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
         } catch (_: Exception) { /* Explicit refresh/action exposes errors; polling retains last known state. */ }
     }
 
-    fun preview(item: LocalModel, index: Int = 0): String? = repository?.preview(item, index)
+    fun preview(item: LocalModel, index: Int = 0): String? {
+        val remote = remoteModelPreview(item, index)
+        // Only an actual sidecar file needs the computer. Provider images never use its proxy.
+        if (item.preview?.source == "local" && state.value.connected) return repository?.preview(item, index) ?: remote
+        return remote ?: if (item.preview?.source == "local") repository?.preview(item, index) else null
+    }
 
     suspend fun installation(modelId: Long, versionId: Long, fileId: Long): String {
         val repo = repository ?: return "安装状态待连接电脑确认"

@@ -11,7 +11,9 @@ data class ModelCacheSnapshot(
     val bridgeServerId: String = "", val capabilities: ModelCapabilities? = null,
     val items: List<LocalModel> = emptyList(), val savedAt: Long = 0, val lastSync: Long = 0,
     val query: LocalModelQuery = LocalModelQuery(), val compact: Boolean = false,
-    val scrollIndex: Int = 0, val scrollOffset: Int = 0
+    val scrollIndex: Int = 0, val scrollOffset: Int = 0,
+    // Phone metadata is an overlay, not a replacement for the computer's file/index record.
+    val phoneSources: Map<String, ModelProvider> = emptyMap()
 )
 
 /** Caller supplies an IO dispatcher. Each profile AND normalized endpoint owns a separate file. */

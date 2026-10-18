@@ -28,9 +28,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.Coil
+import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.comfyui.mobile.modelcenter.LocalModel
+import com.comfyui.mobile.modelcenter.remoteModelPreview
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
@@ -44,13 +47,13 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** Secondary-page chrome, not another expanded home-page header. */
 @Composable
-fun ModelCenterToolbar(onBack: () -> Unit, onSettings: () -> Unit, onRefresh: () -> Unit) {
+fun ModelCenterToolbar(onBack: () -> Unit, onSettings: () -> Unit, onRefresh: () -> Unit, title: String = "模型中心") {
     Row(Modifier.fillMaxWidth().statusBarsPadding().heightIn(min = 56.dp).padding(horizontal = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack, modifier = Modifier.size(44.dp)) {
             Icon(MiuixIcons.Back, "返回", modifier = Modifier.size(24.dp))
         }
-        Text("模型中心", style = MiuixTheme.textStyles.title4,
+        Text(title, style = MiuixTheme.textStyles.title4,
             modifier = Modifier.weight(1f).padding(start = 4.dp))
         IconButton(onClick = onSettings, modifier = Modifier.size(44.dp)) {
             Icon(MiuixIcons.Settings, "集市连接、代理与 Key 设置", modifier = Modifier.size(23.dp))
@@ -147,7 +150,12 @@ internal fun ModelProgressTrack(progress: Float, modifier: Modifier = Modifier) 
     }
 }
 
-/** URLs already include server identity and cover revision; offline mode reads Coil's existing cache only. */
+internal data class PhoneModelImages(
+    val loader: ImageLoader, val namespace: String, val request: (String) -> ImageRequest
+)
+internal val LocalPhoneModelImages = staticCompositionLocalOf<PhoneModelImages?> { null }
+
+/** Computer-offline is not phone-offline. Only local sidecar URLs become cache-only. */
 @Composable
 internal fun LocalModelCover(
     item: LocalModel, url: String?, offline: Boolean, modifier: Modifier = Modifier,
@@ -155,30 +163,47 @@ internal fun LocalModelCover(
 ) {
     val context = LocalContext.current
     val colors = MiuixTheme.colorScheme
-    var loaded by remember(url) { mutableStateOf(false) }
-    var failed by remember(url) { mutableStateOf(false) }
-    val request = remember(context, url, offline) {
-        url?.let { ImageRequest.Builder(context).data(it).memoryCacheKey(it).diskCacheKey(it)
-            .networkCachePolicy(if (offline) CachePolicy.DISABLED else CachePolicy.ENABLED)
-            .crossfade(150).build() }
+    val phone = LocalPhoneModelImages.current
+    val remote = remoteModelPreview(item)
+    var fallback by remember(url, remote) { mutableStateOf(false) }
+    val actualUrl = if (fallback) remote else url
+    val direct = actualUrl != null && actualUrl == remote
+    var attempt by remember(actualUrl, phone?.namespace) { mutableIntStateOf(0) }
+    var loaded by remember(actualUrl, phone?.namespace, attempt) { mutableStateOf(false) }
+    var failed by remember(actualUrl, phone?.namespace, attempt) { mutableStateOf(false) }
+    val request = remember(context, actualUrl, offline, phone?.namespace, attempt) {
+        actualUrl?.let {
+            val builder = if (direct && phone != null) phone.request(it).newBuilder()
+            else ImageRequest.Builder(context).data(it).memoryCacheKey(it).diskCacheKey(it)
+            builder.networkCachePolicy(if (offline && !direct) CachePolicy.DISABLED else CachePolicy.ENABLED)
+                .crossfade(150).build()
+        }
     }
     Box(modifier.clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(
         colors.primary.copy(alpha = .10f), colors.surfaceContainerHigh)))
         .testTag("model-cover-${item.id}").semantics {
-            stateDescription = if (loaded) "预览已加载" else if (url == null || failed) "暂无预览" else "预览加载中"
-        },
+            stateDescription = if (loaded) "预览已加载" else if (failed) "预览加载失败"
+                else if (actualUrl == null) "暂无预览" else "预览加载中"
+        }.then(if (failed) Modifier.clickable { attempt++ } else Modifier),
         contentAlignment = Alignment.Center) {
         if (!loaded) Column(horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Icon(MiuixIcons.Photos, null, tint = colors.onSecondaryContainer.copy(alpha = .45f),
                 modifier = Modifier.size(28.dp))
-            Text(if (url == null || failed) "暂无预览" else "加载预览…",
+            Text(if (failed) "加载失败 · 点按重试" else if (actualUrl == null) "暂无预览" else "加载预览…",
                 style = MiuixTheme.textStyles.footnote2,
                 color = colors.onSecondaryContainer.copy(alpha = .7f), maxLines = 1)
         }
-        if (request != null) AsyncImage(model = request,
-            contentDescription = "${item.displayName}预览",
-            contentScale = contentScale, onSuccess = { loaded = true; failed = false },
-            onError = { failed = true }, modifier = Modifier.fillMaxSize().testTag("model-preview-${item.id}"))
+        // Coil considers an identical URL/cache key the same model. A transport-only setting
+        // change needs a new painter too, while keeping the successful image's disk cache key.
+        key(actualUrl, phone?.namespace, attempt) {
+            if (request != null) AsyncImage(model = request,
+                imageLoader = if (direct && phone != null) phone.loader else Coil.imageLoader(context),
+                contentDescription = "${item.displayName}预览",
+                contentScale = contentScale, onSuccess = { loaded = true; failed = false },
+                onError = {
+                    if (!fallback && remote != null && remote != actualUrl) fallback = true else failed = true
+                }, modifier = Modifier.fillMaxSize().testTag("model-preview-${item.id}"))
+        }
     }
 }

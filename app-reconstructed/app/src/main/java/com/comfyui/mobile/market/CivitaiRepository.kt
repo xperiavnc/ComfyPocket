@@ -9,6 +9,11 @@ import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import com.comfyui.mobile.model.CivitaiModelItem
 import com.comfyui.mobile.model.CivitaiSearchPageData
 import com.comfyui.mobile.model.CivitaiVersionItem
+import com.comfyui.mobile.modelcenter.LocalModelSource
+import com.comfyui.mobile.modelcenter.ModelProvider
+import com.comfyui.mobile.modelcenter.ModelSourceException
+import com.comfyui.mobile.modelcenter.ModelSourceResult
+import com.comfyui.mobile.modelcenter.modelHash
 import com.google.gson.Gson
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -24,7 +29,7 @@ class CivitaiRepository(
     context: Context,
     initialSettings: CivitaiSettings,
     private val bridge: ComfyRepository
-) {
+) : LocalModelSource {
     private val app = context.applicationContext
     private val gson = Gson()
     private val cache = MarketDiskCache(app.cacheDir.resolve("civitai_metadata"))
@@ -66,9 +71,58 @@ class CivitaiRepository(
     }
 
     fun imageRequest(url: String): ImageRequest = ImageRequest.Builder(app).data(url)
-        .memoryCacheKey("${settings.cacheNamespace(bridgeIdentity)}:$url")
-        .diskCacheKey("${settings.cacheNamespace(bridgeIdentity)}:$url")
+        .memoryCacheKey("$sourceScope:$url")
+        .diskCacheKey("$sourceScope:$url")
         .build()
+
+    override val sourceScope: String
+        get() = settings.copy(mode = MarketConnectionMode.DIRECT).cacheNamespace()
+    override val transportScope: String
+        get() = settings.let { config ->
+            marketHash(listOf(sourceScope, config.proxyEnabled.toString(), config.proxyAddress,
+                config.proxyUsername, config.proxyPassword).joinToString("\u0000"))
+        }
+
+    /** External metadata always uses the phone's own client/proxy/key, even with a Bridge catalog. */
+    override suspend fun fetchSource(sha256: String, refresh: Boolean): ModelSourceResult =
+        withContext(Dispatchers.IO) {
+            val hash = modelHash(sha256) ?: throw ModelSourceException("请先同步完整的模型 SHA-256")
+            val namespace = sourceScope
+            val http = activeClient()
+            try {
+                val matched = cached("$namespace|local-hash-v1|$hash", ModelProvider::class.java, refresh) {
+                    CivitaiLocalModelJson.match(CivitaiHttp.text(http,
+                        CivitaiHttp.request(CivitaiJson.endpoint("model-versions/by-hash/$hash"))), hash)
+                }
+                var provider = matched.value
+                var warning = matched.warning
+                try {
+                    val model = cached("$namespace|model|${provider.modelId}",
+                        CivitaiModelItem::class.java, refresh) {
+                        CivitaiJson.model(CivitaiHttp.text(http,
+                            CivitaiHttp.request(CivitaiJson.endpoint("models/${provider.modelId}")))).also {
+                            check(it.id == provider.modelId) { "Civitai 返回了不同的模型" }
+                        }
+                    }
+                    provider = provider.copy(name = model.value.name, author = model.value.creator,
+                        modelDescription = model.value.description, modelDescriptionFetched = true)
+                    warning = model.warning ?: warning
+                } catch (cancelled: CancellationException) { throw cancelled
+                } catch (error: Exception) {
+                    // An independently failing introduction must not discard the exact version/cover.
+                    warning = "版本与预览已匹配；模型简介暂未加载，点击重试。" +
+                        if (error is MarketAccessException) " ${error.message}" else ""
+                }
+                ModelSourceResult(provider.copy(fetchedAt = System.currentTimeMillis(),
+                    fetchedBy = "phone", cacheScope = namespace), warning)
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) {
+                throw ModelSourceException(
+                    if (error is MarketAccessException) error.message.orEmpty()
+                    else "来源未返回与本地 SHA-256 相同的有效文件，请重试",
+                    (error as? MarketAccessException)?.status)
+            }
+        }
 
     suspend fun search(
         query: MarketQuery, page: Int, cursor: String?, forceRefresh: Boolean
@@ -102,14 +156,15 @@ class CivitaiRepository(
     suspend fun details(
         original: CivitaiModelItem, versionId: Long?, forceRefresh: Boolean = false
     ): MarketDetailResult = withContext(Dispatchers.IO) {
-        val config = settings
-        if (config.mode == MarketConnectionMode.BRIDGE) return@withContext MarketDetailResult(original)
+        val config = settings.copy(mode = MarketConnectionMode.DIRECT)
         val namespace = config.cacheNamespace()
         val http = activeClient()
         val model = cached("$namespace|model|${original.id}",
             CivitaiModelItem::class.java, forceRefresh) {
             CivitaiJson.model(CivitaiHttp.text(http,
-                CivitaiHttp.request(CivitaiJson.endpoint("models/${original.id}"))))
+                CivitaiHttp.request(CivitaiJson.endpoint("models/${original.id}")))).also {
+                check(it.id == original.id) { "Civitai 返回了不同的模型，请重试" }
+            }
         }
         val selected = model.value.versions.firstOrNull { it.id == versionId }
             ?: model.value.versions.firstOrNull()

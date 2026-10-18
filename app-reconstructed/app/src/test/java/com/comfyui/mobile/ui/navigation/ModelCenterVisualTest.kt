@@ -22,6 +22,9 @@ import coil.request.ImageRequest
 import coil.request.SuccessResult
 import coil.util.DebugLogger
 import com.comfyui.mobile.ComfyApplication
+import com.comfyui.mobile.data.AppModule
+import com.comfyui.mobile.market.CivitaiRepository
+import com.comfyui.mobile.market.CivitaiSettings
 import com.comfyui.mobile.market.MarketCatalogState
 import com.comfyui.mobile.model.*
 import com.comfyui.mobile.modelcenter.*
@@ -44,6 +47,7 @@ import org.robolectric.annotation.Implements
 import org.robolectric.annotation.Implementation
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowSystemClock
+import org.robolectric.util.ReflectionHelpers
 import java.io.File
 import java.time.Duration
 import java.util.concurrent.atomic.AtomicInteger
@@ -51,6 +55,7 @@ import okhttp3.mockwebserver.MockWebServer
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.RecordedRequest
+import okhttp3.OkHttpClient
 import okio.Buffer
 
 /**
@@ -134,15 +139,15 @@ class ModelCenterVisualTest {
                     preview = ModelPreviewInfo("local", "fixture-cover"))
             }))
 
-    private fun screen(tab: Int, dark: Boolean = true, content: @Composable () -> Unit): AutoCloseable {
+    private fun screen(tab: Int, dark: Boolean = true, detail: Boolean = false, content: @Composable () -> Unit): AutoCloseable {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         host = controller.get()
         controller.get().setContent {
             ComfyControllerTheme(darkTheme = dark, manageSystemBars = false) {
                 Column(Modifier.fillMaxSize().background(top.yukonga.miuix.kmp.theme.MiuixTheme.colorScheme.background)
                     .testTag("model-center-capture")) {
-                    ModelCenterToolbar({}, {}, {})
-                    ModelCenterTabs(tab, {})
+                    ModelCenterToolbar({}, {}, {}, title = if (detail) "模型详情" else "模型中心")
+                    if (!detail) ModelCenterTabs(tab, {})
                     content()
                 }
             }
@@ -266,6 +271,171 @@ class ModelCenterVisualTest {
             assertTrue(search.right - search.left >= 180.dp)
             assertTrue(search.bottom - search.top < 60.dp)
             capture("local-narrow-light")
+        }
+    }
+
+    private fun detailFixture() = fixtureState().page.items.first().copy(
+        sha256 = "a".repeat(64), provider = ModelProvider(
+            name = "柔光人像", author = "示例作者", version = "v2.1", baseModel = "Illustrious",
+            modelDescription = "<p>为柔和的自然光和细腻色彩训练的人像模型。</p><p>适合日常场景，建议先从较低权重开始调整。</p>",
+            modelDescriptionFetched = true, description = "<p>这一版优化了光影层次与背景表现。</p>",
+            trainedWords = listOf("soft_light", "natural_colors"), fetchedBy = "phone"))
+
+    @Test fun redesignedDetailPlacesActualIntroductionBeforeVersionAndCollapsedFileInformation() {
+        val cover = fixtureCover()
+        val vm = ModelCenterViewModel(app)
+        val item = detailFixture()
+        screen(0, detail = true) {
+            LocalModelDetails(vm, fixtureState().copy(detail = item), item, coverUrl = cover)
+        }.use {
+            waitForCover()
+            compose.onNodeWithText("模型简介").assertIsDisplayed()
+            compose.onNodeWithText("为柔和的自然光", substring = true).assertIsDisplayed()
+            compose.onNodeWithText("D:/fixture/loras", substring = true).assertDoesNotExist()
+            compose.onNodeWithText("SHA-256：", substring = true).assertDoesNotExist()
+            val preview = compose.onNodeWithTag("model-cover-fixture-0", useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertTrue(preview.bottom - preview.top <= 164.dp)
+            capture("local-model-detail-direct-dark")
+            compose.onNodeWithText("文件信息").performScrollTo()
+            compose.onNodeWithText("展开", substring = false).performClick()
+            compose.onNodeWithText("D:/fixture/loras", substring = true).assertExists()
+            compose.onNodeWithText("SHA-256：", substring = true).assertExists()
+        }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w320dp-h640dp-mdpi")
+    fun narrowLightDetailKeepsIntroductionAndEditActionReadable() {
+        val cover = fixtureCover()
+        val vm = ModelCenterViewModel(app)
+        val item = detailFixture()
+        screen(0, dark = false, detail = true) {
+            LocalModelDetails(vm, fixtureState().copy(detail = item), item, coverUrl = cover)
+        }.use {
+            waitForCover()
+            compose.onNodeWithText("编辑标注").assertIsDisplayed()
+            compose.onNodeWithText("模型简介").assertIsDisplayed()
+            capture("local-model-detail-direct-narrow-light")
+        }
+    }
+
+    @Test fun computerOfflineCoverStillUsesPhoneHttpProxyInsteadOfGlobalCoilOrBridge() {
+        fixtureCover() // Synthetic bytes only; the regular image server must receive no requests.
+        MockWebServer().use { proxy ->
+            val body = File(output, "fixture-cover.png").readBytes()
+            proxy.enqueue(MockResponse().setHeader("Content-Type", "image/png").setBody(Buffer().write(body)))
+            val repo = CivitaiRepository(app, CivitaiSettings(proxyEnabled = true,
+                proxyAddress = proxy.url("/").toString(), apiKey = java.util.UUID.randomUUID().toString()),
+                AppModule.provideRepository())
+            val client = ReflectionHelpers.getField<OkHttpClient>(repo, "client")
+            ReflectionHelpers.setField(repo, "client", client.newBuilder().addInterceptor { chain ->
+                val url = chain.request().url
+                assertEquals("image.civitai.com", url.host)
+                chain.proceed(chain.request().newBuilder().url(url.newBuilder().scheme("http").port(80).build()).build())
+            }.build())
+            val cover = "https://image.civitai.com/phone-fixture/preview.png"
+            val model = fixtureState().page.items.first().copy(provider = ModelProvider(
+                images = listOf(ModelPreview(cover))), preview = ModelPreviewInfo("provider"))
+            val state = fixtureState().copy(fromCache = true, connected = false,
+                page = ModelPage(items = listOf(model), total = 1))
+            val vm = ModelCenterViewModel(app)
+            try {
+                screen(0) {
+                    CompositionLocalProvider(LocalPhoneModelImages provides
+                        PhoneModelImages(repo.imageLoader, repo.sourceScope, repo::imageRequest)) {
+                        LocalModelList(vm, state, coverUrl = { cover })
+                    }
+                }.use {
+                    waitForCover()
+                    assertEquals(1, proxy.requestCount)
+                    assertEquals(0, imageServer!!.requestCount)
+                    val request = proxy.takeRequest()
+                    assertTrue(request.requestLine.contains("http://image.civitai.com/phone-fixture/preview.png"))
+                    assertNull(request.getHeader("Authorization"))
+                    capture("local-phone-proxy-cover")
+                    println("MODEL_COVER_PROXY computerOffline=true phoneProxyRequests=1 computerRequests=0 cover=loaded")
+                }
+            } finally { repo.close() }
+        }
+    }
+
+    @Test fun failedCoverRetriesImmediatelyWhenPhoneProxySettingsChange() {
+        fixtureCover()
+        MockWebServer().use { broken -> MockWebServer().use { working ->
+            broken.enqueue(MockResponse().setResponseCode(503))
+            working.enqueue(MockResponse().setHeader("Content-Type", "image/png")
+                .setBody(Buffer().write(File(output, "fixture-cover.png").readBytes())))
+            val config = CivitaiSettings(proxyEnabled = true, proxyAddress = broken.url("/").toString(),
+                apiKey = java.util.UUID.randomUUID().toString())
+            val repo = CivitaiRepository(app, config, AppModule.provideRepository())
+            fun fixtureHttp() {
+                val client = ReflectionHelpers.getField<OkHttpClient>(repo, "client")
+                ReflectionHelpers.setField(repo, "client", client.newBuilder().addInterceptor { chain ->
+                    chain.proceed(chain.request().newBuilder().url(
+                        chain.request().url.newBuilder().scheme("http").port(80).build()).build())
+                }.build())
+            }
+            fixtureHttp()
+            val accountScope = repo.sourceScope
+            val transport = mutableStateOf(PhoneModelImages(repo.imageLoader, repo.transportScope, repo::imageRequest))
+            val cover = "https://image.civitai.com/proxy-retry-fixture/preview.png"
+            val model = fixtureState().page.items.first().copy(provider = ModelProvider(images = listOf(ModelPreview(cover))))
+            try {
+                screen(0) {
+                    CompositionLocalProvider(LocalPhoneModelImages provides transport.value) {
+                        LocalModelCover(model, cover, offline = true, modifier = Modifier.fillMaxWidth().height(180.dp))
+                    }
+                }.use {
+                    compose.waitUntil(10_000) {
+                        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "预览加载失败"),
+                            useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+                    }
+                    assertEquals(1, broken.requestCount)
+                    compose.runOnIdle {
+                        repo.updateSettings(config.copy(proxyAddress = working.url("/").toString()))
+                        fixtureHttp()
+                        assertEquals(accountScope, repo.sourceScope)
+                        transport.value = PhoneModelImages(repo.imageLoader, repo.transportScope, repo::imageRequest)
+                    }
+                    waitForCover()
+                    assertEquals(1, working.requestCount)
+                }
+            } finally { repo.close() }
+        } }
+    }
+
+    @Test fun unreadableLocalSidecarFallsBackToPhonePreviewWithoutBlockingDescription() {
+        val local = fixtureCover()
+        imageServer!!.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest) = MockResponse().setResponseCode(404)
+        }
+        MockWebServer().use { proxy ->
+            proxy.enqueue(MockResponse().setHeader("Content-Type", "image/png")
+                .setBody(Buffer().write(File(output, "fixture-cover.png").readBytes())))
+            val repo = CivitaiRepository(app, CivitaiSettings(proxyEnabled = true,
+                proxyAddress = proxy.url("/").toString(), apiKey = java.util.UUID.randomUUID().toString()),
+                AppModule.provideRepository())
+            val client = ReflectionHelpers.getField<OkHttpClient>(repo, "client")
+            ReflectionHelpers.setField(repo, "client", client.newBuilder().addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().url(
+                    chain.request().url.newBuilder().scheme("http").port(80).build()).build())
+            }.build())
+            val remote = "https://image.civitai.com/fallback-fixture/preview.png"
+            val model = detailFixture().copy(provider = detailFixture().provider!!.copy(images = listOf(ModelPreview(remote))))
+            val vm = ModelCenterViewModel(app)
+            try {
+                screen(0, detail = true) {
+                    CompositionLocalProvider(LocalPhoneModelImages provides
+                        PhoneModelImages(repo.imageLoader, repo.transportScope, repo::imageRequest)) {
+                        LocalModelDetails(vm, fixtureState().copy(detail = model), model, coverUrl = local)
+                    }
+                }.use {
+                    waitForCover()
+                    compose.onNodeWithText("为柔和的自然光", substring = true).assertIsDisplayed()
+                    assertEquals(1, imageServer!!.requestCount)
+                    assertEquals(1, proxy.requestCount)
+                }
+            } finally { repo.close() }
         }
     }
 }
