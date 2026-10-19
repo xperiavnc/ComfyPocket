@@ -1,254 +1,219 @@
-# ComfyPocket
+<p align="center">
+  <img src="app-reconstructed/app/src/main/res/drawable/app_logo.png" width="112" alt="ComfyPocket 图标">
+</p>
 
-Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端、
-工作流参数编辑、任务记录、Agent、图库和模型管理。
+<h1 align="center">ComfyPocket</h1>
 
-## 目录
+<p align="center"><strong>把 ComfyUI 装进口袋，让手机成为你的创作控制台。</strong></p>
+<p align="center">Android 13+ · 工作流控制 · AI Agent · 模型管理 · 原生画廊</p>
 
-- `app-reconstructed/`：可构建的 Android 工程。
-- `app-reconstructed/ComfyUI-Mobile-Bridge/`：独立的 Python 服务端桥接插件，不打入 APK。
-- `app-reconstructed/BUILD.md`：重建工程的构建版本与说明。
-- `app-reconstructed/REFACTOR.md`：2026-10-17 的 ViewModel 职责拆分说明。
-- `app-reconstructed/MARKET.md`：手机直连集市、代理、Key、缓存和下载队列说明。
-- `app-reconstructed/MODEL_CENTER.md`：P0–P1 模型中心、电脑索引 / 标注、离线缓存、哈希资料及版本契约。
-- `app-reconstructed/DANBOORU_GALLERY_PLAN.md`：Danbooru 原生画廊的实施记录、账号/代理操作与验证边界。
-- `app-reconstructed/MATERIAL.md`：两种底栏风格、老版页面动画、预览移除与历史迁移说明。
-- `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
-- `app-reconstructed/TAG_LIBRARY.md`：可选词库安装、来源、查询边界与可复现构建方式。
-- `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
+<p align="center">
+  <a href="#主要功能">主要功能</a> ·
+  <a href="#安装与运行">安装与运行</a> ·
+  <a href="#使用指南">使用指南</a> ·
+  <a href="#从源码构建">从源码构建</a> ·
+  <a href="#文档导航">详细文档</a>
+</p>
 
-## Civitai 集市
+## 软件简介
 
-手机可独立直连 Civitai，支持自定义 HTTP 代理和 Key，查看模型简介、触发词、
-示例图正反提示词。模型安装仍下发给 ComfyUI 电脑。
-开启成人内容后，普通内容与成人浏览范围分区查询、独立翻页并去重。
-支持 `.com / .red` 模型链接或编号直达公开详情，保留模型分级和链接指定版本。
-本地模型按完整 SHA-256 由手机自动获取模型简介、版本说明、作者与网络预览，
-保存到手机资料缓存；电脑刷新不会抹掉这些资料或人工标注。
-网络封面同样复用手机代理，即使电脑断开也可继续读取。详见 `app-reconstructed/MODEL_CENTER.md`。
+**ComfyPocket** 是面向 Android 的 ComfyUI 控制客户端。你可以在手机上连接自己的
+ComfyUI 服务或 RunningHub，编辑工作流参数、提交生成任务、查看生成结果，也可以用
+Agent 通过对话编写提示词并调用已配置的工作流。
 
-配套 Bridge 2.0 已去除 Lora Manager 依赖，使用原生校验下载队列。
-电脑 Key 在 **ComfyUI 设置 → Mobile Bridge → Civitai** 配置，支持保存、测试和清除，
-不从手机偷偷转发凭据。从旧单文件插件升级请替换整个目录并重启 ComfyUI。
+除了生成控制，应用还整合了本地模型管理、Civitai 在线集市、可选中英标签词库及
+Danbooru 原生画廊，尽量让找模型、调参数、出图与浏览结果在同一处完成。
 
-## 构建
+> **ComfyPocket 是控制客户端，不是在手机上运行绘图模型。**
+> 生成任务由你连接的 ComfyUI 或 RunningHub 执行；Agent 使用你自行配置的模型 API。
+> 离线可读取已保存的部分资料和缓存，实际生成仍需要相应服务。
 
-需要 JDK 17、Android SDK 和已接受的 SDK 许可；本地 Android/Compose 页面测试
-另需安装 JDK 21（测试任务使用独立 toolchain）。设置 `JAVA_HOME`、
-`ANDROID_HOME`。工程使用 Gradle Wrapper；Android 平台为 API 37.0，
-应用最低支持 Android 13（API 33）。
+## 主要功能
 
-Windows 命令提示符：
+| 功能 | 说明 |
+| --- | --- |
+| **ComfyUI / RunningHub** | 支持本地 ComfyUI 与 RunningHub 后端，按当前服务配置提交任务、查看状态和结果。 |
+| **工作流与节点控制** | 加载 JSON 工作流，编辑可用节点参数，管理常用配置；Agent 可分别绑定正向与反向文本字段。 |
+| **AI Agent** | 支持对话、提示词编写与自动出图；可配置模型服务、思考强度、上下文预算、单次输出上限、人设和分镜规则。 |
+| **角色档案与服装预设** | 保存角色名称、别名、外貌参考、固定绘画标签和服装预设，为对话绘图复用角色资料。 |
+| **本地模型中心** | 浏览服务器模型、预览图、简介、触发词与中文标注；支持同步服务器文件的重命名、移动和删除。 |
+| **Civitai 在线集市** | 手机直连浏览，支持搜索、作者查询、分类、排序、模型链接直达和详情查看，并可下发电脑下载。 |
+| **画廊与媒体查看** | 浏览生成结果和 Danbooru 内容，支持图片全屏缩放、标签查看与复制，以及视频查看和下载。 |
+| **可选中英词库** | 按需导入标签与角色词库，支持离线中英查询；默认 APK 不携带词库，不安装也可正常使用 Agent。 |
+| **状态与外观** | 主页展示可用的 CPU / 内存等状态信息；支持主题配色及标准底栏、经典悬浮两种底栏风格。 |
+
+## 界面概览
+
+| 界面 | 主要用途 |
+| --- | --- |
+| **主页** | 查看连接和系统状态，进入本地模型、在线集市等功能。 |
+| **控制** | 选择工作流、调整节点参数、提交任务并查看队列与结果。 |
+| **应用** | 使用和管理常用工作流应用及其参数。 |
+| **Agent** | 配置模型服务，用对话编写正反向提示词并调用工作流。 |
+| **画廊** | 浏览图片与视频，查看 Danbooru 图片、排行榜和标签。 |
+| **模型中心** | 在本地模型、在线集市和任务页面间切换，查看资料及下载进度。 |
+| **设置** | 管理连接、主题、底栏外观及各功能配置。 |
+
+## 安装与运行
+
+### 环境要求
+
+| 项目 | 要求 |
+| --- | --- |
+| 手机系统 | **Android 13（API 33）及以上**。 |
+| 绘图后端 | 可从手机访问的 ComfyUI 服务，或你自己的 RunningHub 服务配置。 |
+| 配套插件 | 完整使用模型中心、服务器文件管理和下载队列时，安装仓库内的 **ComfyUI-Mobile-Bridge 2.2.6**。 |
+| Agent | 自行配置模型 API 地址、模型名称和所需 Key；支持的参数以实际服务商为准。 |
+| Civitai / Danbooru | 按需配置各自账号、Key 和手机 HTTP 代理。 |
+
+### 1. 安装 APK
+
+在 Android 设备上安装项目提供的 **`ComfyPocket-<versionName>.apk`**，也可以按下文从源码构建。
+文件名由 Gradle 读取版本配置自动生成，不使用固定的无版本文件名。
+
+当前工程的调试构建使用 **debug 签名**，正式发布签名需要自行配置。
+源码中的 Android namespace 为 `com.comfyui.mobile`，安装包名为
+`com.comfyui.mobile.rebuilt`。
+
+### 2. 连接绘图服务
+
+1. 在电脑上启动 ComfyUI，确保手机与服务之间网络可达。
+2. 先用手机浏览器打开服务地址，例如 `http://<电脑局域网 IP>:8188/`，确认可以访问。
+3. 在应用的连接配置中填写同一个服务地址并连接；使用 RunningHub 时填写对应服务配置。
+4. 加载工作流，检查模型文件和节点参数，再提交生成任务。
+
+手机中的 `localhost` 或 `127.0.0.1` 指向手机自身，不代表你的电脑。
+跨网络使用时，请同时做好 ComfyUI 服务的访问控制。
+
+### 3. 安装配套 Bridge
+
+需要模型中心完整联动或从手机下载模型到电脑时：
+
+1. 停止 ComfyUI，将仓库内的 **整个** `app-reconstructed/ComfyUI-Mobile-Bridge/`
+   目录复制到 `ComfyUI/custom_nodes/ComfyUI-Mobile-Bridge/`。
+2. 保留 `__init__.py`、其余 Python 模块及 `web/` 的相对位置，避免双层目录或同时启用旧副本。
+3. 启动 ComfyUI，刷新网页；需要受账号权限限制的模型时，在
+   **ComfyUI 设置 → Mobile Bridge → Civitai** 中保存并测试电脑端 Key。
+4. 返回手机，进入模型中心同步模型或下发下载，查看任务状态。
+
+Bridge **不依赖 Lora Manager**，也不打包进 APK。更新时替换完整插件目录并重启 ComfyUI，
+保留原有 `user/mobile_bridge/` 用户数据；只更新 APK 不会自动部署电脑插件。
+
+详细安装、代理与升级说明见 [Bridge 文档](app-reconstructed/ComfyUI-Mobile-Bridge/README.md)。
+
+## 使用指南
+
+### Agent：从对话到出图
+
+1. 打开 **Agent 设置 → 模型 API 配置**，配置服务地址、模型名称与 Key，保存并应用。
+2. 按需设置思考强度、上下文预算和单次输出长度。这些设置不扩大服务商模型的实际能力。
+3. 在 **选择工作流 → 设置节点** 中分别配置正向和反向提示词字段；反向也可选择保留工作流原值。
+4. 按需登记角色资料和服装预设，再发送本轮画面要求。只需要提示词时，可明确要求不提交生成。
+5. 在“出图提示词”中查看正向、反向及实际写入状态，分别复制或成对保存。
+
+角色识别名称、对话别名和绘画标签应分开填写。角色资料提供提示词参考，
+**不等于已自动加载 LoRA**；实际模型和 LoRA 仍由工作流节点配置。
+反向提示词支持空值，也会按配置保留原值，不强制拼接一套固定反向模板。
+
+更多配置、角色规则与执行边界见 [Agent 文档](app-reconstructed/AGENT.md)。
+
+### 模型中心与在线集市
+
+- **本地模型**：同步 ComfyUI 注册目录，查看封面、模型简介、版本说明、触发词及人工中文标注。
+  本地模型选择器复用同一份资料，确认时仍使用服务器原始完整文件路径。
+- **文件管理**：重命名、移动和删除会实际修改电脑上的模型文件，并同步相关记录。
+  删除为永久删除；文件名或位置改变后，已有工作流中的旧路径需要重新选择。
+- **在线集市**：默认手机直连 Civitai，支持作者查询、分类和排序，以及 `.com / .red` 模型链接或编号直达。
+  手机可配置独立 HTTP 代理和 Key，查看模型与版本简介、触发词、预览及可用的示例提示词。
+- **下载任务**：模型文件由电脑上的 Bridge 下载；手机负责选择版本、目标目录及查看进度，
+  支持暂停、继续和取消。
+
+> **手机浏览与电脑下载是两套网络和凭据配置。**
+> 手机 HTTP 代理及 Civitai Key 不会自动转发给电脑。手机能打开详情，不代表电脑已经具备下载网络和账号权限。
+> 第三方 API 的检索范围与网页可能不同，排序和分页以接口实际返回为准。
+
+详见 [模型中心](app-reconstructed/MODEL_CENTER.md) 与 [集市说明](app-reconstructed/MARKET.md)。
+
+### 画廊与可选词库
+
+- **Danbooru 画廊**：独立配置账号和手机代理，支持搜索、评级、热度等排序及日 / 周 / 月排行榜；
+  点击图片查看标签或进入全屏，图片可缩放，支持的视频可查看及下载。
+- **本地词库**：默认不随 APK 安装。需要时获取 `ComfyPocket-tag-library.zip`，
+  在 **Agent 设置 → 可选资源 → 本地词库 → 导入词库** 中安装，也可更新或移除。
+  词库检索离线执行，Agent 编写提示词仍使用所配置的模型服务。
+- **主题外观**：在 **设置 → 主题与外观 → 底栏风格** 中切换标准底栏与经典悬浮风格。
+
+详见 [画廊说明](app-reconstructed/DANBOORU_GALLERY_PLAN.md) 与 [词库说明](app-reconstructed/TAG_LIBRARY.md)。
+
+## 从源码构建
+
+Android 工程位于 **`app-reconstructed/`**，在 Android Studio 中打开这个目录，
+而不是仓库根目录。
+
+构建前准备 **JDK 17、Android SDK、SDK Platform 37.0**，并接受 SDK 许可；
+本地 Android / Compose 测试另需 **JDK 21 toolchain**。
+配置 `JAVA_HOME`、`ANDROID_HOME`，或通过本机 `local.properties` 指定 SDK。
+
+**Windows（cmd）：**
 
 ```bat
 cd app-reconstructed
 gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plain
 ```
 
-Linux / macOS：
+**Linux / macOS：**
 
 ```sh
 cd app-reconstructed
 ./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plain
 ```
 
-调试 APK 按 **软件名＋版本号** 自动导出到
-`app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk`，
-例如 `ComfyPocket-0.0.38-character-outfits.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
-应用安装后的显示名也是 **ComfyPocket**；AGP 内部 `app-debug.apk` 仍保留以兼容构建元数据。
-安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
-服务地址和 API 密钥在应用中配置，不应提交到仓库。
+APK 自动导出到：
 
-本地模型详情的“文件管理”支持实际修改服务器文件：重命名、移动到同类型注册目录 /
-新建子文件夹、确认后永久删除。同名预览和附属资料一并处理，服务器成功后才刷新手机记录。
-此功能需完整更新 **ComfyUI-Mobile-Bridge 2.2.5** 并重启 ComfyUI；“编辑标注”仍只负责别名等资料，
-不与真实文件名混用。详见 [模型中心说明](app-reconstructed/MODEL_CENTER.md)。
+```text
+app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk
+```
 
-Agent、控制页和应用页共用的**本地模型选择器**接通模型中心同一份资料：
-卡片为模型文件名 + 人工标注的中文名称，点选查看最新简介、触发词和标注；
-确认仍使用 ComfyUI 原始完整节点路径。触发词集中到确认页，列表只保留文件名与中文标注；
-简介支持展开，版本说明 / 标注 / 文件信息按需展开，固定底部操作。共享手机资料缓存、HTTP 代理及 Civitai Key，
-保留人工锁定的空触发词。新增独立刷新、全量分页和失败重试，修正 UNet / GGUF 分类。
-完整联动需配套 **Bridge 2.2.6**；新发现的原生文件不必等待资料索引完成才能选择。
-更新插件不会由手机自动执行，需替换完整目录并重启，保留 ComfyUI 用户目录的资料与凭据。
+具体工具链版本、环境配置和测试说明见 [构建文档](app-reconstructed/BUILD.md)。
 
-## 可选词库
+## 技术栈
 
-默认 APK 不携带词库。需要离线标签和角色中英查询时，单独获取 `ComfyPocket-tag-library.zip`，
-在 **Agent 设置 → 可选资源 → 本地词库 → 导入词库** 中选择即可。安装后自动启用，支持更新和移除；
-不安装也可正常聊天和生图。升级保留已安装词库，并识别旧版已经初始化的当前完整数据库。
-源码构建词库包使用 `python app-reconstructed/tools/pack_local_tag_library.py`，不需要重新下载数据。
+- **语言**：Kotlin；配套 Bridge 使用 Python，设置面板使用 JavaScript。
+- **界面**：Jetpack Compose、Miuix、Material 3。
+- **状态与异步**：AndroidX Lifecycle / ViewModel、Kotlin Coroutines。
+- **网络与数据**：OkHttp、Retrofit、Gson。
+- **图片与视频**：Coil、AndroidX Media3。
+- **构建与测试**：Gradle Kotlin DSL、JUnit、Robolectric、Compose UI 测试。
 
-## 当前验证状态
+## 文档导航
 
-- `0.0.38-character-outfits`（versionCode 40）：角色库由 App 本地确定名称 / 手填别名匹配，
-  直接注入本轮档案，不依赖 AI 记得调用或猜别名。续改保留已确认角色 / 服装，
-  支持可选常驻、重名反馈、多套服装与默认项、临时换装、单角色固定触发词漏词补齐。
-  角色列表可搜索，编辑页保存 / 取消固定，服装草稿随角色一起保存；旧资料及备份兼容。
-  已验证完整 debug 构建与 112 套 / 731 项 Android 测试（新增 48 项），以及同输入旧版失败 /
-  新版通过、真实可选词库身份隔离、工作流写入、深浅色窄屏大字体原生渲染。
-  不增加模型轮次、不自动加载 LoRA、不改底栏或原页面切换。验证边界见 Agent 说明。
+| 文档 | 内容 |
+| --- | --- |
+| [项目说明与验证记录](PROJECT_NOTES.md) | 原有完整项目说明、版本记录、测试结果及验证边界。 |
+| [构建与运行](app-reconstructed/BUILD.md) | 工具链版本、SDK、构建命令和输出位置。 |
+| [Agent](app-reconstructed/AGENT.md) | 模型配置、提示词、角色档案、上下文与执行逻辑。 |
+| [模型中心](app-reconstructed/MODEL_CENTER.md) | 本地模型、资料缓存、手机直连与服务器文件管理。 |
+| [Civitai 集市](app-reconstructed/MARKET.md) | 搜索、代理、Key、缓存及下载联动。 |
+| [Bridge 插件](app-reconstructed/ComfyUI-Mobile-Bridge/README.md) | 电脑端插件安装、设置、下载接口与升级。 |
+| [Danbooru 画廊](app-reconstructed/DANBOORU_GALLERY_PLAN.md) | 原生画廊、排序、媒体查看和实施记录。 |
+| [可选词库](app-reconstructed/TAG_LIBRARY.md) | 数据来源、中英查询、独立词库包与许可。 |
+| [界面与导航](app-reconstructed/MATERIAL.md) | 两种底栏风格、页面切换及界面改动记录。 |
+| [架构拆分](app-reconstructed/REFACTOR.md) | ViewModel 职责拆分与工程结构说明。 |
 
-- `0.0.37-model-confirm`（versionCode 39）：触发词从模型列表移到选中确认页，
-  列表保留模型文件名和中文标注；确认页采用紧凑头部、触发词 / 简介优先、
-  长文本展开和版本 / 标注 / 文件折叠，共用一个滚动区并固定底部取消 / 确定。
-  保留精确节点路径、复制、加入角色库与显式写入文本节点；普通确认不自动追加触发词。
-  完整 debug 构建及 109 套 / 683 项 Android 测试通过，包括同一测试的旧版失败 / 新版通过、
-  复制 / 写入动作、云端兼容、深色窄屏及浅色 320dp / 大字体原生渲染与触摸滚动。
-  本批只更新 APK，Bridge 维持 2.2.6；不改底栏或原页面切换动画，不自动安装或部署。
+## 贡献指南
 
-- `0.0.36-model-picker`（versionCode 38）：模型选择器共用模型中心的资料与中文标注，
-  卡片文件名下显示中文名称，点选展示最新简介、触发词和标注，仍回填原始节点文件路径。
-  共享手机来源缓存、Key / 代理，人工锁定空触发词保持为空；修正刷新、UNet / GGUF 分类、
-  全量分页、查询草稿、失败重试及旧回包覆盖。完整功能需 Bridge 2.2.6。
-  完整 debug 构建、108 套 / 672 项 Android 测试、124 项 Bridge Python 和 10 项设置面板测试通过；
-  已检查 320dp 列表 / 详情原生渲染、长备注触摸滚动、基线 / 修改版同输入探针及打包插件重跑。
-  未自动安装、部署、重启或修改真实权重；桌面渲染不等于手机性能实测。
+欢迎通过 Issue 反馈问题，或 Fork 后提交 Pull Request。
 
-- `0.0.34-optional-tags`（versionCode 36）：完整中英标签与角色词库改为可选 ZIP 安装包，
-  默认 APK 不包含数据库或原始词表，83,723,800 → 58,834,055 bytes，减少约 29.73%。
-  完整词库包 25,268,492 bytes，支持导入、校验、更新、移除、旧版已初始化数据迁移及无词库正常生图。
-  Agent 设置整理为模型服务、提示词和可选资源；连接 / 生成参数与长说明折叠，提示词预览和编辑更紧凑，
-  保留配置保存反馈、正反向流程、两种底栏及原有页面动画。debug APK 构建及 102 套 / 633 项 Android 测试、
-  4 项词库构建规则测试通过；已检查深色与 320dp 浅色原生渲染图，不代表手机帧率实测。
+- 反馈问题时附上应用版本、后端类型、复现步骤及必要的日志或截图，并先移除 Key 等敏感信息。
+- 修改代码前阅读对应功能文档，保持现有 Kotlin / Compose 风格，尽量补充相关回归测试。
+- 提交前运行对应构建和测试，并如实说明验证结果；不要将自动化测试结果等同于真机体验验证。
+- 不提交本机 SDK 路径、构建缓存、凭据、签名密钥、用户配置或模型权重。
 
-- `0.0.33-toast-feedback`（versionCode 35）：全应用短操作提示恢复为 P2 之前的系统 Toast，
-  移除前台 Material Snackbar；页面、弹窗和 ViewModel 共用主线程提示入口，新消息替换旧消息，
-  空消息不展示，同文案的新操作仍各自确认。切页 / 重建 / 恢复不重放旧提示。
-  截图中的 Agent 重置成功、实际写入失败和缺少工作流三种反馈已回归；
-  debug APK 构建及 100 套 / 626 项 Android 测试通过。两种底栏与页面切换保持不变。
+## 项目说明与致谢
 
-- `0.0.32-market-cleanup`（versionCode 34）：精简在线集市的常驻说明、重复筛选摘要和
-  分区副标题；直达详情收进搜索行，作者输入提示缩短。保留清除筛选、错误与重试、
-  两区标题及数量，查询、分页与预览逻辑不变。debug APK 构建及 11 项现有界面回归通过，
-  已检查使用合成封面的原生渲染图。
+本仓库基于提供的源码快照重建构建配置并持续改进，不代表已恢复原始发布工程。
+感谢 ComfyUI 及 Android、Compose、Miuix 等生态；词库所引用的 ai-tag-toolbox、
+Danbooru 中英对照等数据来源及许可说明见 [词库文档](app-reconstructed/TAG_LIBRARY.md)。
 
-- `0.0.31-market-channels`（versionCode 33）：在线集市普通内容 / 成人浏览范围分区查询，
-  各自分页、缓存与重试，跨区按 ID 去重；开启成人内容不再撤掉普通内容查询。
-  新增 `.com / .red` 链接或编号直达公开详情，保留指定版本、内容标记与分级预览。
-  完整 debug APK 构建、98 套 / 617 项 Android 回归、Bridge Python 92 项及设置面板 Node 10 项通过。
-  合成双区原生渲染与真实页面外壳触摸滚动通过，不代表真机帧率或真实账号权限联调。
-  手机直连只需 APK；桥接列表需配套 2.2.4 以保留预览分级，详见模型中心文档。
-
-- `0.0.27-model-center-direct`（versionCode 29）：本地模型资料与网络预览改为手机直连，
-  复用集市 HTTP 代理和 Civitai Key；按文件哈希精确匹配并缓存模型总简介、版本说明、
-  作者、底模和触发词。详情改为紧凑封面、简介与触发词优先、文件信息默认折叠。
-  在线列表保留显式电脑桥接备用模式，但详情和网络预览不再随它绕电脑。
-  保留上一版触摸滚动修复、两种底栏与原切换动画；Bridge 2.2.1 不变。
-  完整 debug 构建及 86 套 / 543 项测试通过，0 失败 / 错误 / 跳过；
-  包含手机代理取图、代理变更重试、简介缓存重启和六类触摸滚动回归。
-  自动化验证结果和实际设备验收边界见 `app-reconstructed/MODEL_CENTER.md`。
-
-- `0.0.26-model-center-scroll`（versionCode 28）：修复模型中心三个分页不能触摸滚动的回归。
-  固定工具栏不再挂载旧折叠标题栏的 nested-scroll 拦截；该连接仅保留给原插件页。
-  保留上一版 UI、封面、底栏和页面动画，本次只需更新 APK，无需重新更新 Bridge。
-  在真实 `ModelHubScreen` 外壳中注入触摸上滑 / 下滑：旧版六项全部复现位置不动，
-  修复后本地网格、紧凑列表、在线集市、下载队列、资料任务、详情六项均通过。
-  完整 debug 构建及 82 套 / 517 项测试通过，0 失败 / 错误 / 跳过；手机实际手感待复测。
-
-- `0.0.25-model-center-ui`（versionCode 27）：模型中心改为紧凑工具栏、下划线分页、
-  自适应封面网格及带缩略图的紧凑列表；搜索、筛选、同步摘要和在线集市统一排版。
-  下载任务改为独立进度卡片，模型下载与资料补全分开查看，完成任务不再显示零速率。
-  本地列表及详情自动加载预览，Bridge 2.2.1 优先读取同目录同名封面，不依赖哈希匹配；
-  无本地封面时复用已有来源资料，图片缓存按服务器和封面版本隔离。
-  两种底栏、原页面切换、角色词库与正反向提示词流程保持不变。
-  Android debug 构建及 81 套 / 511 项测试、Bridge 82 项和原设置面板 10 项全部通过。
-  深色网格 / 紧凑列表、在线页、任务卡和 320dp 浅色窄屏已做合成数据布局渲染，
-  不代表手机 GPU 或帧率实测。本地封面功能需更新完整 Bridge 2.2.1 并重启，
-  保留 ComfyUI 用户目录中的 `mobile_bridge/`；本轮未自动部署或提交真实生图。
-  升级与验证边界见 `app-reconstructed/MODEL_CENTER.md`。
-
-- `0.0.24-model-center`（versionCode 26）：主页原资产区分流到本地模型 / 在线集市 /
-  原插件列表，模型中心三个分页；新增服务器隔离缓存、注册目录索引、详情标注与修订撤销、
-  精确 SHA-256 资料补全、独立资料队列和下载后资料留存，配套 Bridge 2.2。
-  两种底栏、原页面动画、正反提示词和角色库保留。
-  Android debug 构建及 506 项测试通过；Bridge 76 项、原设置面板 10 项通过。
-  本批仅 P0–P1，Agent 接线 / 写词库仍为后续阶段；电脑新插件部署和真机联调尚待完成。
-  验证边界与使用说明见 `app-reconstructed/MODEL_CENTER.md`。
-
-- `0.0.23-navigation-motion`（versionCode 25）：底栏切页按入口顺序区分左右，修复
-  「应用 → Agent」仍从右进入；两种底栏保持同一套老版距离、时长，RTL 镜像，二级页进入/返回不变。
-  Danbooru、集市连接、Agent 提示词编辑/恢复默认、管理标签和分级选择先退场再卸载，
-  补齐取消/关闭动画；退场中拦截重复操作，取消不保存。上一版全屏缩放与视频下载保留。
-  完整 debug 构建及 489 项测试通过，0 失败 / 错误 / 跳过；逐帧布局与截图已检查，
-  手机实际帧率和主观手感仍待复测。
-- `0.0.22-danbooru-fullscreen`（versionCode 24）：Danbooru 详情支持视频下载、进度与取消，
-  流式复用完整缓存并保存到 `Movies/ComfyPocket`；点图片进入全屏，支持双指缩放、拖动、
-  双击放大/复位和原图。视频内嵌/全屏共用同一个播放器，保留播放进度与暂停状态。
-  分级固定在排序行右侧，去掉排序按钮的双层按压底色。完整 debug 构建及 475 项测试通过；
-  真实手机相册、CDN/代理、硬件解码与手势帧率仍待实测。未改来源行、底栏或页面切换。
-- `0.0.21-danbooru-media`（versionCode 23）：修复 Danbooru 把视频地址当封面、预览失败不尝试
-  备用图片的问题，读取 `media_asset` 图片/视频变体；新增点按后才启动的详情页视频播放，
-  沿用画廊独立 HTTP 代理。排序/评级改为紧凑文字按钮，窄屏和大字体自动换行；
-  详情页内容可从经典悬浮底栏后方滚过，仅在列表尾部避让。完整 debug 构建及 460 项测试通过；
-  手机硬件解码、真实 CDN 与实际手机代理仍待设备验收，ZIP/SWF 保留封面与标签。
-
-- `0.0.20-overlay-layer`（versionCode 22）：修复悬浮底栏盖住 Agent 画风/提示词和控制器节点管理
-  弹窗底部按钮、触摸误切入口的问题。统一将当前页面的弹窗绘制在整个导航外壳之上，
-  保留页面自己的返回/生命周期/主题；两种底栏外观与原版切换动画不变。
-  旧版四项实点复现失败，修复后完整 debug 构建与 437 项回归全部通过。
-
-- `0.0.19-navigation-styles`（versionCode 21）：在 **设置 → 主题与外观 → 底栏风格**
-  提供「标准底栏 / 经典悬浮」两种样式，立即生效并记住选择，页面与返回栈共用。
-  两种底栏统一复用老版 280ms 横向滑动与淡入淡出；Danbooru 点按查看标签、返回列表也加入同套动画。
-  删除 Material 预览入口、独立 Activity、演示页面及资源。
-  debug APK 构建成功，432 项回归全部通过（0 失败 / 错误 / 跳过）。
-  P3–P5 保持回退状态，不改业务协议、词库或生成/媒体缓存逻辑。验证边界见 `app-reconstructed/MATERIAL.md`。
-
-- `0.0.18-p2-restored`（versionCode 20）：通过新的回退提交取消 P3–P5，保留 P2 外壳与底栏对齐修复，
-  源码恢复到 `2b29c4b`，仅提高 APK 发布版本号；构建及 448 项回归通过。
-
-以下为历史版本记录；Material 预览在当前版本中已删除：
-
-- `0.0.11-material-motion`（versionCode 13）：为 **Material 预览**补充可中断的 Tab 内容切换、
-  详情／设置进入与返回、全屏图淡入淡出。底栏固定，重复点击不刷新，不改原 Miuix 外壳。
-  保留退场内容快照，退场页不再处理点击与返回；系统动画倍率为 0 时直接结束过渡。
-  验证边界和动效规格见 `app-reconstructed/MATERIAL.md`。
-
-- `0.0.10-material-preview`（versionCode 12）：新增 **设置 → Material 预览**，原界面保留。
-  提供 Material 3 主题、五入口导航演示、Danbooru 图片／Tag／全屏与账号代理表单样板。
-  默认离线，可演示空／失败／追加状态，手动确认后可连接现有 Danbooru 配置。
-  仅完成 P0／P1，未进入全应用迁移；使用和验证边界见 `app-reconstructed/MATERIAL.md`。
-
-- `0.0.9`（versionCode 11）：Danbooru 增加热度、评分、收藏排序及日／周／月排行榜，可前后切换榜期。
-  热度使用官方 `order:rank`，排行榜使用官方日历范围和 `order:score`；请求在服务端排序，排序列表使用数字分页。
-  统一画廊、设置与 Tag 详情的布局，浏览网格只保留清晰图片，移除帖子编号底栏。
-  改用 Miuix 原生下拉刷新动画；刷新期间保留旧图，失败保留当前窗口并允许重试。
-  Android 构建及 394 项 JVM/Android/Compose 回归通过（基线 377 项，新增 17 项）；真机动画观感仍待实测。
-  使用方式、日期与验证边界见画廊计划第 14 节。
-
-- `0.0.8`（versionCode 10）：应用显示名及交付 APK 统一为 ComfyPocket；删除 Agent 的三种格式选项及对应偏好，保留自定义分镜、离线双语词库与正反向流程。
-  画廊新增手机直连 Danbooru：独立代理和账号 Key、搜索/评级、游标与数字分页、原生详情、五类 Tag、多选复制、单图保存分享及独立缓存。
-  原服务器/本地来源、包名、签名、底栏动画和 Bridge 保留。实施与实测边界详见画廊计划第 13 节。
-
-- `0.0.7-agent-bilingual-tags`（versionCode 9）：内置词库扩充为 140,871 个标签与 99,980 个角色，
-  共 240,851 项，均有中文对应。合并 Danbooru 社区中英对照固定快照，支持中文整句 / 别名查英文标签，
-  不把纯英文回显计入中文覆盖。含机器翻译、画师和作品数据，来源、许可与过滤范围见 `app-reconstructed/TAG_LIBRARY.md`。
-  删除聊天里的词库命中展开提示，保留离线检索与设置页查词；正反向流程不变。
-- `0.0.6-agent-local-tags`（versionCode 8）：撤掉 Danbooru 联网查词，内置 13,358 个普通词、
-  34,122 个角色条目，支持中英文/别名搜索。绘图前离线取候选，不增加模型修订轮次。
-  Agent 主动编写正向和反向；工作流可分别选择精确文本字段；“出图提示词”同时显示、
-  分别复制和成对保存两组词，明确实际写入状态。用户自定义人设与分镜规则保留。
-- 保留此前的 CPU 进度条同色、提示词职责分离、
-  反向缺失保留原值和显式空字符串清空行为；更新本版仅需 APK，不必更新 Bridge。
-
-- `0.0.3-agent-media-monitor`（versionCode 5）修复生成通知静默、Agent 设置保存反馈、
-  分享和画廊的原图缓存复用；主页新增 CPU / 内存预览，配套 Bridge 2.1，详见 `app-reconstructed/AGENT.md`。
-- `0.0.2-agent-core`（versionCode 4）落地 Agent 实例级会话、分步执行和工作流工具；
-  思考强度包括极高 `xhigh` 和 `max`，随模型配置保存，详见 `app-reconstructed/AGENT.md`。
-- 0.0.7 Android 基线构建成功，323 项 JVM/Android 页面测试和 3 项双语词库导入测试通过；0.0.8 的 377 项 JVM/Android/Compose 回归全部通过（基线 323 项），真实账号/代理/真机尚待验证，详见画廊实施记录。
-  上批另有 3 项 Bridge CPU/内存采样测试。Bridge Python、
-  设置 GUI 与本地浏览器的独立测试说明见插件文档，本批未改动插件。
-- 主 ViewModel 首轮从 3,867 行拆至 3,161 行，抽出工作流解析、编辑状态、
-  参数持久化、日志和缓存管理五个组件。
-- 本地补丁回放和回滚演练通过；APK v2 签名校验通过。
-- 使用调试签名，尚未做真机 UI 或真实生成服务端到端测试。
-- `0.0.1-market-return-fix`（versionCode 3）修复诊断定位到的集市退出时
-  主线程关闭 TLS 连接崩溃，并处理保存代理/Key 时的同类清理路径。
-  暖 HTTPS 连接、页面销毁后清理和客户端轮换已有回归；仍待用户手机复测。
-  保留“设置 → 导出返回/退出诊断”，流程和验证边界见 `app-reconstructed/MARKET.md`。
-- 原有常规 ComfyUI 连接的证书策略未改；Civitai 直连使用独立正常 TLS 客户端。
-  Bridge 原生下载重新验证文件与注册目录，图片代理使用精确域名边界。
-
-本仓库基于提供的源码快照重建构建配置并做职责拆分，不代表已恢复原始发布工程。
-本机 SDK 路径、缓存、执行记录、原始备份和 APK 交付文件均排除在 Git 之外。
+当前仓库尚未提供统一的项目级 `LICENSE`。
+第三方组件与数据各自保留其原有许可和署名说明。
