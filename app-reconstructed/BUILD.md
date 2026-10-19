@@ -25,7 +25,7 @@
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.34-optional-tags`，版本号为 `36`。显示名 **ComfyPocket**；
+当前构建版本名为 `0.0.36-model-picker`，版本号为 `38`。显示名 **ComfyPocket**；
 模型中心的手机直连资料 / 代理预览与详情说明见 `MODEL_CENTER.md`，Agent 见 `AGENT.md`，
 在线画廊见 `DANBOORU_GALLERY_PLAN.md`，底栏与动画说明见 `MATERIAL.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
@@ -49,7 +49,7 @@ gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plai
 
 输出：
 
-- 品牌命名调试 APK：`app/build/outputs/ComfyPocket/ComfyPocket.apk`（assembleDebug 自动导出）
+- 品牌命名调试 APK：`app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk`（assembleDebug 自动导出）
 - AGP 内部产物：`app/build/outputs/apk/debug/app-debug.apk`（不修改其元数据）
 - 单元测试 HTML：`app/build/reports/tests/testDebugUnitTest/index.html`
 - 单元测试 XML：`app/build/test-results/testDebugUnitTest/`

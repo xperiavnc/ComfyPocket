@@ -824,14 +824,15 @@ class ComfyRepository private constructor() {
         keyword: String,
         page: Int,
         pageSize: Int,
-        baseModel: String? = null
+        baseModel: String? = null,
+        refresh: Boolean = false
     ): Result<com.comfyui.mobile.network.RhResourcePageData> {
         return try {
             ensureApi()
-            val response = api?.getMobileResourceList(resourceType, keyword, page, pageSize, baseModel)
+            val response = api?.getMobileResourceList(resourceType, keyword, page, pageSize, baseModel, refresh)
             if (response?.isSuccessful == true) {
                 val body = response.body()
-                if (body?.data != null) {
+                if (body?.code == 0 && body.data != null) {
                     Result.success(body.data)
                 } else {
                     Result.failure(IllegalStateException(body?.msg ?: "未获取到模型数据"))
@@ -845,6 +846,8 @@ class ComfyRepository private constructor() {
                     Result.failure(IllegalStateException("获取本地模型失败 (HTTP $code)"))
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.e("Repository", "Get mobile resource list failed", e)
             Result.failure(e)

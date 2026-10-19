@@ -443,6 +443,27 @@ class ModelIndex:
             providers = {row["sha256"]: self.provider(row["sha256"])} if row["sha256"] else {}
             return self.with_preview(self._item(row, annotations, providers))
 
+    def picker_metadata(self, category):
+        """The picker reads the SAME annotations/providers as model-center detail.
+
+        This is a read-only overlay: native ComfyUI node options remain authoritative
+        for selectability, including newly added files not yet indexed.
+        """
+        with self.db() as db:
+            result = {}
+            for item in self._rows(db):
+                if item["category"] != category or not item["present"]:
+                    continue
+                path = Path(item["rootPath"]) / item["relativePath"]
+                try:
+                    current = path.stat()
+                except OSError:
+                    continue
+                if current.st_size != item["size"] or current.st_mtime_ns != item["mtimeNs"]:
+                    continue  # A replaced file must not inherit another hash's source.
+                result[os.path.normcase(os.path.realpath(path))] = item
+            return result
+
     def local_preview(self, item):
         """Exact sibling covers, independent of provider matching and weight hashing."""
         if not item["present"]:

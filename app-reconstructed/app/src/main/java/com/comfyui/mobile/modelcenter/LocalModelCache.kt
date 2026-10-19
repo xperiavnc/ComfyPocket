@@ -19,13 +19,38 @@ data class ModelCacheSnapshot(
 /** Caller supplies an IO dispatcher. Each profile AND normalized endpoint owns a separate file. */
 class LocalModelCache(private val directory: File, identity: String, private val gson: Gson = Gson()) {
     private val file = File(directory, cacheKey(identity) + ".json")
+    private val lock = locks.computeIfAbsent(file.absolutePath) { Any() }
 
-    @Synchronized fun load(): ModelCacheSnapshot = try {
+    fun load(): ModelCacheSnapshot = synchronized(lock) { read() }
+
+    private fun read(): ModelCacheSnapshot = try {
         if (file.isFile) gson.fromJson(file.readText(), ModelCacheSnapshot::class.java) ?: ModelCacheSnapshot()
         else ModelCacheSnapshot()
     } catch (_: Exception) { ModelCacheSnapshot() }
 
-    @Synchronized fun save(snapshot: ModelCacheSnapshot) {
+    fun save(snapshot: ModelCacheSnapshot) = synchronized(lock) {
+        val previous = read()
+        // A selector and a retained model-center VM may save at the same time.
+        // Preserve the newest phone source without overwriting file/annotation state.
+        val sources = if (previous.bridgeServerId == snapshot.bridgeServerId) {
+            (previous.phoneSources.keys + snapshot.phoneSources.keys).associateWith { hash ->
+                listOfNotNull(previous.phoneSources[hash], snapshot.phoneSources[hash])
+                    .maxBy { it.fetchedAt }
+            }
+        } else snapshot.phoneSources
+        write(snapshot.copy(phoneSources = sources))
+    }
+
+    fun savePhoneSource(serverId: String, provider: ModelProvider) = synchronized(lock) {
+        val hash = modelHash(provider.matchedHash) ?: return@synchronized
+        if (provider.cacheScope.isBlank()) return@synchronized
+        val current = read()
+        if (current.bridgeServerId.isNotBlank() && current.bridgeServerId != serverId) return@synchronized
+        save(current.copy(bridgeServerId = serverId,
+            phoneSources = current.phoneSources + (hash to provider), savedAt = System.currentTimeMillis()))
+    }
+
+    private fun write(snapshot: ModelCacheSnapshot) {
         directory.mkdirs()
         val temp = File(directory, file.name + ".tmp")
         val raw = gson.toJson(snapshot)
@@ -34,6 +59,7 @@ class LocalModelCache(private val directory: File, identity: String, private val
     }
 
     companion object {
+        private val locks = java.util.concurrent.ConcurrentHashMap<String, Any>()
         fun cacheKey(identity: String): String = MessageDigest.getInstance("SHA-256")
             .digest(identity.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
         fun page(snapshot: ModelCacheSnapshot, query: LocalModelQuery, page: Int): ModelPage {

@@ -158,7 +158,9 @@ data class RhResourceItem(
     val posterUrl: String? = null,
     val thumbnailUrl: String? = null,
     val desc: String? = null,
-    val versions: List<RhResourceVersion>? = null
+    val versions: List<RhResourceVersion>? = null,
+    /** Present only for the local picker; same record as model-center detail. */
+    val localModel: com.comfyui.mobile.modelcenter.LocalModel? = null
 ) {
     val effectiveId: String
         get() = id?.toString().orEmpty().ifBlank { "${resourceName.orEmpty()}_${effectiveModelName}" }

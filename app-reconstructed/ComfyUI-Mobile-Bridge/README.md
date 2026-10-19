@@ -1,8 +1,19 @@
-# ComfyUI-Mobile-Bridge 2.2.5
+# ComfyUI-Mobile-Bridge 2.2.6
 
 独立的 ComfyPocket 服务端插件。直接读取 ComfyUI 模型目录，并提供 Civitai
 桥接浏览、原生模型下载和 ComfyUI 设置页。**不需要 Lora Manager。**
 ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下载。
+
+2.2.6 修正 Agent / 工作流本地模型选择器：合并新旧 UNet 注册分类，GGUF 从
+`unet_gguf / diffusion_models_gguf` 及共享 UNet 分类中只取 `.gguf` 文件，不再
+把普通 safetensors 模型误列为 GGUF。按完整节点相对路径去重，保持子目录与 Windows 分隔符。
+`resource/list?refresh=true` 仅在第一页清除当前分类的 ComfyUI 文件选项缓存，重新读取
+已注册目录；新下载 / 外部放入的模型可手动刷新，不依赖模型中心资料索引或在线识别。
+返回总数和完整分页；目录读取放入工作线程，目录错误返回可重试失败而不是空成功。
+每条资源可附带同一模型中心索引的 `localModel`，包含位置 ID、中文别名、标注、触发词、
+来源和封面版本；不建立第二套独立标注库。仅精确完整路径、大小与纳秒修改时间一致时附加资料，
+新文件未索引或旧文件已被替换时仍列原生选项，不附加旧内容的来源或标注。
+需要替换完整插件目录并重启 ComfyUI；手机不会自动部署、重启或修改用户模型。
 
 2.2.5 增加 `model-file-management`：手机本地模型详情可重命名服务器权重、移动至
 同类型注册根目录 / 新建子目录，或二次确认后永久删除模型；同名预览与附属资料一并处理。
@@ -102,9 +113,16 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 
 ## API 兼容
 
-- `GET /api/mobile/status`：版本 `2.2.5`，提供 `native-civitai-downloads`、
+- `GET /api/mobile/status`：版本 `2.2.6`，提供 `native-civitai-downloads`、
   `civitai-server-settings`、`system-monitor` 和 `model-center-v1` 能力字段。
 - `GET /api/mobile/system/monitor`：CPU 利用率（0–100%）、内存总字节数与已用字节数。
+- `GET/POST /api/mobile/resource/list`：模型选择器精确节点选项。
+  `resourceType=CHECKPOINT/UNET/GGUF/LORA`、`keyword`、`baseModel`、
+  `page`、`pageSize`（1–100）；`refresh=true` 仅在第一页刷新相应分类缓存。
+   `keyword` 同时匹配中文别名、标注与已确认来源字段；`baseModel` 优先人工标注和来源底模，
+   缺失时再用路径 / 文件名生态别名筛选；路径推断不视为已核实的模型架构。
+  `records / total / pages / hasNext` 描述筛选后的全量分页，响应不缓存。
+   `records[].localModel` 与模型中心 detail 共用索引和修订；未索引或文件状态不一致时为 null。
 - `GET/POST /api/mobile/civitai/settings`：只由设置 GUI 使用；状态不返回 Key。
 - `POST /api/mobile/civitai/native-download`
 - `GET /api/mobile/civitai/native-tasks`

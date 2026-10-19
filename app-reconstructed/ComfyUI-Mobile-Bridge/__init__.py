@@ -382,34 +382,89 @@ def _list_native_models(
     keyword: str,
     page: int,
     page_size: int,
-    base_model: Optional[str] = None
+    base_model: Optional[str] = None,
+    refresh: bool = False,
+    model_index=None
 ) -> Dict[str, Any]:
-    """Read models directly from registered ComfyUI directories."""
+    """Read exact node options from all relevant registered categories.
+
+    `unet` is a legacy alias on recent ComfyUI versions, not a GGUF category.
+    GGUF loaders register their own keys and may share the ordinary UNet roots.
+    Keep the original option string (including Windows separators) for node input.
+    """
     if folder_paths is None:
         return {"records": [], "total": 0, "current": page, "size": page_size, "pages": 0, "hasNext": False}
 
     cat_map = {
-        "LORA": "loras",
-        "CHECKPOINT": "checkpoints",
-        "UNET": "diffusion_models",
-        "GGUF": "unet",
+        "LORA": ("loras",),
+        "CHECKPOINT": ("checkpoints",),
+        "UNET": ("diffusion_models", "unet"),
+        "GGUF": ("unet_gguf", "diffusion_models_gguf", "diffusion_models", "unet"),
     }
-    folder_type = cat_map.get(resource_type.upper(), "loras")
-    
-    try:
-        all_files = folder_paths.get_filename_list(folder_type) or []
-    except Exception:
-        all_files = []
+    resource_type = resource_type.upper()
+    if resource_type not in cat_map:
+        raise ValueError("不支持的模型类型")
+    folder_types = cat_map[resource_type]
+    if refresh and page == 1:
+        # Invalidate only this picker category, not unrelated ComfyUI caches.
+        for cache in (getattr(folder_paths, "filename_list_cache", None),
+                      getattr(getattr(folder_paths, "cache_helper", None), "cache", None)):
+            if isinstance(cache, dict):
+                for key in folder_types:
+                    cache.pop(key, None)
+
+    all_files = []
+    seen = set()
+    registered = getattr(folder_paths, "folder_names_and_paths", None)
+    for folder_type in folder_types:
+        if isinstance(registered, dict) and folder_type not in registered:
+            continue
+        try:
+            names = folder_paths.get_filename_list(folder_type) or []
+        except KeyError:
+            continue  # Optional/legacy category is not registered on this server.
+        for name in names:
+            name = str(name)
+            is_gguf = name.lower().endswith(".gguf")
+            if resource_type in ("UNET", "GGUF") and is_gguf != (resource_type == "GGUF"):
+                continue
+            # Alias keys can expose the same option twice. Do not flatten subfolders.
+            identity = os.path.normcase(name.replace("\\", "/"))
+            if identity in seen:
+                continue
+            full_path = folder_paths.get_full_path(folder_type, name)
+            if not full_path or not os.path.isfile(full_path):
+                continue  # A stale option whose file was removed is not selectable.
+            seen.add(identity)
+            all_files.append((name, full_path))
+    all_files.sort(key=lambda item: (item[0].replace("\\", "/").casefold(), item[0]))
+    metadata = model_index.picker_metadata("UNET" if resource_type == "GGUF" else resource_type) \
+        if model_index is not None else {}
+
+    def indexed(item):
+        return metadata.get(os.path.normcase(os.path.realpath(item[1])))
 
     # Filter keyword (case-insensitive)
     if keyword:
-        kw = keyword.lower()
-        all_files = [f for f in all_files if kw in f.lower()]
+        kw = keyword.casefold()
+        def matches_keyword(item):
+            model = indexed(item) or {}
+            provider = model.get("provider") or {}
+            values = [item[0], model.get("annotation"), provider.get("name"),
+                      provider.get("version"), provider.get("trainedWords")]
+            return kw in json.dumps(values, ensure_ascii=False).casefold()
+        all_files = [item for item in all_files if matches_keyword(item)]
 
     # Filter base model (case-insensitive match against all aliases)
     if base_model and base_model.lower() not in ("any", "all", "全部"):
         aliases = [a.lower() for a in _expand_base_model_aliases(base_model)]
-        all_files = [f for f in all_files if any(a in f.lower() for a in aliases)]
+        def matches_base(item):
+            model = indexed(item) or {}
+            value = (model.get("annotation") or {}).get("baseModel") or \
+                (model.get("provider") or {}).get("baseModel")
+            haystack = str(value or item[0]).lower()
+            return any(a in haystack for a in aliases)
+        all_files = [item for item in all_files if matches_base(item)]
 
     total = len(all_files)
     total_pages = (total + page_size - 1) // page_size if page_size > 0 else 1
@@ -418,12 +473,18 @@ def _list_native_models(
     page_files = all_files[start:end]
 
     records = []
-    for f in page_files:
-        clean_name = os.path.splitext(os.path.basename(f))[0]
-        full_path = folder_paths.get_full_path(folder_type, f)
+    for f, full_path in page_files:
+        clean_name = os.path.splitext(f.replace("\\", "/").rsplit("/", 1)[-1])[0]
         preview_url = _find_native_preview(full_path) if full_path else None
         native_desc = _extract_model_description({}, full_path) if full_path else ""
         
+        model = indexed((f, full_path))
+        if model is not None:
+            model = model_index.with_preview(model)
+        annotation = (model or {}).get("annotation") or {}
+        provider = (model or {}).get("provider") or {}
+        words = annotation.get("trainedWords") if "trainedWords" in (annotation.get("fieldLocks") or []) \
+            else annotation.get("trainedWords") or provider.get("trainedWords") or []
         records.append({
             "id": f,
             "resourceName": clean_name,
@@ -432,9 +493,10 @@ def _list_native_models(
             "thumbnailUrl": preview_url,
             "posterUrl": preview_url,
             "desc": native_desc or f"本地模型: {f}",
+            "localModel": model,
             "versions": [{
-                "baseModel": "",
-                "triggerWords": "",
+                "baseModel": annotation.get("baseModel") or provider.get("baseModel") or "",
+                "triggerWords": ", ".join(words or []),
                 "versionResourceName": f
             }]
         })
@@ -452,7 +514,7 @@ def _list_native_models(
 async def handle_mobile_status(request: web.Request) -> web.Response:
     return web.json_response({
         "code": 0, "msg": "success", "data": {
-            "version": "2.2.5", "name": "ComfyUI-Mobile-Bridge",
+            "version": "2.2.6", "name": "ComfyUI-Mobile-Bridge",
             "loraManagerInstalled": False,
             "capabilities": ["native-civitai-downloads", "civitai-server-settings", "system-monitor",
                              "model-center-v1"],
@@ -598,12 +660,24 @@ async def handle_resource_list(request: web.Request) -> web.Response:
 
     base_model = params.get("baseModel") or params.get("base_model")
 
-    native_data = _list_native_models(resource_type, keyword, page, page_size, base_model)
+    refresh = str(params.get("refresh") or "").strip().lower() in ("true", "1", "yes")
+    try:
+        # Directory scans and sidecar reads must not block ComfyUI's event loop.
+        native_data = await asyncio.to_thread(
+            _list_native_models, resource_type, keyword, page, page_size, base_model, refresh,
+            _get_civitai_service().model_center.index)
+    except ValueError:
+        return web.json_response({"code": 400, "msg": "不支持的模型类型", "data": None},
+                                 status=400, headers={"Cache-Control": "no-store"})
+    except Exception:
+        logger.exception("Failed to read native model picker catalog")
+        return web.json_response({"code": 502, "msg": "读取模型目录失败，请检查服务器目录后重试", "data": None},
+                                 status=502, headers={"Cache-Control": "no-store"})
     return web.json_response({
         "code": 0,
         "msg": "success",
         "data": native_data
-    })
+    }, headers={"Cache-Control": "no-store"})
 
 
 async def handle_assets_summary(request: web.Request) -> web.Response:

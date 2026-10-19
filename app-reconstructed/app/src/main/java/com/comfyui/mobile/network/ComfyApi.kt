@@ -69,7 +69,8 @@ interface ComfyApi {
         @retrofit2.http.Query("keyword") keyword: String,
         @retrofit2.http.Query("page") page: Int,
         @retrofit2.http.Query("pageSize") pageSize: Int,
-        @retrofit2.http.Query("baseModel") baseModel: String? = null
+        @retrofit2.http.Query("baseModel") baseModel: String? = null,
+        @retrofit2.http.Query("refresh") refresh: Boolean = false
     ): Response<RhResourceListResponse>
 
     @retrofit2.http.GET("api/mobile/system/assets_summary")

@@ -101,6 +101,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     private val workflowEditor = WorkflowEditorState(workflowPreferences) { _objectInfo.value }
     private val consoleLog = ConsoleLogStore()
     private val cacheManager = AppCacheManager(application, uploadPreviewStore)
+    private val modelPickerData = lazy { com.comfyui.mobile.modelcenter.ModelPickerData(application, repository) }
     
     val connectionState = repository.webSocketManager.connectionState
         .stateIn(viewModelScope, SharingStarted.Eagerly, ConnectionState.DISCONNECTED)
@@ -1112,10 +1113,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         keyword: String,
         page: Int,
         pageSize: Int,
-        baseModel: String?
+        baseModel: String?,
+        refresh: Boolean
     ): Result<com.comfyui.mobile.network.RhResourcePageData> {
-        return repository.getLocalResourceList(resourceType, keyword, page, pageSize, baseModel)
+        val server = currentServerProfile()
+            ?: return Result.failure(IllegalStateException("请先选择 ComfyUI 服务器"))
+        return repository.getLocalResourceList(resourceType, keyword, page, pageSize, baseModel, refresh)
+            .map { modelPickerData.value.decorate(server, it) }
     }
+
+    override suspend fun localModelDetail(item: com.comfyui.mobile.network.RhResourceItem):
+        Result<com.comfyui.mobile.network.RhResourceItem> {
+        val server = currentServerProfile()
+            ?: return Result.failure(IllegalStateException("请先选择 ComfyUI 服务器"))
+        return modelPickerData.value.detail(server, item)
+    }
+    override fun localModelImageLoader() = modelPickerData.value.imageLoader()
+    override fun localModelImageRequest(url: String) = modelPickerData.value.imageRequest(url)
 
     fun fetchAssetsSummary() {
         val server = currentServerProfile()
@@ -1743,6 +1757,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     override fun onCleared() {
         MainViewModelAgent.invalidateContext(this, "会话已关闭")
         llmClient.cancelActive()
+        if (modelPickerData.isInitialized()) modelPickerData.value.close()
         super.onCleared()
         networkMonitor.stop()
         stopForegroundHeartbeat()

@@ -54,7 +54,7 @@ cd app-reconstructed
 
 调试 APK 按 **软件名＋版本号** 自动导出到
 `app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk`，
-例如 `ComfyPocket-0.0.35-model-files.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
+例如 `ComfyPocket-0.0.36-model-picker.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
 应用安装后的显示名也是 **ComfyPocket**；AGP 内部 `app-debug.apk` 仍保留以兼容构建元数据。
 安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
@@ -64,6 +64,13 @@ cd app-reconstructed
 此功能需完整更新 **ComfyUI-Mobile-Bridge 2.2.5** 并重启 ComfyUI；“编辑标注”仍只负责别名等资料，
 不与真实文件名混用。详见 [模型中心说明](app-reconstructed/MODEL_CENTER.md)。
 
+Agent、控制页和应用页共用的**本地模型选择器**接通模型中心同一份资料：
+卡片为模型文件名 + 人工标注的中文名称，点选查看最新简介、触发词和标注；
+确认仍使用 ComfyUI 原始完整节点路径。共享手机资料缓存、HTTP 代理及 Civitai Key，
+保留人工锁定的空触发词。新增独立刷新、全量分页和失败重试，修正 UNet / GGUF 分类。
+完整联动需配套 **Bridge 2.2.6**；新发现的原生文件不必等待资料索引完成才能选择。
+更新插件不会由手机自动执行，需替换完整目录并重启，保留 ComfyUI 用户目录的资料与凭据。
+
 ## 可选词库
 
 默认 APK 不携带词库。需要离线标签和角色中英查询时，单独获取 `ComfyPocket-tag-library.zip`，
@@ -72,6 +79,14 @@ cd app-reconstructed
 源码构建词库包使用 `python app-reconstructed/tools/pack_local_tag_library.py`，不需要重新下载数据。
 
 ## 当前验证状态
+
+- `0.0.36-model-picker`（versionCode 38）：模型选择器共用模型中心的资料与中文标注，
+  卡片文件名下显示中文名称，点选展示最新简介、触发词和标注，仍回填原始节点文件路径。
+  共享手机来源缓存、Key / 代理，人工锁定空触发词保持为空；修正刷新、UNet / GGUF 分类、
+  全量分页、查询草稿、失败重试及旧回包覆盖。完整功能需 Bridge 2.2.6。
+  完整 debug 构建、108 套 / 672 项 Android 测试、124 项 Bridge Python 和 10 项设置面板测试通过；
+  已检查 320dp 列表 / 详情原生渲染、长备注触摸滚动、基线 / 修改版同输入探针及打包插件重跑。
+  未自动安装、部署、重启或修改真实权重；桌面渲染不等于手机性能实测。
 
 - `0.0.34-optional-tags`（versionCode 36）：完整中英标签与角色词库改为可选 ZIP 安装包，
   默认 APK 不包含数据库或原始词表，83,723,800 → 58,834,055 bytes，减少约 29.73%。

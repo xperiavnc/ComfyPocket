@@ -72,4 +72,50 @@ class LocalModelCacheTest {
         assertFalse(page.scanComplete)
         assertNull(page.items.first().lastUsed)
     }
+
+    @Test fun selectorAndModelCenterShareNewestPhoneSourcesWithoutOverwritingAnnotations() {
+        val root = temporary.newFolder()
+        val center = LocalModelCache(root, "same-profile|same-endpoint")
+        val picker = LocalModelCache(root, "same-profile|same-endpoint")
+        val hash = "a".repeat(64)
+        val raw = item.copy(sha256 = hash, annotation = item.annotation.copy(
+            trainedWords = emptyList(), fieldLocks = listOf("trainedWords")))
+        val snapshot = ModelCacheSnapshot("bridge-a", items = listOf(raw), scrollIndex = 3)
+        center.save(snapshot)
+        val newer = ModelProvider(matchedHash = hash, fetchedAt = 200, cacheScope = "account",
+            modelDescription = "手机新获取的简介")
+        picker.savePhoneSource("bridge-a", newer)
+        // A retained model-center VM saves its older in-memory snapshot after the picker.
+        center.save(snapshot.copy(savedAt = 300, phoneSources = mapOf(hash to newer.copy(
+            fetchedAt = 100, modelDescription = "旧简介"))))
+        val restored = LocalModelCache(root, "same-profile|same-endpoint").load()
+        assertEquals("手机新获取的简介", restored.phoneSources[hash]!!.modelDescription)
+        assertEquals(raw, restored.items.single())
+        assertTrue(restored.items.single().triggerWords.isEmpty())
+        assertNull(restored.items.single().provider)
+        assertEquals(3, restored.scrollIndex)
+        picker.savePhoneSource("bridge-other", newer.copy(fetchedAt = 400))
+        assertEquals("bridge-a", center.load().bridgeServerId)
+        assertEquals(200L, center.load().phoneSources[hash]!!.fetchedAt)
+    }
+
+    @Test fun twoCacheInstancesCanSaveConcurrentlyWithoutLosingPhoneSources() {
+        val root = temporary.newFolder()
+        val center = LocalModelCache(root, "shared")
+        val picker = LocalModelCache(root, "shared")
+        center.save(ModelCacheSnapshot("bridge-a", items = listOf(item)))
+        val first = Thread {
+            repeat(20) { center.save(center.load().copy(savedAt = it.toLong())) }
+        }
+        val second = Thread {
+            repeat(20) { i ->
+                picker.savePhoneSource("bridge-a", ModelProvider(matchedHash = "%064x".format(i),
+                    cacheScope = "account", fetchedAt = i.toLong()))
+            }
+        }
+        first.start(); second.start()
+        first.join(); second.join()
+        assertEquals(20, center.load().phoneSources.size)
+        assertEquals(listOf(item), center.load().items)
+    }
 }

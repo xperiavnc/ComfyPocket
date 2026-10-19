@@ -32,8 +32,14 @@ interface CloudModelBrowserHost {
         keyword: String,
         page: Int,
         pageSize: Int,
-        baseModel: String? = null
+        baseModel: String? = null,
+        refresh: Boolean = false
     ): Result<RhResourcePageData>
+
+    suspend fun localModelDetail(item: com.comfyui.mobile.network.RhResourceItem):
+        Result<com.comfyui.mobile.network.RhResourceItem> = Result.success(item)
+    fun localModelImageLoader(): coil.ImageLoader? = null
+    fun localModelImageRequest(url: String): Any = url
 }
 
 /**
