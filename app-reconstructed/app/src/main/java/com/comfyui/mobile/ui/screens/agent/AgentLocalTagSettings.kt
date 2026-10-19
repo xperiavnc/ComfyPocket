@@ -129,10 +129,14 @@ internal fun AgentLocalTagSettings(
                         modifier = Modifier.fillMaxWidth(), enabled = ready)
                     if (status.isNotEmpty()) Text(status, style = MiuixTheme.textStyles.footnote1,
                         color = scheme.onSurfaceVariantSummary)
-                    if (results.isNotEmpty()) Column(
-                        Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) { results.forEach { LocalTagEntryText(it) } }
+                    if (results.isNotEmpty()) {
+                        Text("长按文字可自由选取；也可分别复制标签和中文。",
+                            style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
+                        Column(
+                            Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) { results.forEach { LocalTagEntryText(it) } }
+                    }
                 }
             }
             AgentSettingsDisclosure("资源说明", if (info == null) "词库单独安装，不增加默认 APK 体积" else

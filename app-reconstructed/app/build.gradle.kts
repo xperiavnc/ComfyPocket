@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 42
-        versionName = "0.0.40-character-tag-clarification"
+        versionCode = 43
+        versionName = "0.0.41-tag-library-copy"
     }
 
     buildFeatures {

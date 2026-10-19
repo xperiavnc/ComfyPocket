@@ -1,16 +1,24 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import android.content.ClipboardManager
+import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.hasSetTextAction
 import com.comfyui.mobile.agent.AgentPromptSettings
@@ -35,6 +43,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @RunWith(RobolectricTestRunner::class)
@@ -206,20 +215,23 @@ class AgentPromptControlsTest {
         } finally { controller.pause().stop().destroy() }
     }
 
-    @Test fun manualLookupUsesTheSelectedVocabularyKindWithoutCallingTheAgent() {
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h800dp-mdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun manualLookupUsesTheSelectedVocabularyKindWithoutCallingTheAgent() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val queries = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
-                setContent { MiuixTheme {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                setContent { CompositionLocalProvider(LocalSquircleEnabled provides false) { MiuixTheme {
+                    Column(Modifier.testTag("manual-lookup-scroll").verticalScroll(rememberScrollState())) {
                         AgentLocalTagSettings(AgentPromptSettings(), installed, search = { query, kind ->
                             queries += query to kind
                             listOf(LocalTagEntry("hatsune_miku", "初音未来", "character_names", "vocaloid",
                                 "character", "hatsune_miku", "blue hair", query, true))
                         }, onImport = {}, onRemove = {}, onSave = {})
                     }
-                } }
+                } } }
             })
             compose.waitForIdle()
             compose.onNodeWithText("离线查词").performScrollTo().performClick()
@@ -228,6 +240,45 @@ class AgentPromptControlsTest {
             compose.waitUntil(timeoutMillis = 5000) { queries.any { it == "初音未来" to "character" } }
             compose.waitForIdle()
             compose.onNodeWithText("hatsune_miku · 初音未来").assertExists()
+            compose.onNodeWithTag("manual-lookup-scroll")
+                .performScrollToNode(hasTestTag("agent-local-tag-copy-tag"))
+            compose.onNodeWithTag("agent-local-tag-copy-tag").performScrollTo().assertIsDisplayed().performClick()
+            val clipboard = controller.get().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            assertEquals("hatsune_miku", clipboard.primaryClip!!.getItemAt(0).text.toString())
+            compose.onNodeWithTag("agent-local-tag-copy-translation").performScrollTo().performClick()
+            assertEquals("初音未来", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    @Config(sdk = [34], qualifiers = "w360dp-h800dp-mdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun manualTagLookupCopiesTheTagWithoutItsChineseTranslation() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { CompositionLocalProvider(LocalSquircleEnabled provides false) { MiuixTheme {
+                    Column(Modifier.testTag("manual-lookup-scroll").verticalScroll(rememberScrollState())) {
+                        AgentLocalTagSettings(AgentPromptSettings(), installed, search = { _, _ ->
+                            listOf(LocalTagEntry("blue_hair", "蓝发", "hair", "外貌", "tag", "", "", "蓝发", true))
+                        }, onImport = {}, onRemove = {}, onSave = {})
+                    }
+                } } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("离线查词").performScrollTo().performClick()
+            compose.onNode(hasSetTextAction()).performScrollTo().performTextInput("蓝发")
+            compose.waitUntil(timeoutMillis = 5000) {
+                compose.onAllNodesWithTag("agent-local-tag-copy-tag").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("blue_hair · 蓝发").assertExists()
+            compose.onNodeWithTag("manual-lookup-scroll")
+                .performScrollToNode(hasTestTag("agent-local-tag-copy-tag"))
+            compose.onNodeWithTag("agent-local-tag-copy-tag").performScrollTo().assertIsDisplayed().performClick()
+            val clipboard = controller.get().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            assertEquals("blue_hair", clipboard.primaryClip!!.getItemAt(0).text.toString())
+            compose.onNodeWithTag("agent-local-tag-copy-translation").performScrollTo().performClick()
+            assertEquals("蓝发", clipboard.primaryClip!!.getItemAt(0).text.toString())
         } finally { controller.pause().stop().destroy() }
     }
 
