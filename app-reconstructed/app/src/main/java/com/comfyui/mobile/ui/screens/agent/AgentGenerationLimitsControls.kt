@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.agent.AgentGenerationLimits
 import com.comfyui.mobile.agent.OutputTokenParameter
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -39,24 +38,33 @@ internal data class AgentLimitsDraft(
 internal fun AgentGenerationLimitsControls(value: AgentLimitsDraft, onChange: (AgentLimitsDraft) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("上下文与输出长度", style = MiuixTheme.textStyles.body1)
+        Text("上下文预算 · tokens", style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         TextField(value.context, { onChange(value.copy(context = it)) },
-            label = "上下文预算（tokens，留空沿用默认）", useLabelAsPlaceholder = true,
+            label = "留空沿用默认", useLabelAsPlaceholder = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true, modifier = Modifier.fillMaxWidth().testTag("agent-context-tokens"))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             listOf(16384, 32768, 65536, 131072).forEach { tokens ->
-                TextButton("${tokens / 1024}K", onClick = { onChange(value.copy(context = tokens.toString())) })
+                AgentChoiceChip("${tokens / 1024}K", value.context.toIntOrNull() == tokens,
+                    Modifier.testTag("agent-context-preset-$tokens")) { onChange(value.copy(context = tokens.toString())) }
             }
-            TextButton("默认", onClick = { onChange(value.copy(context = "")) })
+            AgentChoiceChip("默认", value.context.isBlank()) { onChange(value.copy(context = "")) }
         }
+        Text("单次输出上限 · tokens", style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         TextField(value.output, { onChange(value.copy(output = it)) },
-            label = "单次输出上限（tokens，留空跟随服务商）", useLabelAsPlaceholder = true,
+            label = "留空跟随服务商", useLabelAsPlaceholder = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             singleLine = true, modifier = Modifier.fillMaxWidth().testTag("agent-output-tokens"))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("输出参数", style = MiuixTheme.textStyles.footnote1,
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             OutputTokenParameter.entries.forEach { parameter ->
-                TextButton((if (value.parameter == parameter) "✓ " else "") + parameter.label,
-                    onClick = { onChange(value.copy(parameter = parameter)) })
+                AgentChoiceChip(parameter.label, value.parameter == parameter,
+                    Modifier.testTag("agent-output-parameter-${parameter.wireValue}")) {
+                    onChange(value.copy(parameter = parameter))
+                }
             }
         }
         AgentSettingsDisclosure("长度参数说明", "留空跟随默认；超出预算时裁剪较早的对话") {

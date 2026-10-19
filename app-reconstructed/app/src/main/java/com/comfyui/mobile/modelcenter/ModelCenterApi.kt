@@ -16,6 +16,11 @@ interface ModelCenterApi {
                              @Query("fileId") fileId: Long): Response<ModelEnvelope<ModelInstallation>>
     @POST("api/mobile/model-center/models/{id}/annotation")
     suspend fun annotate(@Path("id") id: String, @Body body: AnnotationWrite): Response<ModelEnvelope<LocalModel>>
+    @GET("api/mobile/model-center/models/{id}/directories")
+    suspend fun directories(@Path("id") id: String, @Query("rootId") rootId: String,
+                            @Query("path") path: String): Response<ModelEnvelope<ModelDirectories>>
+    @POST("api/mobile/model-center/models/{id}/file-action")
+    suspend fun fileAction(@Path("id") id: String, @Body body: ModelFileWrite): Response<ModelEnvelope<ModelFileResult>>
     @POST("api/mobile/model-center/scan")
     suspend fun scan(@Body action: ModelAction): Response<ModelEnvelope<ModelScan>>
     @GET("api/mobile/model-center/tasks")

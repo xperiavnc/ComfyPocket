@@ -52,10 +52,17 @@ cd app-reconstructed
 ./gradlew :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plain
 ```
 
-调试 APK 自动导出到 `app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket.apk`。
+调试 APK 按 **软件名＋版本号** 自动导出到
+`app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk`，
+例如 `ComfyPocket-0.0.35-model-files.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
 应用安装后的显示名也是 **ComfyPocket**；AGP 内部 `app-debug.apk` 仍保留以兼容构建元数据。
 安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
+
+本地模型详情的“文件管理”支持实际修改服务器文件：重命名、移动到同类型注册目录 /
+新建子文件夹、确认后永久删除。同名预览和附属资料一并处理，服务器成功后才刷新手机记录。
+此功能需完整更新 **ComfyUI-Mobile-Bridge 2.2.5** 并重启 ComfyUI；“编辑标注”仍只负责别名等资料，
+不与真实文件名混用。详见 [模型中心说明](app-reconstructed/MODEL_CENTER.md)。
 
 ## 可选词库
 

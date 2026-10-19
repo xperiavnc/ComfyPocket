@@ -52,6 +52,7 @@ import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.ui.screens.agent.AgentReasoningEffortSelector
 import com.comfyui.mobile.ui.screens.agent.AgentGenerationLimitsControls
 import com.comfyui.mobile.ui.screens.agent.AgentSettingsDisclosure
+import com.comfyui.mobile.ui.screens.agent.AgentChoiceChip
 import com.comfyui.mobile.ui.screens.agent.AgentLimitsDraft
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -154,82 +155,35 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = currentLlmProfile?.displayName ?: "添加模型配置",
+                        text = "模型配置",
                         style = MiuixTheme.textStyles.title4,
                         fontWeight = FontWeight.SemiBold
     )
 
-                    // 多模型 Profile 快捷切换标签栏（末尾直接展示 + 新建）
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-    ) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         llmProfiles.forEach { item ->
-                            val isActive = item.id == currentLlmProfileId
-                            val isEditingThis = item.id == editingProfileId
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(
-                                        when {
-                                            isActive -> scheme.primary
-                                            isEditingThis -> scheme.primaryContainer
-                                            else -> scheme.surfaceContainerHigh
-                                        }
-                                    )
-                                    .clickable {
-                                        editingProfileId = item.id
-                                        profileName = item.name
-                                        baseUrl = item.baseUrl
-                                        apiKey = item.apiKey
-                                        model = item.model
-                                        reasoningEffort = AgentReasoningEffort.fromStored(item.reasoningEffort)
-                                        limits = AgentLimitsDraft.from(item.generationLimits)
-                                        viewModel.selectLlmProfile(item.id)
-                                    }
-                                    .heightIn(min = 44.dp)
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
-    ) {
-                                Text(
-                                    text = if (isActive) "✓ ${item.displayName}" else item.displayName,
-                                    fontSize = 12.sp,
-                                    color = when {
-                                        isActive -> scheme.onPrimary
-                                        isEditingThis -> scheme.onPrimaryContainer
-                                        else -> scheme.onSurface
-                                    },
-                                    fontWeight = if (isActive || isEditingThis) FontWeight.SemiBold else FontWeight.Normal
-    )
+                            AgentChoiceChip(item.displayName, item.id == currentLlmProfileId,
+                                Modifier.testTag("agent-profile-${item.id}")) {
+                                editingProfileId = item.id
+                                profileName = item.name
+                                baseUrl = item.baseUrl
+                                apiKey = item.apiKey
+                                model = item.model
+                                reasoningEffort = AgentReasoningEffort.fromStored(item.reasoningEffort)
+                                limits = AgentLimitsDraft.from(item.generationLimits)
+                                viewModel.selectLlmProfile(item.id)
                             }
                         }
-
-                        // 直接在横向标签栏末尾显示 + 新建
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(scheme.secondaryContainer)
-                                .clickable {
-                                    val newP = viewModel.createNewLlmProfile()
-                                    editingProfileId = newP.id
-                                    profileName = newP.name
-                                    baseUrl = newP.baseUrl
-                                    apiKey = newP.apiKey
-                                    model = newP.model
-                                    reasoningEffort = AgentReasoningEffort.fromStored(newP.reasoningEffort)
-                                    limits = AgentLimitsDraft.from(newP.generationLimits)
-                                }
-                                .heightIn(min = 44.dp)
-                                    .padding(horizontal = 12.dp, vertical = 10.dp)
-    ) {
-                            Text(
-                                text = "+ 新建",
-                                fontSize = 12.sp,
-                                color = scheme.primary,
-                                fontWeight = FontWeight.SemiBold
-    )
+                        AgentChoiceChip("＋ 新建", action = true, modifier = Modifier.testTag("agent-profile-new")) {
+                            val newP = viewModel.createNewLlmProfile()
+                            editingProfileId = newP.id
+                            profileName = newP.name
+                            baseUrl = newP.baseUrl
+                            apiKey = newP.apiKey
+                            model = newP.model
+                            reasoningEffort = AgentReasoningEffort.fromStored(newP.reasoningEffort)
+                            limits = AgentLimitsDraft.from(newP.generationLimits)
                         }
                     }
 

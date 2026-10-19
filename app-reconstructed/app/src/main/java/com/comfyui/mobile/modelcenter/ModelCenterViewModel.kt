@@ -21,7 +21,7 @@ data class ModelCenterState(
     val capabilities: ModelCapabilities? = null, val page: ModelPage = ModelPage(),
     val query: LocalModelQuery = LocalModelQuery(), val compact: Boolean = false,
     val scrollIndex: Int = 0, val scrollOffset: Int = 0,
-    val detail: LocalModel? = null, val detailLoading: Boolean = false,
+    val detail: LocalModel? = null, val detailLoading: Boolean = false, val fileBusy: Boolean = false,
     val tasks: ModelTasks = ModelTasks(), val error: String? = null, val notice: String? = null,
     val sourceScope: String = "", val sourceTransport: String = "",
     val sourceTasks: Map<String, ModelSourceTask> = emptyMap()
@@ -41,6 +41,7 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
     private var contextKey = ""
     private var negotiated = false
     private val cacheWrites = Mutex()
+    private val fileWrites = Mutex()
     private var phoneSource: LocalModelSource? = null
     private val sourceLoader = ModelSourceLoader(viewModelScope,
         onStatus = { hash, task ->
@@ -278,6 +279,76 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
             Result.success(Unit)
         } catch (cancelled: CancellationException) { throw cancelled
         } catch (error: Exception) { Result.failure(error) }
+    }
+
+    private fun fileRepository(): LocalModelRepository {
+        check(state.value.connected && negotiated && !state.value.fromCache) { "请连接电脑并刷新模型库后管理文件" }
+        check(state.value.capabilities?.fileManagement == true) { "请更新电脑 Bridge 至 2.2.5 或更新版本并重启 ComfyUI" }
+        return checkNotNull(repository) { "请连接电脑后管理文件" }
+    }
+
+    suspend fun directories(id: String, rootId: String, path: String): Result<ModelDirectories> {
+        val token = generation
+        return try {
+            val repo = fileRepository()
+            val result = repo.directories(id, rootId, path)
+            check(token == generation && result.serverId == state.value.capabilities?.serverId) {
+                "电脑连接已切换，请重新选择文件夹"
+            }
+            Result.success(result)
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (error: Exception) { Result.failure(error) }
+    }
+
+    suspend fun manageFile(item: LocalModel, request: ModelFileWrite): Result<ModelFileResult> {
+        if (!fileWrites.tryLock()) return Result.failure(IllegalStateException("正在处理模型文件，请稍候"))
+        val token = generation
+        try {
+            val repo = fileRepository()
+            check(state.value.detail?.id == item.id && item.serverId == state.value.capabilities?.serverId &&
+                item.present && item.mtimeNs != null) {
+                "请重新打开模型详情，确认服务器文件状态"
+            }
+            check(request.expectedPath == item.relativePath && request.expectedSize == item.size &&
+                request.expectedMtimeNs == item.mtimeNs) { "文件状态已变化，请刷新后重试" }
+            val serverId = state.value.capabilities?.serverId
+            mutable.value = state.value.copy(fileBusy = true)
+            val result = repo.fileAction(item.id, request)
+            check(result.serverId == serverId && result.previousId == item.id && result.action == request.action &&
+                (request.action == "delete" || result.item?.serverId == serverId)) { "服务器文件操作响应不一致，请刷新确认" }
+            if (token != generation) {
+                // The old server still performed the requested operation. Repair only
+                // that server's disk cache; never publish it into the active profile.
+                cacheWrites.withLock {
+                    withContext(Dispatchers.IO) {
+                        val previous = repo.cache.load()
+                        repo.cache.save(previous.copy(items = previous.items.filterNot {
+                            it.id == item.id || it.id == result.item?.id
+                        } + listOfNotNull(result.item), savedAt = System.currentTimeMillis()))
+                    }
+                }
+                error("操作已提交到原电脑；连接已切换，请在原电脑刷新确认")
+            }
+            // Do not publish any rename/delete before the server has committed the real files.
+            loadJob?.cancel()
+            queryEpoch++
+            detailEpoch++
+            val replacement = result.item
+            snapshot = snapshot.copy(items = snapshot.items.filterNot { it.id == item.id ||
+                it.id == replacement?.id } + listOfNotNull(replacement), savedAt = System.currentTimeMillis())
+            mutable.value = state.value.copy(
+                loading = false, detailLoading = false, fileBusy = false, notice = result.feedback,
+                detail = if (state.value.detail?.id == item.id) replacement?.let(::resolved) else state.value.detail,
+                page = state.value.page.copy(items = state.value.page.items.filterNot { it.id == item.id }))
+            persist()
+            refresh()
+            return Result.success(result)
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (error: Exception) { return Result.failure(error)
+        } finally {
+            if (token == generation) mutable.value = state.value.copy(fileBusy = false)
+            fileWrites.unlock()
+        }
     }
 
     fun scan(operation: String) = action { repo ->

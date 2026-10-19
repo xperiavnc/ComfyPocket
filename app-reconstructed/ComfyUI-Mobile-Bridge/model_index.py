@@ -1,7 +1,7 @@
 """Model-center v1 storage. All public methods run on worker threads, not aiohttp.
 
 Locations describe registered files, SHA256 describes content, and annotations
-are deliberately separate from provider data. No model file is ever modified.
+are deliberately separate from provider data. File changes require ModelFiles.
 """
 from __future__ import annotations
 
@@ -104,7 +104,8 @@ class ModelIndex:
             roots = [dict(row) for row in db.execute("SELECT id,category,path,status FROM roots ORDER BY category,path")]
             return {"schemaVersion": SCHEMA, "serverId": values["serverId"],
                     "capabilities": ["model-index", "model-annotations", "hash-enrichment",
-                                      "download-index", "model-previews", "local-model-previews"],
+                                      "download-index", "model-previews", "local-model-previews",
+                                      "model-file-management"],
                     "categories": sorted({r["category"] for r in roots}),
                     "useCases": list(USE_CASES), "roots": roots,
                     "storage": "ComfyUI user directory/mobile_bridge/model-center",
@@ -201,7 +202,8 @@ class ModelIndex:
                 errors.append(True)
             walk = os.walk(path, onerror=walk_error, followlinks=False) if not errors and not absent else ()
             for directory, subdirs, files in walk:
-                subdirs[:] = [s for s in subdirs if not (Path(directory) / s).is_symlink()]
+                subdirs[:] = [s for s in subdirs if not s.startswith(".mobile-") and
+                              not (Path(directory) / s).is_symlink()]
                 if stop.is_set():
                     return False
                 for filename in files:

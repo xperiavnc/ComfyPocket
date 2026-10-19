@@ -452,7 +452,7 @@ def _list_native_models(
 async def handle_mobile_status(request: web.Request) -> web.Response:
     return web.json_response({
         "code": 0, "msg": "success", "data": {
-            "version": "2.2.4", "name": "ComfyUI-Mobile-Bridge",
+            "version": "2.2.5", "name": "ComfyUI-Mobile-Bridge",
             "loraManagerInstalled": False,
             "capabilities": ["native-civitai-downloads", "civitai-server-settings", "system-monitor",
                              "model-center-v1"],

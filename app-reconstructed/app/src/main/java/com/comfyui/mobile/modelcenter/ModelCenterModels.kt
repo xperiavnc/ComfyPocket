@@ -40,7 +40,7 @@ data class LocalModel(
     val nodeModelName: String? = null, val loadStatus: String = "unresolved",
     val lastUsed: Long? = null, val annotation: ModelAnnotation = ModelAnnotation(),
     val revision: Int = 0, val provider: ModelProvider? = null, val matchBasis: String = "",
-    val preview: ModelPreviewInfo? = null
+    val preview: ModelPreviewInfo? = null, val mtimeNs: Long? = null
 ) {
     val displayName: String get() = annotation.alias.ifBlank { name }
     val baseModel: String get() = annotation.baseModel.ifBlank { provider?.baseModel.orEmpty() }
@@ -58,6 +58,7 @@ data class ModelCapabilities(
     val lastSync: Long = 0, val scanComplete: Boolean = false, val scan: ModelScan = ModelScan()
 ) {
     val supported: Boolean get() = schemaVersion == 1 && "model-index" in capabilities
+    val fileManagement: Boolean get() = supported && "model-file-management" in capabilities
 }
 data class ModelStats(
     val locations: Int = 0, val missing: Int = 0, val bytes: Long = 0,

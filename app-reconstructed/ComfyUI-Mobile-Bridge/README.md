@@ -1,8 +1,16 @@
-# ComfyUI-Mobile-Bridge 2.2.4
+# ComfyUI-Mobile-Bridge 2.2.5
 
 独立的 ComfyPocket 服务端插件。直接读取 ComfyUI 模型目录，并提供 Civitai
 桥接浏览、原生模型下载和 ComfyUI 设置页。**不需要 Lora Manager。**
 ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下载。
+
+2.2.5 增加 `model-file-management`：手机本地模型详情可重命名服务器权重、移动至
+同类型注册根目录 / 新建子目录，或二次确认后永久删除模型；同名预览与附属资料一并处理。
+操作检查路径、大小、纳秒修改时间，保留扩展名，拒绝同名覆盖；索引位置、人工标注、
+历史修订与 ComfyUI 文件选项同步更新。扫描与资料队列在文件操作期间等待。
+同盘不重写权重，跨盘复制后发布；普通失败会回滚已移动文件。
+删除不是回收站，清理受占用时会返回暂存文件说明；已有工作流旧路径需重新选择。
+需替换完整插件目录并重启 ComfyUI，保留原用户目录；手机不会自动部署或重启。
 
 2.2.4 为双分区集市保留模型的 `nsfw`、`nsfwLevel`、`minor`、`sfwOnly`，
 以及预览的 `nsfwLevel` / `minor`。不合并不同浏览模式、不改写站点分级；
@@ -94,13 +102,19 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 
 ## API 兼容
 
-- `GET /api/mobile/status`：版本 `2.2.4`，提供 `native-civitai-downloads`、
+- `GET /api/mobile/status`：版本 `2.2.5`，提供 `native-civitai-downloads`、
   `civitai-server-settings`、`system-monitor` 和 `model-center-v1` 能力字段。
 - `GET /api/mobile/system/monitor`：CPU 利用率（0–100%）、内存总字节数与已用字节数。
 - `GET/POST /api/mobile/civitai/settings`：只由设置 GUI 使用；状态不返回 Key。
 - `POST /api/mobile/civitai/native-download`
 - `GET /api/mobile/civitai/native-tasks`
 - `POST /api/mobile/civitai/native-task-action`
+- `GET /api/mobile/model-center/models/{id}/directories?rootId=...&path=...`：
+  浏览服务器同类型注册根目录下的子文件夹。
+- `POST /api/mobile/model-center/models/{id}/file-action`：
+  `action=rename/move/delete`，必需 `expectedPath / expectedSize / expectedMtimeNs`；
+  重命名携带 `name`（保留权重扩展名），移动携带 `rootId / directory`，删除携带 `confirmName`。
+  成功返回服务器身份、旧位置、新模型（删除为 null）、附属文件数及结果说明。
 
 原 `/download`、`/tasks`、`/task-action` 路径作为原生实现别名保留，方便先升级插件。
 新版手机只调用 `native-*`，遇到旧插件时提示升级，不再回退到模型管理器。

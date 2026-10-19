@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 36
-        versionName = "0.0.34-optional-tags"
+        versionCode = 37
+        versionName = "0.0.35-model-files"
     }
 
     buildFeatures {
@@ -118,7 +118,7 @@ dependencies {
 val exportComfyPocketDebugApk by tasks.registering(Copy::class) {
     from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
     into(layout.buildDirectory.dir("outputs/ComfyPocket"))
-    rename { "ComfyPocket.apk" }
+    rename { "ComfyPocket-${android.defaultConfig.versionName}.apk" }
 }
 tasks.matching { it.name == "assembleDebug" }.configureEach {
     finalizedBy(exportComfyPocketDebugApk)

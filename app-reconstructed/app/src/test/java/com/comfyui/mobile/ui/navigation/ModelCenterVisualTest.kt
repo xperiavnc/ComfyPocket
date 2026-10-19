@@ -158,12 +158,14 @@ class ModelCenterVisualTest {
 
     private fun fixtureState(compact: Boolean = false) = ModelCenterState(
         restored = true, connected = true, fromCache = false, serverLabel = "工作电脑", compact = compact,
+        capabilities = ModelCapabilities(1, "fixture", listOf("model-index", "model-file-management"),
+            roots = listOf(ModelRoot("root", "LORA", "D:/fixture/loras", "ready"))),
         page = ModelPage(total = 4, scanComplete = true, lastSync = 1792309200000,
             stats = ModelStats(locations = 77, bytes = 239520000000L, hashed = 77, uniqueContents = 73),
             items = listOf("柔光人像", "插画线条", "日常服装", "自然光影").mapIndexed { index, title ->
-                LocalModel(id = "fixture-$index", name = "$title.safetensors", category = "LORA",
+                LocalModel(id = "fixture-$index", serverId = "fixture", rootId = "root", name = "$title.safetensors", category = "LORA",
                     rootPath = "D:/fixture/loras", relativePath = "styles/$title.safetensors", size = 124000000,
-                    present = true, annotation = ModelAnnotation(alias = title, baseModel = "Illustrious"),
+                    present = true, mtimeNs = 1792309200000000000, annotation = ModelAnnotation(alias = title, baseModel = "Illustrious"),
                     preview = ModelPreviewInfo("local", "fixture-cover"))
             }))
 
@@ -342,6 +344,7 @@ class ModelCenterVisualTest {
         }.use {
             waitForCover()
             compose.onNodeWithText("编辑标注").assertIsDisplayed()
+            compose.onNodeWithText("文件管理").assertIsDisplayed().assertIsEnabled()
             compose.onNodeWithText("模型简介").assertIsDisplayed()
             capture("local-model-detail-direct-narrow-light")
         }

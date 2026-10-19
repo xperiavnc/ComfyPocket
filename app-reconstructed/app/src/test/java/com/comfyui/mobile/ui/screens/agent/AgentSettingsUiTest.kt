@@ -5,11 +5,17 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.lifecycle.ViewModelStore
@@ -33,6 +39,7 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 import top.yukonga.miuix.kmp.basic.Scaffold
+import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], qualifiers = "w412dp-h915dp-xhdpi")
@@ -73,6 +80,9 @@ class AgentSettingsUiTest {
             compose.onNodeWithText("模型服务").assertExists()
             compose.onNodeWithText("API Base URL").assertDoesNotExist()
             compose.onNodeWithTag("agent-context-tokens").assertDoesNotExist()
+            val profileBounds = compose.onNodeWithTag("agent-profile-ui-test").getUnclippedBoundsInRoot()
+            assertTrue(profileBounds.bottom - profileBounds.top >= 44.dp)
+            assertTrue("Profile chip must not grow to the old 64dp block", profileBounds.bottom - profileBounds.top <= 48.dp)
             capture(controller.get(), "overview-dark")
             compose.onNodeWithText("生成参数").performScrollTo().performClick()
             compose.onNodeWithTag("agent-context-tokens").performScrollTo().performTextReplacement("32768")
@@ -125,6 +135,37 @@ class AgentSettingsUiTest {
             assertEquals(1, imports)
             assertEquals(0, searches)
             capture(controller.get(), "optional-pack-320dp-light")
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test
+    @Config(qualifiers = "w280dp-h720dp-mdpi")
+    fun narrowGenerationButtonsHaveSeparatedRowsAndCompactReadableLabels() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val value = mutableStateOf(AgentLimitsDraft("1000000"))
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(darkTheme = true, manageSystemBars = false) {
+                        Column(Modifier.fillMaxSize()
+                            .background(MiuixTheme.colorScheme.background)
+                            .verticalScroll(rememberScrollState()).padding(16.dp)) {
+                            AgentGenerationLimitsControls(value.value) { value.value = it }
+                        }
+                    }
+                }
+            } })
+            val a = compose.onNodeWithText("16K").getUnclippedBoundsInRoot()
+            val b = compose.onNodeWithText("默认").getUnclippedBoundsInRoot()
+            assertTrue(a.bottom - a.top in 44.dp..48.dp)
+            assertTrue(b.top >= a.bottom + 4.dp)
+            compose.onNodeWithText("max_completion_tokens").performScrollTo().assertIsDisplayed()
+            val parameter = compose.onNodeWithText("max_completion_tokens").getUnclippedBoundsInRoot()
+            assertTrue(parameter.right - parameter.left < 260.dp)
+            assertTrue(parameter.bottom - parameter.top <= 48.dp)
+            compose.onNodeWithText("max_tokens").performClick().assertIsSelected()
+            compose.onNodeWithText("32K").performClick().assertIsSelected()
+            capture(controller.get(), "generation-buttons-280dp-dark")
         } finally { controller.pause().stop().destroy() }
     }
 }

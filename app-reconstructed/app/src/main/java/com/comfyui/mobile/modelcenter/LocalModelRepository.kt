@@ -35,6 +35,8 @@ class LocalModelRepository(
     suspend fun tasks() = checked(api.tasks())
     suspend fun enrich(ids: List<String>, refresh: Boolean) = checked(api.enrich(EnrichmentWrite(ids, refresh)))
     suspend fun taskAction(id: String, action: String) = checked(api.taskAction(ModelAction(action, id)))
+    suspend fun directories(id: String, rootId: String, path: String) = checked(api.directories(id, rootId, path))
+    suspend fun fileAction(id: String, action: ModelFileWrite) = checked(api.fileAction(id, action))
     fun preview(item: LocalModel, index: Int = 0): String? {
         if (item.preview?.source == "none") return null
         return (baseUrl.trimEnd('/') + "/api/mobile/model-center/models/${item.id}/preview").toHttpUrl()

@@ -32,9 +32,11 @@ internal fun LocalModelDetails(
     coverUrl: String? = vm.preview(item)
 ) {
     var editing by remember(item.id) { mutableStateOf(false) }
-    BackHandler(enabled = !editing && state.detail?.id == item.id) { vm.openDetail(null) }
+    var managing by remember(item.id) { mutableStateOf(false) }
+    BackHandler(enabled = !editing && !managing && state.detail?.id == item.id) { vm.openDetail(null) }
     LaunchedEffect(item.id, item.sha256, state.sourceScope, state.sourceTransport) { vm.requestSource(item.id) }
-    val writable = state.connected && !state.fromCache && !state.detailLoading
+    val writable = state.connected && !state.fromCache && !state.detailLoading && !state.fileBusy
+    val fileWritable = writable && item.present && item.mtimeNs != null && state.capabilities?.fileManagement == true
     val colors = MiuixTheme.colorScheme
     val provider = item.provider
     val task = state.sourceTasks[modelHash(item.sha256)]
@@ -44,28 +46,36 @@ internal fun LocalModelDetails(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
         .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 24.dp)
         .testTag("local-model-detail"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            LocalModelCover(item, coverUrl, state.fromCache,
+                Modifier.width(104.dp).height(if (coverUrl == null) 104.dp else 140.dp), contentScale = ContentScale.Crop)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(title, style = MiuixTheme.textStyles.title4, fontWeight = FontWeight.SemiBold,
                     maxLines = 3, overflow = TextOverflow.Ellipsis)
                 val byline = listOfNotNull(provider?.author?.takeIf(String::isNotBlank),
                     provider?.version?.takeIf(String::isNotBlank)).joinToString(" · ")
                 if (byline.isNotBlank()) Text(byline, style = MiuixTheme.textStyles.footnote1,
                     color = colors.onSecondaryContainer, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ModelStatusBadge(modelCategoryLabel(item.category))
+                    if (item.baseModel.isNotBlank()) ModelStatusBadge(item.baseModel, true)
+                    if (item.annotation.favorite) ModelStatusBadge("已收藏", true)
+                }
+                Text(listOf(item.format, modelBytes(item.size)).filter(String::isNotBlank).joinToString(" · "),
+                    style = MiuixTheme.textStyles.footnote2,
+                    color = colors.onSecondaryContainer)
             }
-            ModelAction("编辑标注", writable) { editing = true }
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            ModelStatusBadge(modelCategoryLabel(item.category))
-            if (item.baseModel.isNotBlank()) ModelStatusBadge(item.baseModel, true)
-            ModelStatusBadge(modelBytes(item.size))
-            if (item.annotation.favorite) ModelStatusBadge("已收藏", true)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            DetailAction("编辑标注", writable, Modifier.weight(1f)) { editing = true }
+            DetailAction("文件管理", fileWritable, Modifier.weight(1f)) { managing = true }
         }
-        LocalModelCover(item, coverUrl, state.fromCache,
-            Modifier.fillMaxWidth().height(if (coverUrl == null) 96.dp else 164.dp), contentScale = ContentScale.Fit)
         if (state.detailLoading) Text("正在同步本地文件状态…", style = MiuixTheme.textStyles.footnote2,
             color = colors.onSecondaryContainer)
         state.notice?.let { Text(it, style = MiuixTheme.textStyles.footnote1, color = colors.primary) }
+        if (writable && state.capabilities?.fileManagement != true)
+            Text("文件管理需更新电脑 Bridge 至 2.2.5 或更新版本。", style = MiuixTheme.textStyles.footnote2,
+                color = colors.onSecondaryContainer)
 
         DetailSection("模型简介") {
             val intro = remember(provider?.modelDescription) { descriptionText(provider?.modelDescription.orEmpty()) }
@@ -99,10 +109,18 @@ internal fun LocalModelDetails(
         }
         AnnotationSummary(vm, item, writable) { editing = true }
         FileInformation(item, state.fromCache)
-        Text("简介、版本与网络预览使用手机的 HTTP 代理和 Civitai Key。人工标注单独保存，不被来源资料覆盖。",
-            style = MiuixTheme.textStyles.footnote2, color = colors.onSecondaryContainer)
     }
     if (editing) AnnotationDialog(item, onDismiss = { editing = false }, onSave = vm::save)
+    if (managing) ModelFileDialog(item, state.capabilities?.roots.orEmpty(), onDismiss = { managing = false },
+        directories = { root, path -> vm.directories(item.id, root, path) },
+        onApply = { vm.manageFile(item, it) })
+}
+
+@Composable
+private fun DetailAction(label: String, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Card(cornerRadius = 12.dp, modifier = modifier) {
+        ModelAction(label, enabled, Modifier.fillMaxWidth(), onClick)
+    }
 }
 
 @Composable

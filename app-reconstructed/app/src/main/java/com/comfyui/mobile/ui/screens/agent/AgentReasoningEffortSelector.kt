@@ -1,18 +1,11 @@
 package com.comfyui.mobile.ui.screens.agent
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.comfyui.mobile.agent.AgentReasoningEffort
@@ -33,15 +26,7 @@ internal fun AgentReasoningEffortSelector(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             AgentReasoningEffort.entries.forEach { effort ->
-                val selected = effort == value
-                Box(
-                    Modifier.clip(RoundedCornerShape(8.dp))
-                        .background(if (selected) scheme.primary else scheme.surfaceContainerHigh)
-                        .selectable(selected = selected, role = Role.RadioButton, onClick = { onChange(effort) })
-                        .padding(horizontal = 12.dp, vertical = 9.dp)
-                ) {
-                    Text(effort.label, fontSize = 12.sp, color = if (selected) scheme.onPrimary else scheme.onSurface)
-                }
+                AgentChoiceChip(effort.label, effort == value) { onChange(effort) }
             }
         }
         Text(

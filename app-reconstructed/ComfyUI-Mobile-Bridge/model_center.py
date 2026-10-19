@@ -12,6 +12,7 @@ from aiohttp import web
 
 from .civitai_client import CivitaiError
 from .model_index import ModelIndex, stamp
+from .model_files import ModelFiles
 from .civitai_downloads import positive_id
 
 
@@ -58,6 +59,8 @@ class ModelCenterService:
         self.initialized = False
         self.closing = False
         self.provider_retry_at = 0
+        self.file_lock = asyncio.Lock()
+        self.file_busy = False
 
     async def initialize(self):
         async with self.init_lock:
@@ -115,6 +118,8 @@ class ModelCenterService:
         return await self.guarded(run)
 
     def start_scan(self):
+        if self.file_busy:
+            raise CivitaiError("正在管理模型文件，请稍后同步", 409)
         if self.closing:
             raise CivitaiError("服务正在关闭", 503)
         if self.scan_task and not self.scan_task.done():
@@ -174,6 +179,58 @@ class ModelCenterService:
                 self.index.annotate, request.match_info["id"], revision, data, undo))
         return await self.guarded(run)
 
+    async def directories(self, request):
+        async def run():
+            return response(await threaded(ModelFiles(self.index).directories, request.match_info["id"],
+                                           request.query.get("rootId"), request.query.get("path", "")))
+        return await self.guarded(run)
+
+    async def file_action(self, request):
+        async def run():
+            value = await body(request)
+            async with self.file_lock:
+                self.file_busy = True
+                restart_scan = self.scan_task and not self.scan_task.done()
+                resumable = [key for key, job in self.jobs.items()
+                             if job["status"] in ("queued", "hashing", "matching")]
+                try:
+                    self.scan_stop.set()
+                    if self.scan_task:
+                        await asyncio.gather(self.scan_task, return_exceptions=True)
+                    for key in resumable:
+                        stop = self.stops.get(key)
+                        if stop:
+                            stop.set()
+                        worker = self.workers.get(key)
+                        if worker and self.jobs[key]["status"] in ("queued", "matching"):
+                            worker.cancel()
+                    if self.workers:
+                        await asyncio.gather(*list(self.workers.values()), return_exceptions=True)
+                    result = await threaded(ModelFiles(self.index).mutate, request.match_info["id"], value)
+                    # The filesystem and DB committed first; now rebind in-memory queue entries.
+                    for job in self.jobs.values():
+                        if job["locationId"] == result["previousId"]:
+                            if result["item"]:
+                                job["locationId"] = result["item"]["id"]
+                            else:
+                                await self.save_job(job, status="cancelled", message="模型文件已删除")
+                    return response(result)
+                finally:
+                    self.file_busy = False
+                    # Also covers a disconnected/cancelled HTTP caller after the worker committed.
+                    for saved in await threaded(self.index.jobs):
+                        if saved["id"] in self.jobs:
+                            self.jobs[saved["id"]].update(saved)
+                    for key in resumable:
+                        job = self.jobs.get(key)
+                        if job and job["status"] in ("queued", "hashing", "matching", "paused") and not self.closing:
+                            await self.save_job(job, status="queued", message="")
+                            self.start_job(job)
+                    if restart_scan and not self.closing:
+                        self.scan_task = None
+                        self.start_scan()
+        return await self.guarded(run)
+
     async def save_job(self, job, **updates):
         job.update(updates, updated=max(stamp(), job.get("updated", 0) + 1))
         await threaded(self.index.job_put, dict(job))
@@ -182,6 +239,8 @@ class ModelCenterService:
         await self.initialize()
         if self.closing:
             raise CivitaiError("服务正在关闭", 503)
+        if self.file_busy:
+            raise CivitaiError("正在管理模型文件，请稍后补全资料", 409)
         item = await threaded(self.index.detail, location_id)
         digest = item["sha256"]
         matching = [j for j in self.jobs.values() if j["locationId"] == location_id or
@@ -312,6 +371,8 @@ class ModelCenterService:
             if not job:
                 raise CivitaiError("资料任务不存在", 404)
             if action == "resume":
+                if self.file_busy:
+                    raise CivitaiError("正在管理模型文件，请稍后继续", 409)
                 if self.closing:
                     raise CivitaiError("电脑服务正在关闭", 503)
                 if job["id"] in self.workers:
@@ -432,6 +493,8 @@ class ModelCenterService:
         app.router.add_get(base + "/installation", self.installation)
         app.router.add_get(base + "/models/{id}", self.detail)
         app.router.add_post(base + "/models/{id}/annotation", self.annotation)
+        app.router.add_get(base + "/models/{id}/directories", self.directories)
+        app.router.add_post(base + "/models/{id}/file-action", self.file_action)
         app.router.add_get(base + "/models/{id}/preview", self.preview)
         app.router.add_post(base + "/scan", self.scan_action)
         app.router.add_post(base + "/enrichment", self.enrichment)
