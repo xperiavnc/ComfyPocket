@@ -13,7 +13,7 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
-internal fun ModelPickerAnnotation(annotation: ModelAnnotation) {
+internal fun ModelPickerAnnotation(annotation: ModelAnnotation, showTitle: Boolean = true) {
     val fields = listOf(
         "中文名称" to annotation.alias,
         "其他别名" to annotation.aliases.joinToString("、"),
@@ -27,7 +27,7 @@ internal fun ModelPickerAnnotation(annotation: ModelAnnotation) {
         "备注" to annotation.notes
     ).filter { it.second.isNotBlank() }
     Column(Modifier.testTag("model-picker-annotation"), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        Text("模型标注", style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.SemiBold)
+        if (showTitle) Text("模型标注", style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.SemiBold)
         if (fields.isEmpty()) Text("暂无标注", style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.onSecondaryContainer)
         fields.forEach { (name, value) ->

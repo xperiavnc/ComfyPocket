@@ -218,8 +218,12 @@ class CloudModelBrowserDialogTest {
             assertTrue("Chinese annotation belongs below the native filename", alias.top >= name.bottom)
             compose.onNodeWithText("model-0").performClick()
             compose.onNodeWithText("这是模型中心共享的完整简介", substring = true).assertExists()
+            compose.onNodeWithTag("model-picker-detail-scroll").performScrollToNode(hasTestTag("model-picker-version"))
+            compose.onNodeWithTag("model-picker-version").performClick()
             compose.onNodeWithText("版本使用说明", substring = true).assertExists()
             compose.onNodeWithText("manual_trigger").assertExists()
+            compose.onNodeWithTag("model-picker-detail-scroll").performScrollToNode(hasTestTag("model-picker-annotation-toggle"))
+            compose.onNodeWithTag("model-picker-annotation-toggle").performClick()
             compose.onNodeWithTag("model-picker-detail-scroll").performScrollToNode(hasText("备注：最新使用备注"))
             compose.onNodeWithText("中文名称：星空柔光画风-0").assertExists()
             compose.onNodeWithText("用途：画风").assertExists()
@@ -235,10 +239,26 @@ class CloudModelBrowserDialogTest {
         val host = Host(1).apply { withMetadata = true; emptyWords = true }
         screen(host) {
             compose.onNodeWithText("model-0").performClick()
-            compose.onNodeWithText("触发词：暂无记录").assertExists()
+            compose.onNodeWithTag("model-picker-empty-triggers").assertTextEquals("暂无记录")
             compose.onNodeWithText("provider_trigger").assertDoesNotExist()
             compose.onNodeWithTag("model-picker-confirm").performClick()
             assertTrue(host.selected.single().triggerWords.isNullOrBlank())
+        }
+    }
+
+    @Test fun triggerWordsOnlyAppearAfterOpeningConfirmation() {
+        val host = Host(2).apply { withMetadata = true }
+        screen(host) {
+            compose.onNodeWithText("model-0").assertIsDisplayed()
+            compose.onNodeWithTag("model-picker-alias-0", useUnmergedTree = true)
+                .assertTextEquals("星空柔光画风-0")
+            compose.onNodeWithText("触发词: manual_trigger").assertDoesNotExist()
+            compose.onNodeWithText("manual_trigger").assertDoesNotExist()
+            compose.onNodeWithText("model-0").performClick()
+            compose.onNodeWithText("manual_trigger").assertIsDisplayed()
+            compose.onNodeWithTag("model-picker-confirm").assertIsDisplayed().performClick()
+            assertEquals("Anima\\model-0.safetensors", host.selected.single().effectiveModelName)
+            assertEquals("manual_trigger", host.selected.single().triggerWords)
         }
     }
 
@@ -251,6 +271,8 @@ class CloudModelBrowserDialogTest {
             compose.onNodeWithText("model-0").performClick()
             compose.onNodeWithTag("model-picker-confirm").assertIsDisplayed()
             render("picker-detail-top-320-dark.png")
+            compose.onNodeWithTag("model-picker-detail-scroll").performScrollToNode(hasTestTag("model-picker-annotation-toggle"))
+            compose.onNodeWithTag("model-picker-annotation-toggle").performClick()
             compose.onNodeWithTag("model-picker-detail-scroll").performTouchInput { swipeUp() }
             compose.waitForIdle()
             compose.onNodeWithTag("model-picker-confirm").assertIsDisplayed()

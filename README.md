@@ -54,7 +54,7 @@ cd app-reconstructed
 
 调试 APK 按 **软件名＋版本号** 自动导出到
 `app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk`，
-例如 `ComfyPocket-0.0.36-model-picker.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
+例如 `ComfyPocket-0.0.37-model-confirm.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
 应用安装后的显示名也是 **ComfyPocket**；AGP 内部 `app-debug.apk` 仍保留以兼容构建元数据。
 安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
@@ -66,7 +66,8 @@ cd app-reconstructed
 
 Agent、控制页和应用页共用的**本地模型选择器**接通模型中心同一份资料：
 卡片为模型文件名 + 人工标注的中文名称，点选查看最新简介、触发词和标注；
-确认仍使用 ComfyUI 原始完整节点路径。共享手机资料缓存、HTTP 代理及 Civitai Key，
+确认仍使用 ComfyUI 原始完整节点路径。触发词集中到确认页，列表只保留文件名与中文标注；
+简介支持展开，版本说明 / 标注 / 文件信息按需展开，固定底部操作。共享手机资料缓存、HTTP 代理及 Civitai Key，
 保留人工锁定的空触发词。新增独立刷新、全量分页和失败重试，修正 UNet / GGUF 分类。
 完整联动需配套 **Bridge 2.2.6**；新发现的原生文件不必等待资料索引完成才能选择。
 更新插件不会由手机自动执行，需替换完整目录并重启，保留 ComfyUI 用户目录的资料与凭据。
@@ -79,6 +80,14 @@ Agent、控制页和应用页共用的**本地模型选择器**接通模型中�
 源码构建词库包使用 `python app-reconstructed/tools/pack_local_tag_library.py`，不需要重新下载数据。
 
 ## 当前验证状态
+
+- `0.0.37-model-confirm`（versionCode 39）：触发词从模型列表移到选中确认页，
+  列表保留模型文件名和中文标注；确认页采用紧凑头部、触发词 / 简介优先、
+  长文本展开和版本 / 标注 / 文件折叠，共用一个滚动区并固定底部取消 / 确定。
+  保留精确节点路径、复制、加入角色库与显式写入文本节点；普通确认不自动追加触发词。
+  完整 debug 构建及 109 套 / 683 项 Android 测试通过，包括同一测试的旧版失败 / 新版通过、
+  复制 / 写入动作、云端兼容、深色窄屏及浅色 320dp / 大字体原生渲染与触摸滚动。
+  本批只更新 APK，Bridge 维持 2.2.6；不改底栏或原页面切换动画，不自动安装或部署。
 
 - `0.0.36-model-picker`（versionCode 38）：模型选择器共用模型中心的资料与中文标注，
   卡片文件名下显示中文名称，点选展示最新简介、触发词和标注，仍回填原始节点文件路径。

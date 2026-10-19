@@ -202,7 +202,7 @@ private fun FileInformation(item: LocalModel, cached: Boolean) {
 }
 
 @Composable
-private fun ExpandableModelText(text: String, label: String) {
+internal fun ExpandableModelText(text: String, label: String) {
     var expanded by remember(text) { mutableStateOf(false) }
     var overflow by remember(text) { mutableStateOf(false) }
     SelectionContainer {

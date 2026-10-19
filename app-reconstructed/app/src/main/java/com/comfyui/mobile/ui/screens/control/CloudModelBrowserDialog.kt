@@ -1,9 +1,5 @@
 package com.comfyui.mobile.ui.screens.control
 
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,8 +20,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -62,12 +56,10 @@ import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserManageFilterDialog
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserTypeTabs
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserPager
 import com.comfyui.mobile.ui.screens.modelbrowser.ModelBrowserQuery
-import com.comfyui.mobile.ui.screens.modelbrowser.ModelPickerAnnotation
+import com.comfyui.mobile.ui.screens.modelbrowser.ModelSelectionConfirmation
 import com.comfyui.mobile.modelcenter.modelAnnotationName
-import com.comfyui.mobile.ui.screens.modelbrowser.cleanHtmlToPlainText
 import com.comfyui.mobile.ui.screens.modelbrowser.getBaseModelAliases
 import com.comfyui.mobile.ui.screens.modelbrowser.loadPinnedFilterTags
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
@@ -355,7 +347,7 @@ fun CloudModelBrowserDialog(
                                                 !imgUrl.startsWith(currentServer?.baseUrl.orEmpty())
                                             AsyncImage(
                                                 model = if (directImage) viewModel.localModelImageRequest(imgUrl) else imgUrl,
-                                                imageLoader = if (directImage) phoneImages!! else context.imageLoader,
+                                                imageLoader = if (directImage) phoneImages else context.imageLoader,
                                                 contentDescription = null,
                                                 contentScale = ContentScale.Crop,
                                                 modifier = Modifier.fillMaxSize()
@@ -397,18 +389,6 @@ fun CloudModelBrowserDialog(
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.testTag("model-picker-alias-${item.effectiveId}")
                                     )
-                                    val tw = item.triggerWords?.trim()
-                                    if (!tw.isNullOrBlank()) {
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(
-                                            text = "触发词: $tw",
-                                            style = MiuixTheme.textStyles.body2,
-                                            fontSize = 10.sp,
-                                            color = scheme.primary,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -471,217 +451,35 @@ fun CloudModelBrowserDialog(
         }
     }
 
-    // 模型选择确认弹窗（涵盖有触发词与无触发词两种情况）
+    // 确认页拥有唯一内容滚动区，所有选择回调仍使用最新的原生模型记录。
     pendingSelectedItem?.let { item ->
-        val triggers = item.triggerWords?.trim().orEmpty()
-        val hasTriggers = triggers.isNotBlank()
-        val titleText = if (hasTriggers) "选择模型与触发词" else "确认选择模型"
-
-        OverlayDialog(
-            show = true,
-            title = titleText,
-            onDismissRequest = { pendingSelectedItem = null }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 520.dp)
-                    .padding(vertical = 4.dp)
-            ) {
-                Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())
-                    .testTag("model-picker-detail-scroll")) {
-                // 文件名与中文标注分开显示，选择回填始终使用精确节点路径。
-                Text(
-                    text = item.effectiveResourceName.ifBlank { item.effectiveModelName },
-                    style = MiuixTheme.textStyles.title4.copy(fontWeight = FontWeight.Bold),
-                    color = scheme.onSurface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (currentServer?.isRunningHub != true) {
-                    if (item.modelAnnotationName.isNotBlank()) Text(item.modelAnnotationName,
-                        style = MiuixTheme.textStyles.body2, color = scheme.primary,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp))
-                    Text(item.effectiveModelName, style = MiuixTheme.textStyles.footnote1,
-                        color = scheme.onSecondaryContainer, modifier = Modifier.padding(horizontal = 4.dp))
-                    if (detailLoading) Text("正在读取模型中心资料…", style = MiuixTheme.textStyles.footnote1,
-                        color = scheme.onSecondaryContainer)
-                    detailError?.let {
-                        Text(it, style = MiuixTheme.textStyles.footnote1, color = scheme.error)
-                        TextButton("重试资料", onClick = { detailAttempt++ })
-                    }
-                    if (!hasTriggers) {
-                        Spacer(Modifier.height(8.dp))
-                        Text("触发词：暂无记录", style = MiuixTheme.textStyles.footnote1,
-                            color = scheme.onSecondaryContainer)
-                    }
+        ModelSelectionConfirmation(
+            item = item,
+            localMode = currentServer?.isRunningHub != true,
+            resourceType = selectedType,
+            serverBaseUrl = currentServer?.baseUrl.orEmpty(),
+            phoneImages = phoneImages,
+            phoneImageRequest = viewModel::localModelImageRequest,
+            detailLoading = detailLoading,
+            detailError = detailError,
+            onRetryDetail = { detailAttempt++ },
+            onDismiss = { pendingSelectedItem = null },
+            onConfirm = {
+                val target = pendingSelectedItem
+                pendingSelectedItem = null
+                if (target != null) onSelectModel(target)
+            },
+            textNodes = textNodes,
+            onWriteTriggerNode = { node, triggers ->
+                val target = pendingSelectedItem
+                pendingSelectedItem = null
+                if (target != null) {
+                    if (onSelectModelWithTriggerNode != null) onSelectModelWithTriggerNode(target, node, triggers)
+                    else onSelectModel(target)
                 }
-
-                if (hasTriggers) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    // 触发词标题栏：左侧提示，右侧「复制触发词」按钮
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "触发词：",
-                            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
-                            color = scheme.onSurface
-                        )
-                        TextButton(
-                            text = "复制",
-                            onClick = {
-                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                cm.setPrimaryClip(ClipData.newPlainText("lora_trigger", triggers))
-                                AppToast.show(context, "已复制触发词")
-                            }
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
-
-                    // 可滚动的触发词显示区，限制最大高度
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(scheme.surfaceContainerHigh)
-                            .padding(10.dp)
-                            .heightIn(max = 80.dp)
-                            .verticalScroll(rememberScrollState())
-                    ) {
-                        Text(
-                            text = triggers,
-                            style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium),
-                            color = scheme.primary
-                        )
-                    }
-
-                    // 外部额外操作（例如 Agent 的加入角色库）
-                    if (extraTriggerAction != null) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        extraTriggerAction(item, triggers) {
-                            pendingSelectedItem = null
-                        }
-                    }
-
-                    // 快捷写入节点列表
-                    if (textNodes.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "写入节点（点击追加到指定文本节点）：",
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = scheme.onSecondaryContainer
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 110.dp)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            textNodes.forEach { node ->
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(scheme.surfaceContainerHigh)
-                                        .clickable {
-                                            val target = pendingSelectedItem
-                                            pendingSelectedItem = null
-                                            if (target != null) {
-                                                if (onSelectModelWithTriggerNode != null) {
-                                                    onSelectModelWithTriggerNode(target, node, triggers)
-                                                } else {
-                                                    onSelectModel(target)
-                                                }
-                                            }
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 8.dp)
-                                ) {
-                                    Text(
-                                        text = "#${node.nodeId}  ${node.title}",
-                                        style = MiuixTheme.textStyles.body2,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 模型中心来源简介或本地伴生说明，不拿人工标注覆盖来源资料。
-                val desc = cleanHtmlToPlainText(item.desc)
-                if (desc.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "模型介绍：",
-                        style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
-                        color = scheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(scheme.surfaceContainerHigh)
-                            .padding(10.dp)
-                    ) {
-                        Text(
-                            text = desc,
-                            style = MiuixTheme.textStyles.footnote1,
-                            color = scheme.onSecondaryContainer
-                        )
-                    }
-                } else if (!hasTriggers) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        text = "确定要将当前节点设置为该模型吗？",
-                        style = MiuixTheme.textStyles.body2,
-                        color = scheme.onSurface
-                    )
-                }
-                if (currentServer?.isRunningHub != true) {
-                    Spacer(Modifier.height(12.dp))
-                    item.localModel?.let { ModelPickerAnnotation(it.annotation) }
-                        ?: Text("暂无模型中心资料，请在模型中心同步此文件。",
-                            style = MiuixTheme.textStyles.footnote1, color = scheme.onSecondaryContainer)
-                }
-                }
-
-                Spacer(modifier = Modifier.height(14.dp))
-
-                // 底部操作按钮：仅两个对称按钮 [取消] 和 [确定选择]，永不折行
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    TextButton(
-                        text = "取消",
-                        onClick = {
-                            pendingSelectedItem = null
-                        },
-                        modifier = Modifier.weight(1f).testTag("model-picker-cancel")
-                    )
-                    TextButton(
-                        text = "确定选择",
-                        colors = ButtonDefaults.textButtonColorsPrimary(),
-                        onClick = {
-                            val target = pendingSelectedItem
-                            pendingSelectedItem = null
-                            if (target != null) onSelectModel(target)
-                        },
-                        modifier = Modifier.weight(1f).testTag("model-picker-confirm")
-                    )
-                }
-            }
-        }
+            },
+            extraTriggerAction = extraTriggerAction
+        )
     }
 
     ModelBrowserManageFilterDialog(
