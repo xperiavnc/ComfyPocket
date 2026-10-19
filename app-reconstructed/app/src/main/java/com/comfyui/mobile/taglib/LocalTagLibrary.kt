@@ -14,7 +14,8 @@ import kotlinx.coroutines.withContext
 data class LocalTagEntry(
     val name: String, val translation: String, val category: String, val section: String,
     val kind: String, val trigger: String, val detail: String,
-    val matchedTerm: String, val exact: Boolean
+    val matchedTerm: String, val exact: Boolean,
+    val profileName: String? = null
 )
 
 data class LocalTagReport(
@@ -62,6 +63,19 @@ class LocalTagLibrary(context: Context) {
             rows
         }
 
+    /** Search character variants against the app-resolved identity without exposing aliases as tags. */
+    suspend fun characterCandidates(profiles: List<Pair<String, List<String>>>): List<LocalTagEntry> {
+        val result = mutableListOf<LocalTagEntry>()
+        for ((profileName, aliases) in profiles) {
+            val terms = (listOf(profileName) + aliases).map(String::trim)
+                .filter(String::isNotBlank).distinctBy(::normalize).take(8)
+            for (term in terms) {
+                result += search(term, kind = "character", limit = 8).map { it.copy(profileName = profileName) }
+            }
+        }
+        return result.distinctBy { Triple(it.profileName, it.kind, it.name) }.take(24)
+    }
+
     /** Exact indexed n-gram retrieval works with Chinese sentences and space/underscore tags. */
     suspend fun forRequest(requirements: String): LocalTagReport = withContext(Dispatchers.IO) {
         currentCoroutineContext().ensureActive()
@@ -84,7 +98,9 @@ class LocalTagLibrary(context: Context) {
         currentCoroutineContext().ensureActive()
         // Character identities stay separate; no mass insertion of optional appearances.
         val picked = results.filter { it.kind == "tag" }.take(14) +
-            results.filter { it.kind == "character" }.take(4)
+            results.filter { it.kind == "character" }.take(4).map {
+                it.copy(profileName = it.matchedTerm)
+            }
         LocalTagReport(picked, revision = catalogueRevision, queriedTerms = terms.size)
     }
 
@@ -95,6 +111,7 @@ class LocalTagLibrary(context: Context) {
                 "translationStatus" to if (it.translation.isBlank()) "missing" else "available",
                 "matched" to it.matchedTerm.take(96),
                 "category" to it.category, "kind" to it.kind,
+                "registeredProfile" to it.profileName,
                 "identity" to it.trigger.take(240),
                 "optionalAppearance" to detail?.getAsJsonArray("optionalAppearance")
                     ?.take(12)?.map { word -> word.asString.take(96) }.orEmpty(),
@@ -112,7 +129,8 @@ class LocalTagLibrary(context: Context) {
             "\n${report.summary}。" +
             "\nzh 是中文词义或译名，tag 是对应英文词；用中文理解和筛选，英文词用于图像提示词。zh 为空表示上游缺少中文，不是无效词，不据此删掉用户指定的词。部分译名来自机器翻译，遇到歧义遵从用户要求，不把译名当角色事实。" +
             "\n只采用符合用户要求的候选，不机械替换或全量拼接。负面分类仅供反向选择，命中不等于必须使用；其他分类仅在用户明确排除时写入 negative_prompt。" +
-            "角色身份与可选外貌分开；OC 不绑定已有角色。未命中不是错词，保留触发词、权重与自定义语法。" +
+            "角色身份与可选外貌分开；OC 不绑定已有角色。registeredProfile 标明 App 已匹配的档案，character 候选可能是不同服装/版本身份；同一档案有多个互斥角色候选且用户没有明确指定时，必须先用 clarification_question 和 clarification_options 询问，不得拼在一起或猜选。optionalAppearance / optionalSpecificAppearance 默认不加入；当这些可选外貌会改变角色呈现时，先询问用户是否添加，仅在用户明确选择或确认后使用。" +
+            "已登记角色会按名称和别名单独检索词库角色变体；不同版本身份不能互相覆盖，也不能把档案名称或别名复制为 tag。未命中不是错词，保留触发词、权重与自定义语法。" +
             "始终输出 prompt 和 negative_prompt 两个字段；没有可靠排除项时反向留空，不为凑词把候选转成负面词。"
     }
 

@@ -47,7 +47,6 @@ internal fun AgentCharacterEditor(
     var aliases by remember(lore.id) { mutableStateOf(lore.aliases.orEmpty().joinToString("，")) }
     var words by remember(lore.id) { mutableStateOf(lore.triggerWords) }
     var fixed by remember(lore.id) { mutableStateOf(lore.fixedTriggerWords.orEmpty()) }
-    var pinned by remember(lore.id) { mutableStateOf(lore.alwaysActive == true) }
     var outfits by remember(lore.id) { mutableStateOf(lore.outfits.orEmpty()) }
     var defaultId by remember(lore.id) { mutableStateOf(lore.defaultOutfitId) }
     var advanced by remember(lore.id) { mutableStateOf(false) }
@@ -58,9 +57,9 @@ internal fun AgentCharacterEditor(
     LaunchedEffect(show, lore) {
         if (show) {
             name = lore.name; aliases = lore.aliases.orEmpty().joinToString("，"); words = lore.triggerWords
-            fixed = lore.fixedTriggerWords.orEmpty(); pinned = lore.alwaysActive == true
+            fixed = lore.fixedTriggerWords.orEmpty()
             outfits = lore.outfits.orEmpty(); defaultId = lore.defaultOutfitId
-            advanced = fixed.isNotBlank() || pinned
+            advanced = fixed.isNotBlank()
             fallbackExpanded = false
             error = null; outfitOpen = false
         }
@@ -85,7 +84,7 @@ internal fun AgentCharacterEditor(
                         if (error == null) onSave(lore.copy(
                             name = name.trim(), triggerWords = words.trim(),
                             aliases = aliases.split(Regex("[,，、;；\\n]")).map(String::trim).filter(String::isNotBlank).distinct(),
-                            fixedTriggerWords = fixed.trim(), alwaysActive = pinned,
+                            fixedTriggerWords = fixed.trim(),
                             outfits = outfits, defaultOutfitId = defaultId
                         ))
                     }, modifier = Modifier.weight(1f).testTag("lore-edit-save"),
@@ -111,14 +110,6 @@ internal fun AgentCharacterEditor(
                 TextButton(if (advanced) "收起调用设置" else "调用与漏词补齐",
                     { advanced = !advanced }, modifier = Modifier.fillMaxWidth().testTag("lore-advanced"))
                 if (advanced) {
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                            Text("绘图时始终启用")
-                            Text("不必点名；停用角色后不生效",
-                                style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
-                        }
-                        Switch(pinned, { pinned = it }, modifier = Modifier.testTag("lore-pinned"))
-                    }
                     LoreFieldLabel("固定绘画标签 · 漏写时自动补齐")
                     TextField(fixed, { fixed = it }, label = "必须保留的绘画标签（可选）", useLabelAsPlaceholder = true,
                         minLines = 2, maxLines = 3, modifier = Modifier.fillMaxWidth().testTag("lore-fixed-words"))

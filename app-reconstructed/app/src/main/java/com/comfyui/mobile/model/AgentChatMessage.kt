@@ -3,6 +3,15 @@ package com.comfyui.mobile.model
 import androidx.compose.runtime.Immutable
 
 @Immutable
+data class AgentClarification(
+    val question: String,
+    val options: List<String>,
+    val purpose: String = "general",
+    val subjectId: String? = null,
+    val sourceRequest: String? = null
+)
+
+@Immutable
 data class AgentChatMessage(
     val id: String,
     val role: String,
@@ -19,7 +28,9 @@ data class AgentChatMessage(
     val expandedNegativePrompt: String? = null,
     val negativePromptStatus: String? = null,
     val characterSelections: List<AgentCharacterSelection>? = null,
-    val characterStatus: String? = null
+    val characterStatus: String? = null,
+    /** A pending choice; tapping an option sends it as the user's next message. */
+    val clarification: AgentClarification? = null
     )
 
 @Immutable

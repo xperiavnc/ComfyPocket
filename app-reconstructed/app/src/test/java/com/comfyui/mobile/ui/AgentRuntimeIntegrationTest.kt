@@ -211,25 +211,25 @@ class AgentRuntimeIntegrationTest {
         println("CHARACTER_OUTFIT actual=${graphText()} selection=${vm.agentMessages.value.last().characterSelections} calls=${llmBodies.size}")
     }
 
-    @Test fun duplicateAliasStopsBeforeModelInsteadOfGuessingAndExactNameStillWorks() {
+    @Test fun duplicateAliasAsksBeforeModelAndSelectedNameContinues() {
         vm._characterLores.value = listOf(
             com.comfyui.mobile.model.CharacterLore("a", "星澜", "a_token", aliases = listOf("小蓝")),
             com.comfyui.mobile.model.CharacterLore("b", "月汐", "b_token", aliases = listOf("小蓝")))
         vm.sendAgentMessage("画小蓝")
         awaitDone()
-        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
-        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("角色别名有重名"))
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(listOf("星澜", "月汐"), vm.agentMessages.value.last().clarification!!.options)
         assertTrue(llmBodies.isEmpty())
         assertTrue(promptBodies.isEmpty())
         responses += success("""{"reply":"好","prompt":"b_token","negative_prompt":"","should_draw":true}""")
-        vm.sendAgentMessage("画月汐")
+        vm.sendAgentMessage("我选择：月汐")
         awaitDone()
         assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
         assertEquals("b", vm.agentMessages.value.last().characterSelections!!.single().loreId)
         assertEquals(1, llmBodies.size)
     }
 
-    @Test fun duplicateOutfitDialogueTriggerStopsBeforeModelAndWorkflow() {
+    @Test fun duplicateOutfitDialogueTriggerAsksBeforeModelAndWorkflow() {
         vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
             "star", "星澜", "xl_token", aliases = listOf("小澜"),
             outfits = listOf(
@@ -240,10 +240,31 @@ class AgentRuntimeIntegrationTest {
             )))
         vm.sendAgentMessage("画小澜，换成演出服")
         awaitDone()
-        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
-        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("服装对话触发词有重名"))
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(listOf("冬装", "便服"), vm.agentMessages.value.last().clarification!!.options)
+        assertNull(vm.agentMessages.value.last().expandedPrompt)
         assertTrue(llmBodies.isEmpty())
         assertTrue(promptBodies.isEmpty())
+    }
+
+    @Test fun modelClarificationPersistsChoicesAndDoesNotRecoverOldPromptOrTouchWorkflow() {
+        responses += success("""{"reply":"好","prompt":"cat, rain","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        val initialGraph = graphText()
+        responses += success(
+            """{"reply":"这两个要求有冲突。","prompt":"must_not_apply","negative_prompt":"must_not_apply","should_draw":true,"needs_clarification":true,"clarification_question":"使用哪一套？","clarification_options":["保留第一套","使用第二套"]}"""
+        )
+        vm.sendAgentMessage("换一套")
+        awaitDone()
+        assertEquals(initialGraph, graphText())
+        assertEquals(1, promptBodies.size)
+        val message = MainViewModelAgent.loadAgentMessages(vm).last()
+        assertEquals("使用哪一套？", message.clarification?.question)
+        assertEquals(listOf("保留第一套", "使用第二套"), message.clarification?.options)
+        assertNull(message.expandedPrompt)
+        assertNull(message.errorMessage)
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
     }
 
     @Test fun pinnedDisabledAndExplicitSkipLibraryAreResolvedByAppNotAssistantClaims() {
@@ -315,7 +336,7 @@ class AgentRuntimeIntegrationTest {
         assertTrue(vm.agentMessages.value.last().characterSelections!!.isEmpty())
     }
 
-    @Test fun registeredAliasDoesNotGetReinterpretedByOptionalOfflineCharacterDictionary() {
+    @Test fun registeredAliasKeepsDictionaryVariantsScopedToItsProfile() {
         com.comfyui.mobile.taglib.TagLibraryTestData.install(app, vm.localTagLibrary)
         vm._agentPromptSettings.value = AgentPromptSettings(true)
         val raw = kotlinx.coroutines.runBlocking { vm.localTagLibrary.forRequest("画初音未来，蓝发") }
@@ -326,14 +347,24 @@ class AgentRuntimeIntegrationTest {
         responses += success("""{"reply":"好","prompt":"1girl, blue hair","negative_prompt":"","should_draw":true}""")
         vm.sendAgentMessage("画初音未来，蓝发")
         awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("character_dictionary_optional_appearance", vm.agentMessages.value.last().clarification!!.purpose)
+        assertTrue(llmBodies.isEmpty())
+        assertTrue(promptBodies.isEmpty())
+
+        vm.sendAgentMessage("我选择：不加入，仅用角色版本标签")
+        awaitDone()
+        assertNull("unexpected clarification: ${vm.agentMessages.value.last().clarification}", vm.agentMessages.value.last().clarification)
         val report = requireNotNull(vm.agentMessages.value.last().localTagReport)
-        assertTrue(report.entries.none { it.kind == "character" })
+        assertTrue(report.entries.none { it.kind == "character" && it.profileName == null })
+        assertTrue(report.entries.any { it.kind == "character" && it.profileName == "用户登记的角色" })
         assertTrue(report.entries.any { it.name == "blue hair" })
         val messages = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
         val dictionary = messages.first { it.asJsonObject["content"].asString.contains("离线词库候选") }
             .asJsonObject["content"].asString
-        assertFalse(dictionary.contains("hatsune_miku"))
-        assertEquals("1girl, blue hair, user_exact_trigger", graphText())
+        assertTrue(dictionary.contains("hatsune_miku"))
+        assertTrue(dictionary.contains("registeredProfile"))
+        assertEquals("1girl, blue hair, hatsune miku, vocaloid, user_exact_trigger", graphText())
         assertEquals("custom", vm.agentMessages.value.last().characterSelections!!.single().loreId)
         assertEquals(1, llmBodies.size)
         assertEquals(1, promptBodies.size)

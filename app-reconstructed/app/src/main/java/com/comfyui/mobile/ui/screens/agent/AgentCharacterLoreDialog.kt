@@ -107,7 +107,7 @@ fun AgentCharacterLoreDialog(
                                     Text(lore.name, fontWeight = FontWeight.SemiBold, maxLines = 2,
                                         overflow = TextOverflow.Ellipsis)
                                     Text(
-                                        if (!lore.isEnabled) "已停用" else if (lore.alwaysActive == true) "绘图时常驻" else "按对话名称 / 别名匹配",
+                                        if (!lore.isEnabled) "已停用" else "调用方式在画风与辅助参数设置",
                                         style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                                 }
                                 Switch(lore.isEnabled, { onToggleLore(lore.id) },

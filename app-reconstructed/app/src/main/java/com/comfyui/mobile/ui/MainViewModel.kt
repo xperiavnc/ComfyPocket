@@ -2933,6 +2933,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun toggleCharacterLoreEnabled(id: String) =
         MainViewModelAgent.toggleCharacterLoreEnabled(this, id)
 
+    fun setCharacterLoreAlwaysActive(id: String, alwaysActive: Boolean) =
+        MainViewModelAgent.setCharacterLoreAlwaysActive(this, id, alwaysActive)
+
     fun removeCharacterLore(id: String) =
         MainViewModelAgent.removeCharacterLore(this, id)
 

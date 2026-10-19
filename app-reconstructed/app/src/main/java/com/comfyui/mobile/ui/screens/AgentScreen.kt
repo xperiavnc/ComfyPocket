@@ -773,6 +773,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         onToggleCharacterLore = { id ->
             viewModel.toggleCharacterLoreEnabled(id)
         },
+        onSetCharacterAlwaysActive = viewModel::setCharacterLoreAlwaysActive,
         auxDisplayNodes = auxDisplayNodes,
         onManageAuxNodesClick = { showManageAuxNodesDialog = true },
         onAuxParamChange = { nodeId, key, value ->

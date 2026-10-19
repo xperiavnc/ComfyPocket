@@ -54,6 +54,17 @@ class AgentCharacterStoreTest {
         assertEquals(lore, Gson().fromJson(Gson().toJson(backup), ConfigBackupDto::class.java).characterLores!!.single())
     }
 
+    @Test fun styleAlwaysActiveTogglePersistsWithoutChangingCharacterOrOutfits() {
+        vm.saveCharacterLore(lore.copy(alwaysActive = false))
+        vm.setCharacterLoreAlwaysActive(lore.id, true)
+        assertEquals(lore, MainViewModelAgent.loadCharacterLores(vm).single())
+        vm.setCharacterLoreAlwaysActive(lore.id, false)
+        assertEquals(lore.copy(alwaysActive = false), MainViewModelAgent.loadCharacterLores(vm).single())
+        vm.toggleCharacterLoreEnabled(lore.id)
+        vm.setCharacterLoreAlwaysActive(lore.id, true)
+        assertEquals(false, MainViewModelAgent.loadCharacterLores(vm).single().alwaysActive)
+    }
+
     @Test fun existingModelImportOrQuickEditDoesNotEraseNewCharacterFields() {
         vm.saveCharacterLore(lore)
         vm.addOrUpdateCharacterLore(lore.name, "updated_token", lore.id, false)

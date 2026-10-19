@@ -19,6 +19,8 @@ import com.comfyui.mobile.agent.AgentPromptOutput
 import com.comfyui.mobile.agent.PromptBindingMode
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.AgentChatMessage
+import com.comfyui.mobile.model.AgentClarification
+import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.taglib.LocalTagEntry
 import com.comfyui.mobile.taglib.LocalTagReport
 import com.comfyui.mobile.taglib.LocalTagLibraryState
@@ -32,6 +34,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
+import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @RunWith(RobolectricTestRunner::class)
@@ -77,6 +80,62 @@ class AgentPromptControlsTest {
             compose.onNodeWithText("好的，正在整理画面。").assertExists()
             compose.onNodeWithText("本地词库命中", substring = true).assertDoesNotExist()
             compose.onNodeWithText("blue hair · 蓝发").assertDoesNotExist()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun clarificationOptionCanBeSelectedFromTheChatBubble() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        var selected: String? = null
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    AgentBubble(
+                        msg = AgentChatMessage(
+                            "clarify", "assistant", "使用哪套服装？",
+                            clarification = AgentClarification("使用哪套服装？", listOf("冬装", "便服"))
+                        ),
+                        clarificationEnabled = true,
+                        onClarificationOption = { selected = it }
+                    )
+                } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("使用哪套服装？").assertExists()
+            compose.onNodeWithTag("agent-clarification-option-1").performClick()
+            assertEquals("便服", selected)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun alwaysActiveCharacterToggleLivesInStyleSettings() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        var changed: Pair<String, Boolean>? = null
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme { Scaffold {
+                    AgentStyleAuxParamsDialog(
+                        show = true,
+                        onDismissRequest = {},
+                        boundArtistNode = null,
+                        favoriteArtists = emptyList(),
+                        onSelectArtistNodeClick = {},
+                        onArtistChange = { _, _, _ -> },
+                        onAddFavoriteArtist = {},
+                        onRemoveFavoriteArtist = {},
+                        characterLores = listOf(CharacterLore("star", "星澜", "xl_token")),
+                        onManageCharacterLoresClick = {},
+                        onSelectCharacterLoreToEdit = {},
+                        onToggleCharacterLore = {},
+                        onSetCharacterAlwaysActive = { id, enabled -> changed = id to enabled },
+                        auxDisplayNodes = emptyList(),
+                        onManageAuxNodesClick = {},
+                        onAuxParamChange = { _, _, _ -> },
+                        onResetWorkflowClick = {}
+                    )
+                } } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithTag("lore-pinned-star").assertExists().performClick()
+            assertEquals("star" to true, changed)
         } finally { controller.pause().stop().destroy() }
     }
 

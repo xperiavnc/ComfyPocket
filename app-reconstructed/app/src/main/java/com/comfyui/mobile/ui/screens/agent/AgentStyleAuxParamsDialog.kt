@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
@@ -49,6 +50,7 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Edit
@@ -61,7 +63,7 @@ import androidx.compose.foundation.verticalScroll
 /**
  * 画风与辅助参数弹窗
  * 1. 画师串与常用候选画师
- * 2. 角色触发词库快捷入口（横向胶囊徽章，单击切换启用/停用，长按直达回填编辑）
+ * 2. 角色触发词库快捷入口（在此切换启用与绘图常驻，点击名称编辑档案）
  * 3. 辅助参数动态调节面板（使用 AgentAuxParamWidgets 高度适配）
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -79,6 +81,7 @@ fun AgentStyleAuxParamsDialog(
     onManageCharacterLoresClick: () -> Unit,
     onSelectCharacterLoreToEdit: (CharacterLore) -> Unit,
     onToggleCharacterLore: (String) -> Unit,
+    onSetCharacterAlwaysActive: (String, Boolean) -> Unit,
     auxDisplayNodes: List<EditableNode>,
     onManageAuxNodesClick: () -> Unit,
     onAuxParamChange: (nodeId: String, key: String, value: Any) -> Unit,
@@ -313,54 +316,71 @@ fun AgentStyleAuxParamsDialog(
 
                     if (characterLores.isEmpty()) {
                         Text(
-                            text = "暂无角色。点击“管理词库”登记角色、别名与服装，绘图时自动匹配。",
+                            text = "暂无角色。点击“管理词库”登记角色、别名与服装预设。",
                             style = MiuixTheme.textStyles.footnote1,
                             color = scheme.onSurfaceVariantSummary
     )
                     } else {
                         Text(
-                            text = "单击启用 / 停用，长按管理角色与服装；启用不等于常驻。",
+                            text = "角色匹配和绘图常驻在此设置；关闭角色后常驻不生效。",
                             style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
                             color = scheme.onSurfaceVariantSummary
     )
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             characterLores.forEach { lore ->
-                                val active = lore.isEnabled
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(50))
-                                        .background(
-                                            if (active) scheme.primaryContainer.copy(alpha = 0.85f)
-                                            else scheme.surface
+                                Column(
+                                    modifier = Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(scheme.surface.copy(alpha = 0.55f))
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Text(
+                                            text = lore.name,
+                                            modifier = Modifier.weight(1f)
+                                                .combinedClickable(
+                                                    onClick = { onSelectCharacterLoreToEdit(lore) },
+                                                    onLongClick = { onManageCharacterLoresClick() }
+                                                ),
+                                            style = MiuixTheme.textStyles.body2.copy(
+                                                fontWeight = if (lore.isEnabled) FontWeight.SemiBold else FontWeight.Normal
+                                            ),
+                                            color = if (lore.isEnabled) scheme.onSurface else scheme.onSurfaceVariantSummary,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
                                         )
-                                        .border(
-                                            1.dp,
-                                            if (active) scheme.primary else scheme.outline.copy(alpha = 0.25f),
-                                            RoundedCornerShape(50)
+                                        Text("启用", style = MiuixTheme.textStyles.footnote1,
+                                            color = scheme.onSurfaceVariantSummary)
+                                        Switch(
+                                            checked = lore.isEnabled,
+                                            onCheckedChange = { onToggleCharacterLore(lore.id) },
+                                            modifier = Modifier.testTag("lore-enabled-${lore.id}")
                                         )
-                                        .combinedClickable(
-                                            onClick = { onToggleCharacterLore(lore.id) },
-                                            onLongClick = { onSelectCharacterLoreToEdit(lore) }
-    )
-                                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                                    contentAlignment = Alignment.Center
-    ) {
-                                    Text(
-                                        text = if (lore.alwaysActive == true) "${lore.name} · 常驻" else lore.name,
-                                        fontSize = 12.sp,
-                                        color = if (active) scheme.primary else scheme.onSurfaceVariantSummary,
-                                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.widthIn(max = 120.dp)
-    )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text("绘图时始终启用", style = MiuixTheme.textStyles.footnote1)
+                                            Text("不必点名；停用角色后不生效",
+                                                style = MiuixTheme.textStyles.footnote1,
+                                                color = scheme.onSurfaceVariantSummary)
+                                        }
+                                        Switch(
+                                            checked = lore.alwaysActive == true,
+                                            onCheckedChange = { onSetCharacterAlwaysActive(lore.id, it) },
+                                            enabled = lore.isEnabled,
+                                            modifier = Modifier.testTag("lore-pinned-${lore.id}")
+                                        )
+                                    }
                                 }
                             }
                         }

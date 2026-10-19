@@ -29,12 +29,13 @@ object AgentPromptPolicy {
         buildString {
             appendLine("【应用输出契约】")
             appendLine("内容以用户本轮明确指令为准，完整保留其要求，不以默认人设、旧画面或词库候选擅自改写任务；以下 JSON 只是 App 接收结果的必要封装。")
-            appendLine("本次是绘图模式。外层只输出一个 JSON 对象，字段为 reply（简短中文对话）、prompt（最终正向提示词）、negative_prompt（最终反向提示词字符串）、should_draw（布尔）。没有 XML、代码块、定位行或外层解释。")
+            appendLine("本次是绘图模式。外层只输出一个 JSON 对象，字段为 reply（简短中文对话）、prompt（最终正向提示词）、negative_prompt（最终反向提示词字符串）、should_draw（布尔）、needs_clarification（布尔）、clarification_question（问题文本）、clarification_options（可选答案字符串数组）。没有 XML、代码块、定位行或外层解释。")
             appendLine("人设仅作用于 reply；分镜仅作用于 prompt 和 negative_prompt。参考资料里的“只输出正文”等格式约定只描述提示词字段，不能替换本契约。")
             appendLine("每次同时输出正向与反向字段，独立编写 negative_prompt；允许空字符串，不省略字段，也不由 App 自动补一串通用词。不要把反向写进 prompt。")
             appendLine(AgentNegativePromptPolicy.guidance)
             appendLine("用户的当前画面要求优先于旧画面；使用用户要求、模型适配与自定义分镜决定 tags、混合描述或自然语言；没有额外的 App 格式挡位。")
             appendLine("用户要图或改图时 should_draw=true；明确只要提示词、先别出图、反推提示词或纯问答时 false。")
+            appendLine("当角色版本/服装或同一档案的多个词库候选互相冲突、会实质改变画面且用户没有指定时，必须用 needs_clarification=true 提一个简短问题，给 2-5 个可点击选项；此时 prompt 与 negative_prompt 留空、should_draw=false。用户明确要求查询词库里的角色外貌/版本时，不得以未匹配的默认服装代替；如果候选含 optionalAppearance 或 optionalSpecificAppearance，必须另行询问是否添加。未明确同意绝不加入。相互冲突的候选不得混拼或猜选。无歧义时 needs_clarification=false、问题留空、选项给空数组并直接完成。")
             appendLine("【对话人设，仅作用于 reply】")
             appendLine(persona.ifBlank { defaultPersona }.trim())
             appendLine("【画面分镜，仅作用于 prompt 和 negative_prompt】")
@@ -45,7 +46,8 @@ object AgentPromptPolicy {
                 appendLine("保留已确认的身份特征与触发词；按本轮要求替换冲突的衣物、道具和姿势。")
             }
             appendLine("保留 tags、必要的主体绑定句、权重、LoRA 触发词及图中文字；不要强行把自然语言改写成标签，也不要添加 XML 或 image### 包装。")
-            appendLine("""输出示例：{"reply":"好，保留人物，换成雨夜背景。","prompt":"...","negative_prompt":"...","should_draw":true}""")
+            appendLine("""出图示例：{"reply":"好，保留人物，换成雨夜背景。","prompt":"...","negative_prompt":"","should_draw":true,"needs_clarification":false,"clarification_question":"","clarification_options":[]}""")
+            appendLine("""澄清示例：{"reply":"词库里有多个服装版本，想用哪一套？","prompt":"","negative_prompt":"","should_draw":false,"needs_clarification":true,"clarification_question":"想用哪一套服装？","clarification_options":["节日礼服","常服","只保留角色身份，不添加可选外貌"]}""")
         }
 
     fun fingerprint(value: String): String = MessageDigest.getInstance("SHA-256")

@@ -26,12 +26,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.comfyui.mobile.model.AgentChatMessage
+import com.comfyui.mobile.model.AgentClarification
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Report
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.semantics.Role
 
 @Composable
 fun FrostedChip(
@@ -64,7 +68,11 @@ fun FrostedChip(
 }
 
 @Composable
-fun AgentBubble(msg: AgentChatMessage) {
+fun AgentBubble(
+    msg: AgentChatMessage,
+    clarificationEnabled: Boolean = false,
+    onClarificationOption: (String) -> Unit = {}
+) {
     val scheme = MiuixTheme.colorScheme
     val isUser = msg.role == "user"
     val bubbleColor = if (isUser) {
@@ -192,6 +200,16 @@ fun AgentBubble(msg: AgentChatMessage) {
 
 
                 if (!isUser) {
+                    msg.clarification?.let { clarification ->
+                        if (clarification.question.isNotBlank() && !msg.content.contains(clarification.question)) {
+                            Text(clarification.question, style = MiuixTheme.textStyles.body2)
+                        }
+                        AgentClarificationChoices(
+                            clarification = clarification,
+                            enabled = clarificationEnabled,
+                            onSelect = onClarificationOption
+                        )
+                    }
                     if (!msg.characterStatus.isNullOrBlank()) {
                         Text(
                             text = msg.characterStatus,
@@ -231,6 +249,48 @@ fun AgentBubble(msg: AgentChatMessage) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun AgentClarificationChoices(
+    clarification: AgentClarification,
+    enabled: Boolean,
+    onSelect: (String) -> Unit
+) {
+    val scheme = MiuixTheme.colorScheme
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+        Text(
+            if (enabled) "选择一项继续，也可以直接回复" else "历史选项",
+            style = MiuixTheme.textStyles.footnote1,
+            color = scheme.primary
+        )
+        clarification.options.forEachIndexed { index, option ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (enabled) scheme.primaryContainer.copy(alpha = 0.5f) else scheme.surfaceContainerHigh)
+                    .clickable(enabled = enabled, role = Role.Button) { onSelect(option) }
+                    .heightIn(min = 44.dp)
+                    .padding(horizontal = 10.dp, vertical = 9.dp)
+                    .testTag("agent-clarification-option-$index"),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = option,
+                    style = MiuixTheme.textStyles.footnote1,
+                    color = if (enabled) scheme.onSurface else scheme.onSurfaceVariantSummary
+                )
+            }
+        }
+        if (clarification.options.isEmpty()) {
+            Text(
+                "也可以在输入框里直接说明你的选择。",
+                style = MiuixTheme.textStyles.footnote1,
+                color = scheme.onSurfaceVariantSummary
+            )
         }
     }
 }

@@ -97,14 +97,14 @@ class AgentCharacterLoreDialogTest {
         }
     }
 
-    @Test fun addsAliasesPinnedKeysAndOutfitAsOneStagedCharacterSave() {
+    @Test fun addsAliasesKeysAndOutfitAsOneStagedCharacterSave() {
         screen {
             node("lore-add").performClick()
             node("lore-name").performTextReplacement("新角色")
             node("lore-aliases").performTextReplacement("小新，New Star")
             node("lore-words").performTextReplacement("new_star, blue eyes")
             node("lore-advanced").performScrollTo().performClick()
-            node("lore-pinned").performScrollTo().performClick()
+            node("lore-pinned").assertDoesNotExist()
             node("lore-fixed-words").performScrollTo().performTextReplacement("new_star")
             node("lore-outfit-add").performScrollTo().performClick()
             node("outfit-name").performTextReplacement("旅行装")
@@ -118,7 +118,7 @@ class AgentCharacterLoreDialogTest {
             val saved = requireNotNull(it.saved)
             assertEquals("新角色", saved.name)
             assertEquals(listOf("小新", "New Star"), saved.aliases)
-            assertEquals(true, saved.alwaysActive)
+            assertNull(saved.alwaysActive)
             assertEquals("new_star", saved.fixedTriggerWords)
             assertEquals("travel_token, coat", saved.outfits!!.single().triggerWords)
             assertEquals(listOf("换成旅行穿搭", "穿旅行装"), saved.outfits.single().dialogueTriggers)

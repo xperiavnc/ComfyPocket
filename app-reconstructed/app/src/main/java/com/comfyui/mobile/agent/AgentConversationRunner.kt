@@ -12,7 +12,8 @@ data class AgentReply(
     /** null preserves workflow defaults; an explicit empty string clears the negative input. */
     val negativePrompt: String? = null,
     val characterSelections: List<com.comfyui.mobile.model.AgentCharacterSelection>? = null,
-    val characterStatus: String? = null
+    val characterStatus: String? = null,
+    val clarification: com.comfyui.mobile.model.AgentClarification? = null
 )
 
 data class AgentProgress(val reasoning: String, val content: String)
@@ -85,7 +86,7 @@ class AgentConversationRunner(private val session: AgentSessionController) {
         }
         check()
         observer.reply(reply)
-        val submitted = if (mode == AgentMode.DRAW) {
+        val submitted = if (mode == AgentMode.DRAW && reply.clarification == null) {
             AgentDrawExecutor(workflow).execute(reply, ::check) { session.advance(turn, it) }
         } else null
         check()

@@ -151,6 +151,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     thinkingContent = reply.thinking.takeIf(String::isNotBlank),
                                     characterSelections = reply.characterSelections,
                                     characterStatus = reply.characterStatus,
+                                    clarification = reply.clarification,
                                     isThinking = false, errorMessage = null
                                 )
                             }

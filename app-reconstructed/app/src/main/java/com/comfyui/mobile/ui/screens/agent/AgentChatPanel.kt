@@ -110,8 +110,14 @@ fun AgentChatPanel(
                 contentPadding = PaddingValues(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+                val pendingClarificationId = messages.lastOrNull()
+                    ?.takeIf { it.role == "assistant" && it.clarification != null }?.id
                 items(messages, key = { it.id }) { msg ->
-                    AgentBubble(msg)
+                    AgentBubble(
+                        msg = msg,
+                        clarificationEnabled = !busy && msg.id == pendingClarificationId,
+                        onClarificationOption = { option -> onSendMessage("我选择：$option") }
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))

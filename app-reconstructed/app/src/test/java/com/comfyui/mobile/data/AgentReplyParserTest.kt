@@ -143,4 +143,23 @@ class AgentReplyParserTest {
             """{"prompt":"cat","negative_prompt":"blurry","should_dra"""
         ).negativePrompt)
     }
+
+    @Test fun clarificationIsParsedAsAChoiceWithoutDrawing() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"词库里有多个角色版本。","prompt":"","negative_prompt":"","should_draw":false,"needs_clarification":true,"clarification_question":"使用哪种外貌？","clarification_options":["常服（casual）","节日服（festival）"]}"""
+        )
+        assertEquals("", result.prompt)
+        assertEquals(false, result.shouldDraw)
+        assertEquals("使用哪种外貌？", result.clarification?.question)
+        assertEquals(listOf("常服（casual）", "节日服（festival）"), result.clarification?.options)
+    }
+
+    @Test fun explicitClarificationFlagStillPausesWhenModelOmitsQuestion() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"选一套","prompt":"not_ready","should_draw":true,"needs_clarification":true,"clarification_options":["冬装","便服"]}"""
+        )
+        assertEquals("请先确认本轮要采用的提示词。", result.clarification?.question)
+        assertEquals(listOf("冬装", "便服"), result.clarification?.options)
+        assertNull(AgentReplyParser.parse("""{"prompt":"cat","question":"picture caption"}""").clarification)
+    }
 }

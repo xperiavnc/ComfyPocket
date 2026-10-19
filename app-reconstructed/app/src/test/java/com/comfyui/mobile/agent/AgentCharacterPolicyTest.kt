@@ -131,6 +131,159 @@ class AgentCharacterPolicyTest {
         assertEquals(listOf("穿演出服"), AgentCharacterPolicy.duplicateOutfitDialogueTriggers(duplicate.outfits.orEmpty()))
     }
 
+    @Test fun genericOutfitRequestAsksAndSelectionRoutesToTheMatchingPreset() {
+        val context = resolve("画小澜，换套衣服")
+        val clarification = requireNotNull(context.clarification)
+        assertEquals("character_outfit", clarification.purpose)
+        assertEquals(listOf("冬装", "便服", "自定义服装（按描述设计）"), clarification.options)
+
+        val pending = AgentChatMessage(
+            "choice", "assistant", clarification.question,
+            characterSelections = context.characters.map { it.selection },
+            clarification = clarification
+        )
+        val selected = resolve("我选择：便服", history = listOf(pending))
+        assertEquals(casual.id, selected.characters.single().outfit?.id)
+        assertNull(selected.clarification)
+    }
+
+    @Test fun selectingCustomOutfitDoesNotReopenPresetChoice() {
+        val context = resolve("画小澜，换套衣服")
+        val pending = AgentChatMessage(
+            "choice", "assistant", context.clarification!!.question,
+            characterSelections = context.characters.map { it.selection },
+            clarification = context.clarification
+        )
+        val selected = resolve("我选择：自定义服装（按描述设计）", history = listOf(pending))
+        assertNull(selected.characters.single().outfit)
+        assertTrue(selected.characters.single().customOutfit)
+        assertNull(selected.clarification)
+        assertTrue(selected.promptData().contains("\"自定义服装\":true"))
+    }
+
+    @Test fun incompatiblePresetNamesInOneRequestAskInsteadOfTakingTheLastOne() {
+        val context = resolve("画小澜，穿冬装或便服")
+        assertEquals(listOf("冬装", "便服"), context.clarification?.options)
+        assertNull(context.characters.single().outfit)
+    }
+
+    @Test fun multipleSavedOutfitsWithoutDefaultAskBeforeDrawing() {
+        val context = resolve("画小澜", lores = listOf(star.copy(defaultOutfitId = null)))
+        assertEquals("character_outfit", context.clarification?.purpose)
+        assertEquals(listOf("冬装", "便服", "自定义服装（按描述设计）"), context.clarification?.options)
+    }
+
+    @Test fun dictionaryVariantsAreOnlyQueriedWhenNoPresetOrCustomWardrobeWasResolved() {
+        assertTrue(AgentCharacterPolicy.dictionaryCandidateProfiles(resolve("画小澜")).isEmpty())
+
+        val noPresets = star.copy(outfits = emptyList(), defaultOutfitId = null)
+        assertEquals(
+            listOf(noPresets.name to noPresets.aliases.orEmpty()),
+            AgentCharacterPolicy.dictionaryCandidateProfiles(resolve("画小澜", lores = listOf(noPresets)))
+        )
+
+        val customWardrobe = noPresets.copy(outfits = listOf(winter))
+        assertTrue(AgentCharacterPolicy.dictionaryCandidateProfiles(
+            resolve("小澜换成红色连衣裙", lores = listOf(customWardrobe))).isEmpty())
+    }
+
+    @Test fun explicitDictionaryVariantRequestOverridesAnUnmatchedDefaultOutfit() {
+        val request = "查一下词库里星澜的角色版本"
+        val context = resolve(request)
+        assertTrue(context.dictionaryVariantRequested)
+        assertNull(context.characters.single().outfit)
+        assertTrue(context.characters.single().customOutfit)
+        assertEquals(
+            listOf(star.name to star.aliases.orEmpty()),
+            AgentCharacterPolicy.dictionaryCandidateProfiles(context, request)
+        )
+    }
+
+    @Test fun dictionaryVariantConflictAsksAndOnlyConfirmedTagsReachThePrompt() {
+        val request = "查一下词库里星澜的角色版本"
+        val context = resolve(request)
+        val entries = listOf(
+            dictionaryEntry("star_(winter)", "冬装", "star_(winter)", """{"optionalAppearance":["winter_hair"]}"""),
+            dictionaryEntry("star_(casual)", "便服", "star_(casual)", """{"optionalAppearance":["casual_hair"]}""")
+        )
+        val report = com.comfyui.mobile.taglib.LocalTagReport(entries, revision = "fixture")
+
+        val first = AgentCharacterPolicy.resolveDictionaryCandidates(context, report, request, emptyList())
+        val variantQuestion = requireNotNull(first.clarification)
+        assertEquals("character_dictionary_variant", variantQuestion.purpose)
+        assertEquals(3, variantQuestion.options.size)
+
+        val selectedVariant = variantQuestion.options.first { it.startsWith("便服") }
+        val variantPrompt = AgentChatMessage(
+            "variant-question", "assistant", variantQuestion.question,
+            characterSelections = context.characters.map { it.selection },
+            clarification = variantQuestion
+        )
+        val second = AgentCharacterPolicy.resolveDictionaryCandidates(
+            context, report, "我选择：$selectedVariant", listOf(variantPrompt))
+        val appearanceQuestion = requireNotNull(second.clarification)
+        assertEquals("character_dictionary_optional_appearance", appearanceQuestion.purpose)
+
+        val optionalPrompt = AgentChatMessage(
+            "appearance-question", "assistant", appearanceQuestion.question,
+            characterSelections = context.characters.map { it.selection },
+            clarification = appearanceQuestion
+        )
+        val declined = AgentCharacterPolicy.resolveDictionaryCandidates(
+            context, report, "我选择：不加入，仅用角色版本标签",
+            listOf(variantPrompt, AgentChatMessage("variant-answer", "user", "我选择：$selectedVariant"), optionalPrompt)
+        )
+        assertNull(declined.clarification)
+        assertEquals(listOf("star_(casual)"), declined.context.selectedDictionaryTags)
+        assertEquals(listOf("star_(casual)"), declined.report.entries.filter { it.kind == "character" }
+            .flatMap { AgentCharacterPolicy.pieces(it.trigger) })
+        assertFalse(declined.report.entries.single { it.kind == "character" }.detail.contains("optionalAppearance"))
+
+        val completed = AgentCharacterPolicy.complete(AgentReply("好", "1girl"), declined.context, request)
+        assertTrue(completed.prompt.contains("star_(casual)"))
+        assertFalse(completed.prompt.contains("star_(winter)"))
+        assertFalse(completed.prompt.contains("casual_hair"))
+    }
+
+    @Test fun dictionaryOptionalAppearanceIsAddedOnlyAfterExplicitSelection() {
+        val request = "查一下词库里星澜的角色版本"
+        val context = resolve(request)
+        val entry = dictionaryEntry(
+            "star_(festival)", "节日装", "star_(festival)",
+            """{"optionalAppearance":["festival_hair","golden_eyes"]}"""
+        )
+        val report = com.comfyui.mobile.taglib.LocalTagReport(listOf(entry), revision = "fixture")
+        val question = requireNotNull(AgentCharacterPolicy.resolveDictionaryCandidates(
+            context, report, request, emptyList()).clarification)
+        assertEquals("character_dictionary_optional_appearance", question.purpose)
+
+        val pending = AgentChatMessage(
+            "appearance-question", "assistant", question.question,
+            clarification = question
+        )
+        val accepted = AgentCharacterPolicy.resolveDictionaryCandidates(
+            context, report, "我选择：加入词库可选外貌", listOf(pending))
+        assertNull(accepted.clarification)
+        assertEquals(listOf("star_(festival)", "festival_hair", "golden_eyes"), accepted.context.selectedDictionaryTags)
+    }
+
+    @Test fun dictionaryOnlyCharactersAlsoAskAndCompleteConfirmedIdentity() {
+        val context = AgentCharacterContext()
+        val entries = listOf(
+            dictionaryEntry("star_(festival)", "节日装", "star_(festival)", ""),
+            dictionaryEntry("star_(winter)", "冬装", "star_(winter)", "")
+        )
+        val report = com.comfyui.mobile.taglib.LocalTagReport(entries, revision = "fixture")
+        val first = AgentCharacterPolicy.resolveDictionaryCandidates(context, report, "画星澜", emptyList())
+        val question = requireNotNull(first.clarification)
+        val pending = AgentChatMessage("question", "assistant", question.question, clarification = question)
+        val selected = AgentCharacterPolicy.resolveDictionaryCandidates(context, report, "我选第2个", listOf(pending))
+        assertNull(selected.clarification)
+        val output = AgentCharacterPolicy.complete(
+            AgentReply("好", "portrait, star_(festival)"), selected.context)
+        assertEquals("portrait, star_(winter)", output.prompt)
+    }
+
     @Test fun customClothingClearsDefaultAndSurvivesTheNextBackgroundEdit() {
         val first = resolve("小澜换成红色连衣裙").characters.single()
         assertNull(first.outfit)
@@ -317,4 +470,10 @@ class AgentCharacterPolicyTest {
         assertTrue(lookup.contains("blue hair"))
         assertEquals("画小澜，蓝发，rain, blue_hair", user)
     }
+
+    private fun dictionaryEntry(name: String, translation: String, trigger: String, detail: String) =
+        com.comfyui.mobile.taglib.LocalTagEntry(
+            name, translation, "character_names", "fixture", "character",
+            trigger, detail, "星澜", true, profileName = star.name
+        )
 }

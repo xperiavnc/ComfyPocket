@@ -73,6 +73,16 @@ class AgentConversationRunnerTest {
         assertEquals(0, f.submissions)
     }
 
+    @Test fun clarificationDoesNotPreparePatchOrSubmitWorkflow() = runTest {
+        val f = Fixture()
+        val clarification = com.comfyui.mobile.model.AgentClarification(
+            "使用哪套服装？", listOf("冬装", "便服"), purpose = "character_outfit")
+        assertNull(f.run(AgentReply("使用哪套服装？", shouldDraw = false, clarification = clarification)).submittedId)
+        assertEquals(listOf("llm", "progress:partial", "reply"), f.events)
+        assertEquals(0, f.submissions)
+        assertEquals("before", (((f.graph["1"] as Map<*, *>)["inputs"] as Map<*, *>)["text"]))
+    }
+
     @Test fun missingPromptDoesNotPrepareOrSubmit() = runTest {
         val f = Fixture()
         try { f.run(AgentReply("empty", shouldDraw = true)); fail() }

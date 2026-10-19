@@ -1,5 +1,6 @@
 package com.comfyui.mobile.data
 
+import com.comfyui.mobile.model.AgentClarification
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -23,13 +24,17 @@ object AgentReplyParser {
         /** Short reason when no usable prompt was extracted. */
         val error: String? = null,
         /** Missing / invalid = preserve existing; explicit "" = clear existing. */
-        val negativePrompt: String? = null
+        val negativePrompt: String? = null,
+        val clarification: AgentClarification? = null
     )
 
     private val PROMPT_KEYS = listOf("prompt", "tags", "positive")
     private val NEGATIVE_KEYS = listOf("negative_prompt", "negativePrompt", "negative", "反向提示词", "负向提示词")
     private val REPLY_KEYS = listOf("reply", "tip", "message")
     private val DRAW_KEYS = listOf("should_draw", "draw", "shouldDraw")
+    private val CLARIFICATION_KEYS = listOf("needs_clarification", "needsClarification", "ask_user")
+    private val CLARIFICATION_QUESTION_KEYS = listOf("clarification_question", "clarificationQuestion", "question")
+    private val CLARIFICATION_OPTION_KEYS = listOf("clarification_options", "clarificationOptions", "options")
 
     fun parse(raw: String, preserveNaturalLanguage: Boolean = false): Result {
         val text = stripFences(raw).trim()
@@ -44,8 +49,11 @@ object AgentReplyParser {
             val prompt = sanitizePrompt(stringField(obj, PROMPT_KEYS), preserveNaturalLanguage)
             val negative = optionalPromptField(obj, NEGATIVE_KEYS, preserveNaturalLanguage)
             val draw = boolField(obj, DRAW_KEYS)
-            if (prompt.isNotEmpty() || reply.isNotEmpty() || negative != null) {
-                return Result(reply, prompt, draw, if (prompt.isEmpty()) "JSON 中没有有效的 prompt" else null, negative)
+            val clarification = clarificationField(obj)
+            if (prompt.isNotEmpty() || reply.isNotEmpty() || negative != null || clarification != null) {
+                return Result(reply, prompt, draw,
+                    if (prompt.isEmpty() && clarification == null) "JSON 中没有有效的 prompt" else null,
+                    negative, clarification)
             }
         }
 
@@ -152,6 +160,32 @@ object AgentReplyParser {
             }
         }
         return null
+    }
+
+    private fun stringArrayField(obj: JsonObject, keys: List<String>): List<String> {
+        for (key in keys) {
+            val value = obj[key] ?: continue
+            if (!value.isJsonArray) return emptyList()
+            return value.asJsonArray.mapNotNull { item ->
+                item.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }
+                    ?.asString?.trim()?.takeIf(String::isNotBlank)
+            }.distinct().take(5)
+        }
+        return emptyList()
+    }
+
+    private fun clarificationField(obj: JsonObject): AgentClarification? {
+        val requested = boolField(obj, CLARIFICATION_KEYS)
+        if (requested == false) return null
+        val explicitQuestion = stringField(obj, listOf("clarification_question", "clarificationQuestion")).trim()
+        val question = explicitQuestion.ifBlank {
+            if (requested == true) stringField(obj, CLARIFICATION_QUESTION_KEYS).trim() else ""
+        }
+        if (question.isBlank() && requested != true) return null
+        return AgentClarification(
+            question.ifBlank { "请先确认本轮要采用的提示词。" }.take(400),
+            stringArrayField(obj, CLARIFICATION_OPTION_KEYS)
+        )
     }
 
     fun parseBoolString(s: String): Boolean? = when (s.trim().lowercase()) {

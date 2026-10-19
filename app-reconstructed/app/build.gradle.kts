@@ -13,8 +13,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 41
-        versionName = "0.0.39-character-dialogue-routing"
+        versionCode = 42
+        versionName = "0.0.40-character-tag-clarification"
     }
 
     buildFeatures {
