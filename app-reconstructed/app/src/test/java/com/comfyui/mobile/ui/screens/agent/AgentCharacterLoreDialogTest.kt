@@ -108,10 +108,12 @@ class AgentCharacterLoreDialogTest {
             node("lore-fixed-words").performScrollTo().performTextReplacement("new_star")
             node("lore-outfit-add").performScrollTo().performClick()
             node("outfit-name").performTextReplacement("旅行装")
-            node("outfit-words").performTextReplacement("travel_token, coat")
+            node("outfit-dialogue-triggers").performScrollTo().performTextReplacement("换成旅行穿搭，穿旅行装")
+            node("outfit-words").performScrollTo().performTextReplacement("travel_token, coat")
             node("outfit-save").assertIsDisplayed().performClick()
             assertNull(it.saved)
-            compose.onNodeWithText("旅行装").performScrollTo().performClick()
+            node("lore-outfit-fallback").performScrollTo().performClick()
+            compose.onAllNodesWithText("旅行装").onLast().performScrollTo().performClick()
             node("lore-edit-save").assertIsDisplayed().performClick()
             val saved = requireNotNull(it.saved)
             assertEquals("新角色", saved.name)
@@ -119,6 +121,7 @@ class AgentCharacterLoreDialogTest {
             assertEquals(true, saved.alwaysActive)
             assertEquals("new_star", saved.fixedTriggerWords)
             assertEquals("travel_token, coat", saved.outfits!!.single().triggerWords)
+            assertEquals(listOf("换成旅行穿搭", "穿旅行装"), saved.outfits.single().dialogueTriggers)
             assertEquals(saved.outfits.single().id, saved.defaultOutfitId)
         }
     }
@@ -126,7 +129,8 @@ class AgentCharacterLoreDialogTest {
     @Test fun editingOrRemovingOutfitThenCancellingDoesNotPersistAnyDraft() {
         screen(initial = lore) {
             node("lore-outfit-edit-winter").performScrollTo().performClick()
-            node("outfit-words").performTextReplacement("changed_words")
+            node("outfit-dialogue-triggers").performScrollTo().performTextReplacement("改成错误草稿")
+            node("outfit-words").performScrollTo().performTextReplacement("changed_words")
             node("outfit-cancel").performClick()
             node("lore-outfit-delete-winter").performScrollTo().performClick()
             node("lore-edit-cancel").assertIsDisplayed().performClick()
@@ -139,7 +143,7 @@ class AgentCharacterLoreDialogTest {
         screen {
             node("lore-add").performClick()
             node("lore-edit-save").performClick()
-            node("lore-edit-error").assertTextEquals("请填写角色名与触发词")
+            node("lore-edit-error").assertTextEquals("请填写角色对话识别名称与绘画外貌参考")
             node("lore-name").performTextReplacement("月汐")
             node("lore-words").performTextReplacement("new_token")
             node("lore-edit-save").performClick()
@@ -170,6 +174,7 @@ class AgentCharacterLoreDialogTest {
         screen(initial = lore) {
             node("lore-edit-save").assertIsDisplayed()
             render("editor-360-dark")
+            node("lore-outfit-fallback").performScrollTo().performClick()
             node("lore-outfit-default-winter").performScrollTo().assertIsSelected()
             node("lore-outfit-edit-winter").performScrollTo()
             node("lore-edit-save").assertIsDisplayed()
@@ -185,9 +190,11 @@ class AgentCharacterLoreDialogTest {
             node("lore-edit-cancel").assertIsDisplayed()
             node("lore-outfit-add").performScrollTo().assertIsDisplayed().performClick()
             node("outfit-name").performTextReplacement("雨衣")
-            node("outfit-words").performTextReplacement("raincoat")
+            node("outfit-dialogue-triggers").performScrollTo().performTextReplacement("换成雨衣")
+            node("outfit-words").performScrollTo().performTextReplacement("raincoat")
             node("outfit-save").assertIsDisplayed()
             node("outfit-cancel").assertIsDisplayed()
+            node("outfit-dialogue-triggers").performScrollTo()
             render("outfit-320-light-large-text")
             node("outfit-cancel").performClick()
             node("lore-edit-cancel").assertIsDisplayed().performClick()

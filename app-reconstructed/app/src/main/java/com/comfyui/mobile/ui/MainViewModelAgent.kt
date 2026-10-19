@@ -711,10 +711,17 @@ object MainViewModelAgent {
             name = lore.name.trim(), triggerWords = lore.triggerWords.trim(),
             aliases = lore.aliases.orEmpty().map(String::trim).filter(String::isNotBlank).distinct(),
             fixedTriggerWords = lore.fixedTriggerWords?.trim(),
-            outfits = lore.outfits.orEmpty().map { it.copy(name = it.name.trim(), triggerWords = it.triggerWords.trim()) }
+            outfits = lore.outfits.orEmpty().map {
+                it.copy(
+                    name = it.name.trim(),
+                    triggerWords = it.triggerWords.trim(),
+                    dialogueTriggers = it.dialogueTriggers?.map(String::trim)
+                        ?.filter(String::isNotBlank)?.distinct()
+                )
+            }
         )
         if (clean.name.isBlank() || clean.triggerWords.isBlank()) {
-            vm.showToast("请填写角色名与触发词")
+            vm.showToast("请填写角色对话识别名称与绘画外貌参考")
             return
         }
         val list = vm._characterLores.value.toMutableList()
@@ -725,7 +732,13 @@ object MainViewModelAgent {
         if (clean.outfits.orEmpty().any { it.name.isBlank() || it.triggerWords.isBlank() } ||
             clean.outfits.orEmpty().map { it.name.lowercase(java.util.Locale.ROOT) }.distinct().size != clean.outfits.orEmpty().size
         ) {
-            vm.showToast("请填写完整服装名称与触发词，服装名称不要重复")
+            vm.showToast("请填写完整服装预设名称与绘画标签，且名称不要重复")
+            return
+        }
+        val duplicateOutfitTerms = com.comfyui.mobile.agent.AgentCharacterPolicy
+            .duplicateOutfitDialogueTriggers(clean.outfits.orEmpty())
+        if (duplicateOutfitTerms.isNotEmpty()) {
+            vm.showToast("服装对话触发词重复：${duplicateOutfitTerms.joinToString("、")}")
             return
         }
         val target = clean.copy(defaultOutfitId = clean.defaultOutfitId
@@ -1205,6 +1218,10 @@ object MainViewModelAgent {
         if (characterContext.ambiguousNames.isNotEmpty()) {
             return Result.failure(com.comfyui.mobile.agent.AgentExecutionException(
                 "角色别名有重名（${characterContext.ambiguousNames.joinToString("、")}），请使用登记的完整角色名，或为角色设置不同别名。"))
+        }
+        if (characterContext.ambiguousOutfitNames.isNotEmpty()) {
+            return Result.failure(com.comfyui.mobile.agent.AgentExecutionException(
+                "服装对话触发词有重名（${characterContext.ambiguousOutfitNames.joinToString("、")}），请在服装预设中设置不同的对话触发词。"))
         }
         val systemPrompt = com.comfyui.mobile.agent.AgentPromptPolicy.system(
             persona, drawRules, emptyList()) + characterContext.promptData()

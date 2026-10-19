@@ -8,8 +8,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AgentCharacterPolicyTest {
-    private val winter = CharacterOutfit("winter", "冬装", "winter_token, coat, scarf")
-    private val casual = CharacterOutfit("casual", "便服", "casual_token, shirt")
+    private val winter = CharacterOutfit("winter", "冬装", "winter_token, coat, scarf",
+        dialogueTriggers = listOf("穿暖和的冬天衣服"))
+    private val casual = CharacterOutfit("casual", "便服", "casual_token, shirt",
+        dialogueTriggers = listOf("换成日常穿搭"))
     private val star = CharacterLore("star", "星澜", "xl_token, blue hair", aliases = listOf("小澜", "Star_Lan"),
         fixedTriggerWords = "xl_token", outfits = listOf(winter, casual), defaultOutfitId = winter.id)
     private val moon = CharacterLore("moon", "月汐", "moon_token, red eyes",
@@ -29,8 +31,10 @@ class AgentCharacterPolicyTest {
         assertEquals(star.id, resolve("画 STAR LAN").characters.single().lore.id)
         assertTrue(resolve("画一个没登记的昵称").characters.isEmpty())
         val block = resolve("画小澜").promptData()
-        assertTrue(block.contains("登记名称与别名"))
-        assertTrue(block.contains("不猜译名"))
+        assertTrue(block.contains("角色对话识别名称"))
+        assertTrue(block.contains("不是绘画标签"))
+        assertTrue(block.contains("角色对话别名"))
+        assertTrue(block.contains("只从"))
         assertTrue(block.contains("小澜"))
         assertTrue(block.contains("xl_token"))
     }
@@ -106,6 +110,27 @@ class AgentCharacterPolicyTest {
         assertFalse(block.contains("winter_token"))
     }
 
+    @Test fun dialogueOutfitPhraseSelectsSavedDrawingTagsWithoutManualSelection() {
+        val item = resolve("画小澜，换成日常穿搭").characters.single()
+        assertEquals(casual, item.outfit)
+        assertTrue(resolve("画小澜，换成日常穿搭").promptData().contains("casual_token"))
+        assertFalse(resolve("画小澜，换成日常穿搭").promptData().contains("winter_token"))
+        assertTrue(AgentCharacterPolicy.lookupText(resolve("画小澜，换成日常穿搭"), "画小澜，换成日常穿搭")
+            .contains("画"))
+        assertFalse(AgentCharacterPolicy.lookupText(resolve("画小澜，换成日常穿搭"), "画小澜，换成日常穿搭")
+            .contains("日常穿搭"))
+    }
+
+    @Test fun duplicateOutfitDialoguePhraseIsReportedInsteadOfChoosingAListItem() {
+        val duplicate = star.copy(outfits = listOf(
+            winter.copy(dialogueTriggers = listOf("穿演出服")),
+            casual.copy(dialogueTriggers = listOf("穿演出服"))
+        ))
+        val context = resolve("画小澜，穿演出服", lores = listOf(duplicate))
+        assertEquals(listOf("冬装", "便服"), context.ambiguousOutfitNames)
+        assertEquals(listOf("穿演出服"), AgentCharacterPolicy.duplicateOutfitDialogueTriggers(duplicate.outfits.orEmpty()))
+    }
+
     @Test fun customClothingClearsDefaultAndSurvivesTheNextBackgroundEdit() {
         val first = resolve("小澜换成红色连衣裙").characters.single()
         assertNull(first.outfit)
@@ -137,6 +162,64 @@ class AgentCharacterPolicyTest {
         assertEquals("blurry", result.negativePrompt)
         assertEquals(listOf(AgentCharacterSelection(star.id, winter.id, false)), result.characterSelections)
         assertTrue(result.characterStatus!!.contains("补齐 4 项"))
+    }
+
+    @Test fun characterNamesAliasesAndOutfitDialoguePhrasesNeverBecomeImageTags() {
+        val special = star.copy(name = "大肥鱼", aliases = listOf("deepseek"))
+        val context = resolve("画deepseek，换成日常穿搭", lores = listOf(special))
+        val result = AgentCharacterPolicy.complete(
+            AgentReply("好的", "1girl, 大肥鱼, deepseek, 日常穿搭", negativePrompt = "deepseek, blurry"),
+            context, "画deepseek，换成日常穿搭")
+        assertEquals("1girl, xl_token, casual_token, shirt", result.prompt)
+        assertEquals("blurry", result.negativePrompt)
+        assertTrue(result.characterStatus!!.contains("角色对话识别词"))
+        assertFalse(result.prompt.contains("大肥鱼"))
+        assertFalse(result.prompt.contains("deepseek"))
+        assertFalse(result.prompt.contains("日常穿搭"))
+    }
+
+    @Test fun unselectedLibraryNamesAreAlsoFilteredFromModelPromptOutput() {
+        val context = resolve("画一只猫")
+        val result = AgentCharacterPolicy.complete(
+            AgentReply("好的", "cat, 星澜, 小澜, 冬装, rain", negativePrompt = "小澜, blurry"),
+            context, "画一只猫")
+        assertTrue(context.characters.isEmpty())
+        assertEquals("cat, rain", result.prompt)
+        assertEquals("blurry", result.negativePrompt)
+        assertTrue(result.characterStatus!!.contains("移除"))
+        assertTrue(result.characterSelections!!.isEmpty())
+    }
+
+    @Test fun identityFilteringDoesNotRemoveWordsMerelyContainedInLongAliases() {
+        val longAlias = star.copy(aliases = listOf("the blue-haired traveler"))
+        val context = resolve("画风景", lores = listOf(longAlias))
+        val result = AgentCharacterPolicy.complete(
+            AgentReply("好", "landscape, blue hair, rain"), context, "画风景")
+        assertEquals("landscape, blue hair, rain", result.prompt)
+    }
+
+    @Test fun explicitlyDeclaredDrawingTagCanShareADialogueNameAndOriginalFormattingIsRetained() {
+        val role = star.copy(name = "xl_token", aliases = listOf("blue hair"))
+        val context = resolve("画xl_token", lores = listOf(role))
+        val source = "1girl,\nxl_token, blue hair, winter_token, coat, scarf"
+        assertEquals(source, AgentCharacterPolicy.complete(AgentReply("好", source), context).prompt)
+    }
+
+    @Test fun cleaningOnlyDialogueTermsFromAnExplicitNegativeStillClearsItsInput() {
+        val result = complete("画星澜", "1girl").let {
+            AgentCharacterPolicy.complete(it.copy(negativePrompt = "小澜"), resolve("画星澜"))
+        }
+        assertEquals("", result.negativePrompt)
+    }
+
+    @Test fun explicitlySkippingArchiveStillTreatsRegisteredNamesAsDialogueOnlyMetadata() {
+        val context = resolve("这次不用角色库，画星澜")
+        assertTrue(context.characters.isEmpty())
+        assertTrue(context.promptData().isEmpty())
+        val result = AgentCharacterPolicy.complete(
+            AgentReply("好", "portrait, 星澜, rain"), context, "这次不用角色库，画星澜")
+        assertEquals("portrait, rain", result.prompt)
+        assertTrue(result.characterSelections!!.isEmpty())
     }
 
     @Test fun weightedExistingKeysAreNotDuplicatedAndModelSyntaxIsPreserved() {

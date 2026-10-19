@@ -158,31 +158,54 @@ class AgentRuntimeIntegrationTest {
         assertEquals(2, promptBodies.size)
     }
 
+    @Test fun dialogueIdentityNeverLeaksIntoWorkflowPrompt() {
+        withNegativeWorkflow()
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "whale", "大肥鱼", "ds_whalemaid", aliases = listOf("deepseek"),
+            fixedTriggerWords = "ds_whalemaid"))
+        responses += success("""{"reply":"好","prompt":"1girl, 大肥鱼, (deepseek:1.2), ds_whalemaid, blue hair","negative_prompt":"blurry","should_draw":true}""")
+        vm.sendAgentMessage("画deepseek")
+        awaitDone()
+        println("DIALOGUE_ROUTING positive=${graphText()} negative=${submittedNegative()} calls=${llmBodies.size} submissions=${promptBodies.size}")
+        assertEquals("1girl, ds_whalemaid, blue hair", graphText())
+        assertEquals("blurry", submittedNegative())
+        assertEquals(vm.agentPromptOutput.value.positive, graphText())
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+    }
+
     @Test fun registeredAliasOutfitAndMissingFixedKeysReachActualWorkflowAndPersistAcrossReload() {
         val winter = com.comfyui.mobile.model.CharacterOutfit("winter", "冬装", "winter_token, coat")
-        val casual = com.comfyui.mobile.model.CharacterOutfit("casual", "便服", "casual_token, shirt")
+        val casual = com.comfyui.mobile.model.CharacterOutfit("casual", "便服", "casual_token, shirt",
+            dialogueTriggers = listOf("换成日常穿搭", "穿轻便衣服"))
         vm.saveCharacterLore(com.comfyui.mobile.model.CharacterLore(
-            id = "star", name = "星澜", triggerWords = "xl_token, blue hair",
-            aliases = listOf("小澜"), fixedTriggerWords = "xl_token",
+            id = "star", name = "大肥鱼", triggerWords = "ds_whalemaid, blue hair",
+            aliases = listOf("deepseek"), fixedTriggerWords = "ds_whalemaid",
             outfits = listOf(winter, casual), defaultOutfitId = winter.id))
-        responses += success("""{"reply":"好","prompt":"1girl, rain","negative_prompt":"","should_draw":true}""")
-        vm.sendAgentMessage("画小澜")
+        responses += success("""{"reply":"好","prompt":"1girl, 大肥鱼, deepseek, rain","negative_prompt":"deepseek","should_draw":true}""")
+        vm.sendAgentMessage("画deepseek")
         awaitDone()
-        assertEquals("1girl, rain, xl_token, winter_token, coat", graphText())
+        assertEquals("1girl, rain, ds_whalemaid, winter_token, coat", graphText())
         assertTrue(vm.agentMessages.value.last().characterStatus!!.contains("补齐 3 项"))
         vm._agentMessages.value = MainViewModelAgent.loadAgentMessages(vm)
         assertEquals("star", vm.agentMessages.value.last().characterSelections!!.single().loreId)
         assertEquals("winter", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
-        responses += success("""{"reply":"好","prompt":"1girl, xl_token, winter_token, coat","negative_prompt":"","should_draw":true}""")
-        vm.sendAgentMessage("她换成便服")
+        responses += success("""{"reply":"好","prompt":"1girl, 大肥鱼, deepseek, winter_token, coat, 换成日常穿搭","negative_prompt":"deepseek, blurry","should_draw":true}""")
+        vm.sendAgentMessage("她换成日常穿搭")
         awaitDone()
-        assertEquals("1girl, xl_token, casual_token, shirt", graphText())
+        assertEquals("1girl, ds_whalemaid, casual_token, shirt", graphText())
         assertEquals("casual", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
         val messages = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
         val system = messages.first().asJsonObject["content"].asString
         assertTrue(system.contains("casual_token"))
         assertFalse(system.contains("winter_token"))
-        assertTrue(system.contains("不猜译名"))
+        assertTrue(system.contains("AI 不需要自行选择角色或服装"))
+        assertFalse(system.contains("换成日常穿搭"))
+        assertTrue(system.contains("App已按用户对话选定的服装预设绘画标签"))
+        assertTrue(system.contains("不是绘画标签"))
+        assertFalse((graphText() as String).contains("大肥鱼"))
+        assertFalse((graphText() as String).contains("deepseek"))
+        assertFalse((graphText() as String).contains("日常穿搭"))
         assertEquals(2, llmBodies.size)
         assertEquals(2, promptBodies.size)
         println("CHARACTER_OUTFIT actual=${graphText()} selection=${vm.agentMessages.value.last().characterSelections} calls=${llmBodies.size}")
@@ -204,6 +227,23 @@ class AgentRuntimeIntegrationTest {
         assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
         assertEquals("b", vm.agentMessages.value.last().characterSelections!!.single().loreId)
         assertEquals(1, llmBodies.size)
+    }
+
+    @Test fun duplicateOutfitDialogueTriggerStopsBeforeModelAndWorkflow() {
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "star", "星澜", "xl_token", aliases = listOf("小澜"),
+            outfits = listOf(
+                com.comfyui.mobile.model.CharacterOutfit("one", "冬装", "winter_token",
+                    dialogueTriggers = listOf("换成演出服")),
+                com.comfyui.mobile.model.CharacterOutfit("two", "便服", "casual_token",
+                    dialogueTriggers = listOf("换成演出服"))
+            )))
+        vm.sendAgentMessage("画小澜，换成演出服")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("服装对话触发词有重名"))
+        assertTrue(llmBodies.isEmpty())
+        assertTrue(promptBodies.isEmpty())
     }
 
     @Test fun pinnedDisabledAndExplicitSkipLibraryAreResolvedByAppNotAssistantClaims() {
@@ -252,10 +292,9 @@ class AgentRuntimeIntegrationTest {
         assertTrue(vm.agentMessages.value.last().characterSelections!!.isEmpty())
         val system = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"]
             .asJsonArray.first().asJsonObject["content"].asString
-        assertTrue(system.contains("星澜"))
-        assertTrue(system.contains("小澜"))
+        assertFalse(system.contains("星澜"))
+        assertFalse(system.contains("小澜"))
         assertFalse(system.contains("xl_token"))
-        assertTrue(system.contains("不从上表擅自选择未关联角色"))
         assertEquals(1, promptBodies.size)
     }
 

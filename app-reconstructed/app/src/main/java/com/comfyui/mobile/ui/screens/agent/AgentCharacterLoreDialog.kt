@@ -61,7 +61,7 @@ fun AgentCharacterLoreDialog(
         }
     }
     val scheme = MiuixTheme.colorScheme
-    OverlayDialog(show = show, title = "角色 / LoRA 触发词库", onDismissRequest = onDismissRequest) {
+    OverlayDialog(show = show, title = "Agent 角色档案库", onDismissRequest = onDismissRequest) {
         DialogFormColumn(
             scrollMaxFraction = .58f, scrollMaxCap = 500.dp,
             footer = {
@@ -70,12 +70,12 @@ fun AgentCharacterLoreDialog(
             }
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("绘图时按名称或别名匹配，续改沿用上一画面；常驻角色每轮提供。服装按角色单独保存。",
+                Text("角色名称和别名只匹配 AI 对话，不是绘画标签。服装预设按对话触发词自动匹配；绘画标签与识别词分开保存。",
                     style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextField(query, { query = it }, modifier = Modifier.weight(1f).testTag("lore-search"),
-                        label = "名称 / 别名", useLabelAsPlaceholder = true, singleLine = true)
+                        label = "对话名称 / 别名", useLabelAsPlaceholder = true, singleLine = true)
                     Button(onClick = {
                         target = CharacterLore(name = "", triggerWords = "")
                         isNew = true
@@ -107,7 +107,7 @@ fun AgentCharacterLoreDialog(
                                     Text(lore.name, fontWeight = FontWeight.SemiBold, maxLines = 2,
                                         overflow = TextOverflow.Ellipsis)
                                     Text(
-                                        if (!lore.isEnabled) "已停用" else if (lore.alwaysActive == true) "绘图时常驻" else "按名称 / 别名匹配",
+                                        if (!lore.isEnabled) "已停用" else if (lore.alwaysActive == true) "绘图时常驻" else "按对话名称 / 别名匹配",
                                         style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                                 }
                                 Switch(lore.isEnabled, { onToggleLore(lore.id) },

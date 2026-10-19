@@ -20,7 +20,8 @@ import org.robolectric.annotation.Config
 class AgentCharacterStoreTest {
     private lateinit var vm: MainViewModel
     private lateinit var store: ViewModelStore
-    private val outfit = CharacterOutfit("winter", "冬装", "winter_token, coat")
+    private val outfit = CharacterOutfit("winter", "冬装", "winter_token, coat",
+        dialogueTriggers = listOf("换成冬日穿搭", "穿上保暖衣"))
     private val lore = CharacterLore("star", "星澜", "xl_token, blue hair", aliases = listOf("小澜"),
         alwaysActive = true, fixedTriggerWords = "xl_token", outfits = listOf(outfit), defaultOutfitId = outfit.id)
 
@@ -38,6 +39,9 @@ class AgentCharacterStoreTest {
         assertNull(old.aliases)
         assertNull(old.outfits)
         assertNull(old.alwaysActive)
+        val oldOutfit = Gson().fromJson(
+            """{"id":"old","name":"便服","triggerWords":"shirt"}""", CharacterOutfit::class.java)
+        assertNull(oldOutfit.dialogueTriggers)
         val backup = Gson().fromJson("""{"characterLores":[{"id":"old","name":"旧角色","triggerWords":"old_token"}]}""",
             ConfigBackupDto::class.java)
         assertEquals("old_token", backup.characterLores!!.single().triggerWords)

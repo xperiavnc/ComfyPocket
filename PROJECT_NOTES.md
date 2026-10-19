@@ -57,7 +57,7 @@ cd app-reconstructed
 
 调试 APK 按 **软件名＋版本号** 自动导出到
 `app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk`，
-例如 `ComfyPocket-0.0.38-character-outfits.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
+例如 `ComfyPocket-0.0.39-character-dialogue-routing.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
 应用安装后的显示名也是 **ComfyPocket**；AGP 内部 `app-debug.apk` 仍保留以兼容构建元数据。
 安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
@@ -83,6 +83,12 @@ Agent、控制页和应用页共用的**本地模型选择器**接通模型中�
 源码构建词库包使用 `python app-reconstructed/tools/pack_local_tag_library.py`，不需要重新下载数据。
 
 ## 当前验证状态
+
+- `0.0.39-character-dialogue-routing`（versionCode 41）：角色名称 / 别名与绘画标签分离，提示词只接收已匹配角色的绘画档案；
+  服装预设增加独立 AI 对话触发词，App 依据用户句子自动选择预设并提供对应绘画标签，不需用户手动挑选本轮服装；
+  过滤误入正反向输出的角色识别词与服装对话词，旧预设名称匹配保留兼容，预设触发词歧义时在模型请求和工作流提交前报错。
+  debug 构建与 741 项测试通过，覆盖自动服装路由、角色名称 / 别名过滤、预设歧义阻断、旧 JSON 兼容和窄屏大字体编辑。
+  APK SHA-256：`40f7cc5cdc3dc06e6db18cc3c153ccee54a90838c8709d05143e83363423a174`。
 
 - `0.0.38-character-outfits`（versionCode 40）：角色库由 App 本地确定名称 / 手填别名匹配，
   直接注入本轮档案，不依赖 AI 记得调用或猜别名。续改保留已确认角色 / 服装，

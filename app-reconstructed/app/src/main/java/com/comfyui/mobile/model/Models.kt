@@ -330,7 +330,9 @@ data class CharacterLore(
 data class CharacterOutfit(
     val id: String = java.util.UUID.randomUUID().toString(),
     val name: String,
-    val triggerWords: String
+    val triggerWords: String,
+    /** Dialogue phrases select this preset; null keeps the preset name as the legacy fallback. */
+    val dialogueTriggers: List<String>? = null
 )
 
 /** App-resolved IDs, never inferred from an assistant's free-form claim. */
