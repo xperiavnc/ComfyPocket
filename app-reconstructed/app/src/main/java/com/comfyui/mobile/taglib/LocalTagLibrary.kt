@@ -2,11 +2,8 @@ package com.comfyui.mobile.taglib
 
 import android.content.Context
 import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import com.google.gson.Gson
 import com.google.gson.JsonParser
-import java.io.File
-import java.security.MessageDigest
 import java.text.Normalizer
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -24,56 +21,25 @@ data class LocalTagReport(
     val entries: List<LocalTagEntry> = emptyList(),
     val error: String? = null,
     val revision: String = "",
-    val queriedTerms: Int = 0
+    val queriedTerms: Int = 0,
+    val available: Boolean = true
 ) {
     val summary: String get() = when {
+        !available -> "未安装本地词库"
         error != null -> "本地词库读取失败，保留原始要求"
         entries.isEmpty() -> "本地词库未命中，保留自定义词"
         else -> "本地词库命中 ${entries.size} 项 · 无联网查询"
     }
 }
 
-/** Packaged SQLite catalogue. No HTTP client, remote tool call or second model revision. */
+/** Optional SQLite catalogue. No HTTP client, remote tool call or second model revision. */
 class LocalTagLibrary(context: Context) {
-    private val app = context.applicationContext
+    val store = LocalTagLibraryStore(context)
     private val gson = Gson()
-    private val manifest by lazy {
-        app.assets.open("tag-library/manifest.json").bufferedReader().use {
-            JsonParser.parseString(it.readText()).asJsonObject
-        }
-    }
-    val revision: String get() = manifest["revision"].asString
-    val counts: Pair<Int, Int> get() = manifest["counts"].asJsonObject.let {
-        it["tags"].asInt to it["characters"].asInt
-    }
-    val translatedCount: Int get() = manifest["translatedEntries"].asInt
-    val untranslatedCount: Int get() = manifest["untranslatedEntries"]?.asInt ?: 0
-
-    @Synchronized private fun databaseFile(): File {
-        val expected = manifest["sha256"].asString
-        val dir = File(app.noBackupFilesDir, "tag-library").apply { mkdirs() }
-        val target = File(dir, "catalogue-${expected.take(16)}.db")
-        if (!target.exists() || target.length() != manifest["bytes"].asLong) {
-            val temporary = File(dir, "${target.name}.part")
-            app.assets.open("tag-library/catalogue-v1.db").use { input ->
-                temporary.outputStream().use { input.copyTo(it) }
-            }
-            val hash = MessageDigest.getInstance("SHA-256")
-            temporary.inputStream().use { input ->
-                val bytes = ByteArray(65536)
-                while (true) {
-                    val size = input.read(bytes)
-                    if (size < 0) break
-                    hash.update(bytes, 0, size)
-                }
-            }
-            check(hash.digest().joinToString("") { "%02x".format(it) } == expected) { "词库资源校验失败" }
-            check(temporary.renameTo(target)) { "词库初始化失败" }
-        }
-        return target
-    }
-
-    private fun open() = SQLiteDatabase.openDatabase(databaseFile().path, null, SQLiteDatabase.OPEN_READONLY)
+    val revision: String get() = store.state.value.installed?.revision.orEmpty()
+    val counts: Pair<Int, Int> get() = store.state.value.installed.let { (it?.tags ?: 0) to (it?.characters ?: 0) }
+    val translatedCount: Int get() = store.state.value.installed?.translatedEntries ?: 0
+    val untranslatedCount: Int get() = store.state.value.installed?.untranslatedEntries ?: 0
 
     suspend fun search(query: String, kind: String = "tag", limit: Int = 24): List<LocalTagEntry> =
         withContext(Dispatchers.IO) {
@@ -82,7 +48,7 @@ class LocalTagLibrary(context: Context) {
             require(kind in setOf("tag", "character"))
             currentCoroutineContext().ensureActive()
             val escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            val rows = open().use { db ->
+            val rows = store.read { db, _ ->
                 // Force lookup-first: a kind-first plan would rescan lookup once per entry.
                 db.rawQuery(
                     """SELECT e.*, COALESCE(MAX(CASE WHEN l.term=? THEN l.term END), MIN(l.term)) AS matched
@@ -91,7 +57,7 @@ class LocalTagLibrary(context: Context) {
                        GROUP BY e.id ORDER BY MAX(l.term=?) DESC, MIN(length(l.term)), e.post_count DESC, e.name LIMIT ?""",
                     arrayOf(term, kind, "%$escaped%", term, limit.coerceIn(1, 50).toString())
                 ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.entry(term)) } }
-            }
+            }.orEmpty()
             currentCoroutineContext().ensureActive()
             rows
         }
@@ -100,8 +66,11 @@ class LocalTagLibrary(context: Context) {
     suspend fun forRequest(requirements: String): LocalTagReport = withContext(Dispatchers.IO) {
         currentCoroutineContext().ensureActive()
         val terms = queryTerms(requirements)
-        if (terms.isEmpty()) return@withContext LocalTagReport(revision = revision)
-        val results = open().use { db ->
+        if (terms.isEmpty()) return@withContext LocalTagReport(
+            revision = revision, available = store.state.value.installed != null)
+        var catalogueRevision = ""
+        val results = store.read { db, info ->
+            catalogueRevision = info.revision
             val placeholders = terms.joinToString(",") { "?" }
             db.rawQuery(
                 """SELECT e.*, l.term AS matched, 1 AS exact_match FROM lookup l
@@ -111,12 +80,12 @@ class LocalTagLibrary(context: Context) {
                    e.post_count DESC, e.id LIMIT 120""",
                 terms.toTypedArray()
             ).use { cursor -> buildList { while (cursor.moveToNext()) add(cursor.entry()) } }
-        }.distinctBy { it.kind to it.name }
+        }?.distinctBy { it.kind to it.name } ?: return@withContext LocalTagReport(available = false)
         currentCoroutineContext().ensureActive()
         // Character identities stay separate; no mass insertion of optional appearances.
         val picked = results.filter { it.kind == "tag" }.take(14) +
             results.filter { it.kind == "character" }.take(4)
-        LocalTagReport(picked, revision = revision, queriedTerms = terms.size)
+        LocalTagReport(picked, revision = catalogueRevision, queriedTerms = terms.size)
     }
 
     fun context(report: LocalTagReport): String {

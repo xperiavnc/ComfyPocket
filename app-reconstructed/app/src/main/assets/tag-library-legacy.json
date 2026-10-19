@@ -1,0 +1,12 @@
+{
+  "schema": 2,
+  "revision": "full-toolbox-v3-fa8003a0311f6b09",
+  "counts": {
+    "tags": 141007,
+    "characters": 101952
+  },
+  "translatedEntries": 240851,
+  "untranslatedEntries": 2108,
+  "bytes": 64421888,
+  "sha256": "5a5ae7ed537ca1e917d79510dd09139e0a7b0fc66e62c844eaff993bd91eb744"
+}

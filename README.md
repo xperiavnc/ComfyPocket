@@ -14,7 +14,7 @@ Android 端 ComfyUI 控制客户端，包含本地 ComfyUI 与 RunningHub 后端
 - `app-reconstructed/DANBOORU_GALLERY_PLAN.md`：Danbooru 原生画廊的实施记录、账号/代理操作与验证边界。
 - `app-reconstructed/MATERIAL.md`：两种底栏风格、老版页面动画、预览移除与历史迁移说明。
 - `app-reconstructed/AGENT.md`：Agent 第一阶段执行内核与思考强度档位说明。
-- `app-reconstructed/TAG_LIBRARY.md`：内置词库来源、查询边界与可复现构建方式。
+- `app-reconstructed/TAG_LIBRARY.md`：可选词库安装、来源、查询边界与可复现构建方式。
 - `app-reconstructed/ComfyUI-Mobile-Bridge/README.md`：配套插件安装和 ComfyUI 设置页配置。
 
 ## Civitai 集市
@@ -57,7 +57,21 @@ cd app-reconstructed
 安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
 
+## 可选词库
+
+默认 APK 不携带词库。需要离线标签和角色中英查询时，单独获取 `ComfyPocket-tag-library.zip`，
+在 **Agent 设置 → 可选资源 → 本地词库 → 导入词库** 中选择即可。安装后自动启用，支持更新和移除；
+不安装也可正常聊天和生图。升级保留已安装词库，并识别旧版已经初始化的当前完整数据库。
+源码构建词库包使用 `python app-reconstructed/tools/pack_local_tag_library.py`，不需要重新下载数据。
+
 ## 当前验证状态
+
+- `0.0.34-optional-tags`（versionCode 36）：完整中英标签与角色词库改为可选 ZIP 安装包，
+  默认 APK 不包含数据库或原始词表，83,723,800 → 58,834,055 bytes，减少约 29.73%。
+  完整词库包 25,268,492 bytes，支持导入、校验、更新、移除、旧版已初始化数据迁移及无词库正常生图。
+  Agent 设置整理为模型服务、提示词和可选资源；连接 / 生成参数与长说明折叠，提示词预览和编辑更紧凑，
+  保留配置保存反馈、正反向流程、两种底栏及原有页面动画。debug APK 构建及 102 套 / 633 项 Android 测试、
+  4 项词库构建规则测试通过；已检查深色与 320dp 浅色原生渲染图，不代表手机帧率实测。
 
 - `0.0.33-toast-feedback`（versionCode 35）：全应用短操作提示恢复为 P2 之前的系统 Toast，
   移除前台 Material Snackbar；页面、弹窗和 ViewModel 共用主线程提示入口，新消息替换旧消息，

@@ -1,8 +1,10 @@
 package com.comfyui.mobile.ui.screens.agent
 
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -14,14 +16,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.agent.AgentPromptSettings
 import com.comfyui.mobile.taglib.LocalTagEntry
-import com.comfyui.mobile.taglib.LocalTagLibrary
+import com.comfyui.mobile.taglib.LocalTagLibraryState
+import com.comfyui.mobile.ui.components.rememberDialogDismiss
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -30,71 +35,128 @@ import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
+import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 @Composable
 internal fun AgentLocalTagSettings(
     settings: AgentPromptSettings,
+    libraryState: LocalTagLibraryState,
     search: suspend (String, String) -> List<LocalTagEntry>,
+    onImport: () -> Unit,
+    onRemove: () -> Unit,
     onSave: (AgentPromptSettings) -> Unit
 ) {
-    val app = LocalContext.current.applicationContext
-    val library = remember(app) { LocalTagLibrary(app) }
-    val counts = library.counts
-    var draft by remember(settings) { mutableStateOf(settings) }
-    var query by remember { mutableStateOf("") }
-    var kind by remember { mutableStateOf("tag") }
+    val scheme = MiuixTheme.colorScheme
+    val info = libraryState.installed
+    val ready = info != null && !libraryState.busy && !libraryState.checking
+    var query by rememberSaveable { mutableStateOf("") }
+    var kind by rememberSaveable { mutableStateOf("tag") }
+    var lookupExpanded by rememberSaveable { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<LocalTagEntry>>(emptyList()) }
-    var status by remember { mutableStateOf("输入中文、英文或别名查询") }
-    LaunchedEffect(query, kind) {
+    var status by remember { mutableStateOf("") }
+    LaunchedEffect(query, kind, info?.sha256, ready, lookupExpanded) {
         results = emptyList()
-        if (query.isBlank()) { status = "输入中文、英文或别名查询"; return@LaunchedEffect }
-        status = "正在离线查询…"
+        status = ""
+        if (!ready || !lookupExpanded || query.isBlank()) return@LaunchedEffect
+        status = "正在查询…"
         delay(250)
         try {
             results = search(query, kind)
-            status = if (results.isEmpty()) "未命中，仍可使用自定义提示词" else "找到 ${results.size} 项候选"
-        } catch (e: CancellationException) {
-            throw e
+            status = if (results.isEmpty()) "未找到匹配词，可继续使用自定义提示词" else "找到 ${results.size} 项"
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Exception) {
-            status = "本地词库读取失败，请重试；原始提示词不受影响"
+            status = "词库读取失败，请重新导入"
         }
     }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("本地词库", style = MiuixTheme.textStyles.title4)
-            Text("人设只管对话，分镜负责编写正向和反向；JSON 格式由 App 统一。",
-                style = MiuixTheme.textStyles.footnote1)
+    Card(Modifier.fillMaxWidth(), insideMargin = PaddingValues(18.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("绘图前查询本地词库", Modifier.weight(1f))
-                Switch(checked = draft.useLocalLibrary, onCheckedChange = { draft = draft.copy(useLocalLibrary = it) })
+                Text("本地词库", Modifier.weight(1f), style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
+                Text(if (info == null) "未安装" else "已安装", style = MiuixTheme.textStyles.footnote1,
+                    color = if (info == null) scheme.onSurfaceVariantSummary else scheme.primary)
             }
-            Text("内置 ${String.format(Locale.ROOT, "%,d", counts.first)} 个标签、${String.format(Locale.ROOT, "%,d", counts.second)} 个角色；${String.format(Locale.ROOT, "%,d", library.translatedCount)} 项有中文对照，${String.format(Locale.ROOT, "%,d", library.untranslatedCount)} 项保留上游英文待补译。ai-tag-toolbox 全部词表、别名、角色与专用特征均已收录。可按中文、英文和别名离线查询，再由 Agent 编写正向和反向；未命中保留原词。",
-                style = MiuixTheme.textStyles.footnote1)
-            Button(onClick = { onSave(draft) }, colors = ButtonDefaults.buttonColorsPrimary()) {
-                Text("保存词库设置")
-            }
-            Text("本地查词（不调用 AI、不出图）", style = MiuixTheme.textStyles.body2)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("tag" to "普通词", "character" to "角色").forEach { (id, title) ->
-                    Button(onClick = { kind = id },
-                        colors = if (kind == id) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors()) {
-                        Text(title)
+            when {
+                libraryState.checking -> Text("正在检查本地资源…", style = MiuixTheme.textStyles.footnote1)
+                libraryState.busy -> Text(libraryState.operation, style = MiuixTheme.textStyles.footnote1, color = scheme.primary)
+                info == null -> Text("按需导入标签与角色词库，支持中文、英文和别名离线查词。",
+                    style = MiuixTheme.textStyles.body2, color = scheme.onSurfaceVariantSummary)
+                else -> {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(String.format(Locale.ROOT, "%,d", info.tags), style = MiuixTheme.textStyles.title3)
+                            Text("标签", style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(String.format(Locale.ROOT, "%,d", info.characters), style = MiuixTheme.textStyles.title3)
+                            Text("角色", style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("绘图前查词", style = MiuixTheme.textStyles.body1)
+                            Text("修改后立即保存", style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
+                        }
+                        Switch(settings.useLocalLibrary, onCheckedChange = { onSave(settings.copy(useLocalLibrary = it)) },
+                            enabled = ready, modifier = Modifier.testTag("agent-local-tags-enabled"))
                     }
                 }
             }
-            TextField(value = query, onValueChange = { query = it.take(96) }, label = "中文 / 英文 / 别名",
-                singleLine = true, modifier = Modifier.fillMaxWidth())
-            Text(status, style = MiuixTheme.textStyles.footnote1)
-            if (results.isNotEmpty()) Column(
-                Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                results.forEach { entry -> LocalTagEntryText(entry) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Button(onClick = onImport, enabled = !libraryState.busy && !libraryState.checking,
+                    colors = if (info == null) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors()) {
+                    Text(if (info == null) "导入词库" else "更新词库")
+                }
+                if (info != null) {
+                    TextButton(if (lookupExpanded) "收起查词" else "离线查词", enabled = ready,
+                        onClick = { lookupExpanded = !lookupExpanded })
+                    TextButton("移除", enabled = ready, onClick = { confirmRemove = true })
+                }
             }
-            Text("来源：ai-tag-toolbox 与 ffdkj Danbooru 中英对照固定快照；角色身份与可选外貌分开。来源、翻译限制和重建方式见项目词库说明。",
-                style = MiuixTheme.textStyles.footnote1)
+            AnimatedVisibility(lookupExpanded && info != null) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("tag" to "普通词", "character" to "角色").forEach { (id, title) ->
+                            TextButton((if (kind == id) "✓ " else "") + title, onClick = { kind = id }, enabled = ready,
+                                modifier = Modifier.testTag("agent-tag-kind-$id"))
+                        }
+                    }
+                    TextField(query, { query = it.take(96) }, label = "中文 / 英文 / 别名", singleLine = true,
+                        modifier = Modifier.fillMaxWidth(), enabled = ready)
+                    if (status.isNotEmpty()) Text(status, style = MiuixTheme.textStyles.footnote1,
+                        color = scheme.onSurfaceVariantSummary)
+                    if (results.isNotEmpty()) Column(
+                        Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) { results.forEach { LocalTagEntryText(it) } }
+                }
+            }
+            AgentSettingsDisclosure("资源说明", if (info == null) "词库单独安装，不增加默认 APK 体积" else
+                "${String.format(Locale.ROOT, "%,d", info.translatedEntries)} 项有中文对照") {
+                Text("选择 ComfyPocket-tag-library.zip 即可安装或更新。未安装时 Agent 照常工作；移除只删除词库，不影响人设、聊天或模型配置。",
+                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+                if (info != null) Text("版本 ${info.revision}\n${info.untranslatedEntries} 项保留英文待补译。来源：ai-tag-toolbox、ffdkj Danbooru 中英对照。候选仅供参考，未命中保留原词。",
+                    style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
+            }
+        }
+    }
+    if (confirmRemove) {
+        val dismissal = rememberDialogDismiss { confirmRemove = false }
+        OverlayDialog(show = dismissal.show, modifier = dismissal.modifier, title = "移除本地词库？",
+            onDismissRequest = dismissal::dismiss, onDismissFinished = dismissal::onDismissFinished) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Text("移除后可随时重新导入，Agent 的其他设置会保留。", style = MiuixTheme.textStyles.body2)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton("取消", modifier = Modifier.weight(1f), onClick = dismissal::dismiss)
+                    TextButton("确认移除", modifier = Modifier.weight(1f), onClick = {
+                        if (dismissal.show) { onRemove(); dismissal.dismiss() }
+                    })
+                }
+            }
         }
     }
 }

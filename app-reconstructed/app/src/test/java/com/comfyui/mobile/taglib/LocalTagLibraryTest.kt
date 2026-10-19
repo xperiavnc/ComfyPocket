@@ -14,9 +14,13 @@ import org.robolectric.annotation.Config
 @Config(sdk = [35])
 class LocalTagLibraryTest {
     private lateinit var library: LocalTagLibrary
-    @Before fun setup() { library = LocalTagLibrary(RuntimeEnvironment.getApplication()) }
+    @Before fun setup() {
+        val app = RuntimeEnvironment.getApplication()
+        library = LocalTagLibrary(app)
+        TagLibraryTestData.install(app, library)
+    }
 
-    @Test fun packagedCatalogueContainsThePinnedCounts() {
+    @Test fun installedFullCatalogueContainsThePinnedCounts() {
         assertEquals(141007 to 101952, library.counts)
         assertEquals("full-toolbox-v3-fa8003a0311f6b09", library.revision)
         assertEquals(240851, library.translatedCount)

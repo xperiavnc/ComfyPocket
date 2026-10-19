@@ -469,7 +469,8 @@ class AgentRuntimeIntegrationTest {
 
     @Test fun offlineCandidatesReachTheSingleModelRequestAndBothOutputs() {
         withNegativeWorkflow()
-        vm._agentPromptSettings.value = AgentPromptSettings()
+        com.comfyui.mobile.taglib.TagLibraryTestData.install(app, vm.localTagLibrary)
+        vm._agentPromptSettings.value = AgentPromptSettings(true)
         responses += success("""{"reply":"好","prompt":"blue hair, my_trigger","negative_prompt":"blurry, bad anatomy","should_draw":true}""")
         vm.sendAgentMessage("画蓝发人物，不要模糊，保留 my_trigger")
         awaitDone()
@@ -500,10 +501,10 @@ class AgentRuntimeIntegrationTest {
     }
 
     @Test fun localReadFailurePreservesCustomPromptAndStillOnlyCallsModelOnce() {
-        vm._agentPromptSettings.value = AgentPromptSettings()
-        val manifest = app.assets.open("tag-library/manifest.json").bufferedReader().use {
-            JsonParser.parseString(it.readText()).asJsonObject
-        }
+        com.comfyui.mobile.taglib.TagLibraryTestData.install(app, vm.localTagLibrary)
+        vm._agentPromptSettings.value = AgentPromptSettings(true)
+        val manifest = JsonParser.parseString(java.io.File(com.comfyui.mobile.taglib.TagLibraryTestData.source,
+            "manifest.json").readText()).asJsonObject
         val target = File(app.noBackupFilesDir, "tag-library/catalogue-" + manifest["sha256"].asString.take(16) + ".db")
         target.parentFile!!.mkdirs()
         target.writeBytes(ByteArray(manifest["bytes"].asInt))
@@ -516,6 +517,19 @@ class AgentRuntimeIntegrationTest {
             assertEquals("blue hair, __my_trigger__", graphText())
             assertNotNull(vm.agentMessages.value.last().localTagReport!!.error)
         } finally { target.delete() }
+    }
+
+    @Test fun enabledButUninstalledLibraryDoesNotAddCandidatesOrInterruptDrawing() {
+        kotlinx.coroutines.runBlocking { vm.localTagLibrary.store.remove() }
+        vm._agentPromptSettings.value = AgentPromptSettings(true)
+        responses += success("""{"reply":"好","prompt":"blue hair, custom_trigger","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画蓝发人物，保留 custom_trigger")
+        awaitDone()
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertFalse(llmBodies.single().contains("离线词库候选"))
+        assertNull(vm.agentMessages.value.last().localTagReport)
+        assertEquals("blue hair, custom_trigger", graphText())
     }
 
     private fun installBinding(negative: Boolean, binding: AgentPromptBinding) {

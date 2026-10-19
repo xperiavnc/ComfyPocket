@@ -1235,10 +1235,12 @@ object MainViewModelAgent {
                     com.comfyui.mobile.taglib.LocalTagReport(error = "本地词库读取失败")
                 }
                 checkCurrent()
-                onLocalTagReport(report)
-                // Candidate data precedes the current user request, which remains authoritative.
-                messages.add(messages.lastIndex,
-                    com.comfyui.mobile.network.ChatMessageDto("user", vm.localTagLibrary.context(report)))
+                if (report.available) {
+                    onLocalTagReport(report)
+                    // Candidate data precedes the current user request, which remains authoritative.
+                    messages.add(messages.lastIndex,
+                        com.comfyui.mobile.network.ChatMessageDto("user", vm.localTagLibrary.context(report)))
+                }
             }
             val historyCount = recentHistory.size
             val selection = com.comfyui.mobile.agent.AgentContextBudget.fit(

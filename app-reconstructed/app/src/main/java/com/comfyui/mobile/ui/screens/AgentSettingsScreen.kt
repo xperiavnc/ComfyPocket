@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -30,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -48,6 +51,7 @@ import com.comfyui.mobile.model.LlmProfile
 import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.ui.screens.agent.AgentReasoningEffortSelector
 import com.comfyui.mobile.ui.screens.agent.AgentGenerationLimitsControls
+import com.comfyui.mobile.ui.screens.agent.AgentSettingsDisclosure
 import com.comfyui.mobile.ui.screens.agent.AgentLimitsDraft
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
@@ -81,6 +85,10 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     val agentSystemPrompt by viewModel.agentSystemPrompt.collectAsState()
     val agentDrawPrompt by viewModel.agentDrawPrompt.collectAsState()
     val tagSettings by viewModel.agentPromptSettings.collectAsState()
+    val libraryState by viewModel.localTagLibraryState.collectAsState()
+    val importLibrary = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(viewModel::installLocalTagLibrary)
+    }
 
     val floatingNavClearance = LocalFloatingNavClearance.current
     val scrollBehavior = MiuixScrollBehavior()
@@ -123,27 +131,31 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(top = innerPadding.calculateTopPadding())
+                .testTag("agent-settings-scroll")
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 16.dp)
                 .padding(
-                    top = innerPadding.calculateTopPadding(),
                     bottom = 28.dp + floatingNavClearance
     ),
             verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
             Spacer(modifier = Modifier.height(4.dp))
 
-            // 1. 多模型 API 接入配置与预设管理
+            Text("模型服务", Modifier.padding(start = 4.dp, top = 8.dp),
+                style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+
+            // Profile selection stays visible; connection details and generation parameters expand separately.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 insideMargin = PaddingValues(16.dp)
     ) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "模型 API 配置",
-                        style = MiuixTheme.textStyles.title3,
+                        text = currentLlmProfile?.displayName ?: "添加模型配置",
+                        style = MiuixTheme.textStyles.title4,
                         fontWeight = FontWeight.SemiBold
     )
 
@@ -178,7 +190,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                         limits = AgentLimitsDraft.from(item.generationLimits)
                                         viewModel.selectLlmProfile(item.id)
                                     }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                                    .heightIn(min = 44.dp)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
                                 Text(
                                     text = if (isActive) "✓ ${item.displayName}" else item.displayName,
@@ -208,7 +221,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     reasoningEffort = AgentReasoningEffort.fromStored(newP.reasoningEffort)
                                     limits = AgentLimitsDraft.from(newP.generationLimits)
                                 }
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                                .heightIn(min = 44.dp)
+                                    .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
                             Text(
                                 text = "+ 新建",
@@ -219,6 +233,11 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         }
                     }
 
+                    AgentSettingsDisclosure(
+                        title = "连接配置",
+                        summary = model.ifBlank { "填写服务地址、密钥和模型名称" },
+                        initiallyExpanded = baseUrl.isBlank() || model.isBlank()
+                    ) {
                     TextField(
                         value = profileName,
                         onValueChange = { profileName = it },
@@ -308,6 +327,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         modifier = Modifier.fillMaxWidth()
     )
 
+                    TextButton(if (showPassword) "隐藏密钥" else "显示密钥", onClick = { showPassword = !showPassword })
+
                     TextField(
                         value = model,
                         onValueChange = { model = it },
@@ -317,8 +338,14 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         modifier = Modifier.fillMaxWidth()
     )
 
-                    AgentReasoningEffortSelector(reasoningEffort) { reasoningEffort = it }
-                    AgentGenerationLimitsControls(limits) { limits = it }
+                    }
+                    AgentSettingsDisclosure(
+                        title = "生成参数",
+                        summary = "${reasoningEffort.label} · 上下文 ${limits.context.ifBlank { "默认" }} · 输出 ${limits.output.ifBlank { "默认" }}"
+                    ) {
+                        AgentReasoningEffortSelector(reasoningEffort) { reasoningEffort = it }
+                        AgentGenerationLimitsControls(limits) { limits = it }
+                    }
 
                     Spacer(modifier = Modifier.height(2.dp))
 
@@ -343,9 +370,9 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                             },
                             enabled = runCatching { limits.parsed() }.isSuccess,
                             colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).height(44.dp),
                     ) {
-                            Text("保存并应用此配置")
+                            Text("保存配置")
                         }
 
                         if (llmProfiles.size > 1) {
@@ -354,7 +381,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     viewModel.deleteLlmProfile(editingProfileId)
                                 },
                                 colors = ButtonDefaults.buttonColors(),
-                                modifier = Modifier.weight(0.45f)
+                                modifier = Modifier.weight(0.45f).height(44.dp)
     ) {
                                 Text("删除", color = scheme.error)
                             }
@@ -363,13 +390,13 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 }
             }
 
-            com.comfyui.mobile.ui.screens.agent.AgentLocalTagSettings(
-                settings = tagSettings, search = viewModel::searchLocalTags, onSave = viewModel::setAgentPromptSettings)
+            Text("提示词", Modifier.padding(start = 4.dp, top = 8.dp),
+                style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
 
             // 2. 系统人设提示词卡片（自然清爽的预览区，点击弹出全屏编辑，彻底解决滑动卡顿）
             PromptCard(
                 title = "系统人设提示词",
-                description = "定义 AI 助手的人格语气、回复风格。无需在此编写出图 tags。",
+                description = "对话语气、回复风格与任务偏好",
                 promptContent = agentSystemPrompt,
                 defaultPrompt = MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT,
                 onEditClick = {
@@ -384,7 +411,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             // 3. 画图分镜提示词规则卡片
             PromptCard(
                 title = "画图分镜规则",
-                description = "编写正向和反向提示词，规定画面、排除项及连续性；写法由上方格式决定，无需重复 JSON。",
+                description = "正向与反向提示词、画面编排及连续性",
                 promptContent = agentDrawPrompt,
                 defaultPrompt = MainViewModel.DEFAULT_AGENT_DRAW_PROMPT,
                 onEditClick = {
@@ -395,6 +422,12 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                     confirmResetTarget = PromptTarget.DRAW
                 }
     )
+            Text("可选资源", Modifier.padding(start = 4.dp, top = 8.dp),
+                style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+            com.comfyui.mobile.ui.screens.agent.AgentLocalTagSettings(
+                settings = tagSettings, libraryState = libraryState, search = viewModel::searchLocalTags,
+                onImport = { importLibrary.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },
+                onRemove = viewModel::removeLocalTagLibrary, onSave = viewModel::setAgentPromptSettings)
         }
     }
 
@@ -546,88 +579,28 @@ private fun PromptCard(
     defaultPrompt: String,
     onEditClick: () -> Unit,
     onResetClick: () -> Unit
-    ) {
+) {
     val scheme = MiuixTheme.colorScheme
-    val isCustomized = promptContent.trim() != defaultPrompt.trim()
-
+    val customized = promptContent.trim() != defaultPrompt.trim()
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        insideMargin = PaddingValues(16.dp)
+        modifier = Modifier.fillMaxWidth().testTag(if (title == "系统人设提示词") "agent-prompt-system" else "agent-prompt-draw")
+            .clickable(onClick = onEditClick),
+        insideMargin = PaddingValues(18.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-    ) {
-                Text(
-                    text = title,
-                    style = MiuixTheme.textStyles.title3,
-                    fontWeight = FontWeight.SemiBold
-    )
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(if (isCustomized) scheme.primaryContainer else scheme.surfaceContainerHigh)
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-    ) {
-                    Text(
-                        text = if (isCustomized) "自定义" else "默认",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (isCustomized) scheme.onPrimaryContainer else scheme.onSurfaceVariantSummary
-    )
-                }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(title, Modifier.weight(1f), style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
+                Text(if (customized) "自定义" else "默认", style = MiuixTheme.textStyles.footnote2,
+                    color = if (customized) scheme.primary else scheme.onSurfaceVariantSummary)
+                Icon(MiuixIcons.Edit, contentDescription = "编辑$title", Modifier.size(18.dp), tint = scheme.onSurfaceVariantSummary)
             }
-
-            Text(
-                text = description,
-                fontSize = 12.sp,
-                color = scheme.onSurfaceVariantSummary,
-                lineHeight = 16.sp
-    )
-
-            // 轻量文本预览框：自然的卡片次级背景，不加厚重描边
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(scheme.surfaceContainerHigh)
-                    .clickable(onClick = onEditClick)
-                    .padding(12.dp)
-    ) {
-                Text(
-                    text = promptContent,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp,
-                    color = scheme.onSurface,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 17.sp
-    )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-                Button(
-                    onClick = onEditClick,
-                    colors = ButtonDefaults.buttonColorsPrimary(),
-                    modifier = Modifier.weight(1f),
-                    ) {
-                    Icon(MiuixIcons.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("编辑提示词", fontSize = 13.sp)
-                }
-
-                if (isCustomized) {
-                    TextButton(
-                        text = "恢复默认",
-                        onClick = onResetClick,
-                        modifier = Modifier.weight(0.7f)
-    )
-                }
+            Text(description, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+            Text(promptContent.take(240), maxLines = 2, overflow = TextOverflow.Ellipsis,
+                style = MiuixTheme.textStyles.body2, color = scheme.onSurface)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton("编辑提示词", onClick = onEditClick,
+                    colors = ButtonDefaults.textButtonColorsPrimary())
+                if (customized) TextButton("恢复默认", onClick = onResetClick)
             }
         }
     }

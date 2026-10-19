@@ -3,7 +3,7 @@ package com.comfyui.mobile.agent
 import android.content.SharedPreferences
 
 data class AgentPromptSettings(
-    val useLocalLibrary: Boolean = true
+    val useLocalLibrary: Boolean = false
 )
 
 class AgentPromptSettingsStore(private val prefs: SharedPreferences) {
@@ -16,7 +16,7 @@ class AgentPromptSettingsStore(private val prefs: SharedPreferences) {
                 .putBoolean("agent_offline_tags_v1_migrated", true).apply()
         }
         return AgentPromptSettings(
-            prefs.getBoolean("agent_local_tags_enabled", true)
+            prefs.getBoolean("agent_local_tags_enabled", false)
         )
     }
 

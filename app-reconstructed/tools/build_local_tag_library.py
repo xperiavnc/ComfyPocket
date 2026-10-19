@@ -331,6 +331,6 @@ if __name__ == "__main__":
     parser.add_argument("--source-dir", type=Path)
     parser.add_argument("--danbooru-dir", type=Path, help="Pinned tag.sqlite and LICENSE directory")
     parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] /
-                        "app/src/main/assets/tag-library/catalogue-v1.db")
+                        "tag-library/catalogue-v1.db")
     args = parser.parse_args()
     build(args.source_dir, args.output, args.danbooru_dir)

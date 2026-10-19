@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
@@ -20,6 +21,8 @@ import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.AgentChatMessage
 import com.comfyui.mobile.taglib.LocalTagEntry
 import com.comfyui.mobile.taglib.LocalTagReport
+import com.comfyui.mobile.taglib.LocalTagLibraryState
+import com.comfyui.mobile.taglib.TagLibraryManifest
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -37,14 +40,18 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @LooperMode(LooperMode.Mode.PAUSED)
 class AgentPromptControlsTest {
     @get:Rule val compose = createEmptyComposeRule()
-    @Test fun removedFormatOptionsStayAbsentAndLibrarySettingSaves() {
+    private val installed = LocalTagLibraryState(
+        installed = TagLibraryManifest(2, "fixture", mapOf("tags" to 141007, "characters" to 101952), 240851, 2108),
+        checking = false)
+    @Test fun removedFormatOptionsStayAbsentAndLibrarySwitchSavesImmediately() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         var saved: AgentPromptSettings? = null
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply {
                 setContent { MiuixTheme {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-                        AgentLocalTagSettings(AgentPromptSettings(), search = { _, _ -> emptyList() }) { saved = it }
+                        AgentLocalTagSettings(AgentPromptSettings(), installed, search = { _, _ -> emptyList() },
+                            onImport = {}, onRemove = {}) { saved = it }
                     }
                 } }
             })
@@ -52,7 +59,8 @@ class AgentPromptControlsTest {
             compose.onNodeWithText("Anima 混合").assertDoesNotExist()
             compose.onNodeWithText("通用 Tags").assertDoesNotExist()
             compose.onNodeWithText("自然语言 / 反推").assertDoesNotExist()
-            compose.onNodeWithText("保存词库设置").performScrollTo().performClick()
+            compose.onNodeWithText("保存词库设置").assertDoesNotExist()
+            compose.onNodeWithTag("agent-local-tags-enabled").performScrollTo().performClick()
             assertTrue(saved!!.useLocalLibrary)
         } finally { controller.pause().stop().destroy() }
     }
@@ -146,16 +154,17 @@ class AgentPromptControlsTest {
             controller.get().setContentView(ComposeView(controller.get()).apply {
                 setContent { MiuixTheme {
                     Column(Modifier.verticalScroll(rememberScrollState())) {
-                        AgentLocalTagSettings(AgentPromptSettings(), search = { query, kind ->
+                        AgentLocalTagSettings(AgentPromptSettings(), installed, search = { query, kind ->
                             queries += query to kind
                             listOf(LocalTagEntry("hatsune_miku", "初音未来", "character_names", "vocaloid",
                                 "character", "hatsune_miku", "blue hair", query, true))
-                        }, onSave = {})
+                        }, onImport = {}, onRemove = {}, onSave = {})
                     }
                 } }
             })
             compose.waitForIdle()
-            compose.onNodeWithText("角色").performScrollTo().performClick()
+            compose.onNodeWithText("离线查词").performScrollTo().performClick()
+            compose.onNodeWithTag("agent-tag-kind-character").performScrollTo().performClick()
             compose.onNode(hasSetTextAction()).performScrollTo().performTextInput("初音未来")
             compose.waitUntil(timeoutMillis = 5000) { queries.any { it == "初音未来" to "character" } }
             compose.waitForIdle()

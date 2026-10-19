@@ -2736,6 +2736,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     internal val _agentPromptSettings = MutableStateFlow(com.comfyui.mobile.agent.AgentPromptSettingsStore(prefs).load())
     val agentPromptSettings = _agentPromptSettings.asStateFlow()
     internal val localTagLibrary = com.comfyui.mobile.taglib.LocalTagLibrary(application)
+    val localTagLibraryState = localTagLibrary.store.state
+
+    init {
+        viewModelScope.launch { localTagLibrary.store.refresh() }
+    }
+
+    fun installLocalTagLibrary(uri: android.net.Uri) = MainViewModelTagLibrary.install(this, uri)
+    fun removeLocalTagLibrary() = MainViewModelTagLibrary.remove(this)
 
     fun setAgentPromptSettings(value: com.comfyui.mobile.agent.AgentPromptSettings) =
         MainViewModelAgent.setPromptSettings(this, value)

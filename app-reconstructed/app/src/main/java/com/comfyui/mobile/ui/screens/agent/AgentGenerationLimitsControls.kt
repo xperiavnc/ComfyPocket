@@ -59,10 +59,12 @@ internal fun AgentGenerationLimitsControls(value: AgentLimitsDraft, onChange: (A
                     onClick = { onChange(value.copy(parameter = parameter)) })
             }
         }
-        Text("上下文包含输入与输出预留，按文本字节保守估算；图片每张预留 4096。超预算先移除最早的完整历史轮次，当前指令与规则保持完整。未设置输出上限时预留 4096，实际 token 以服务商为准。",
-            style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-        Text("默认历史：聊天最近约 20 条、画图 4 条。设置预算后最多纳入最近 200 条。输出参数由服务商支持情况决定；max_completion_tokens 可能包含思考消耗，长度截断会提示，不自动重发。",
-            style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        AgentSettingsDisclosure("长度参数说明", "留空跟随默认；超出预算时裁剪较早的对话") {
+            Text("上下文包含输入与输出预留，按文本字节保守估算；图片每张预留 4096。超预算先移除最早的完整历史轮次，当前指令与规则保持完整。未设置输出上限时预留 4096，实际 token 以服务商为准。",
+                style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Text("默认历史：聊天最近约 20 条、画图 4 条。设置预算后最多纳入最近 200 条。输出参数由服务商支持情况决定；max_completion_tokens 可能包含思考消耗，长度截断会提示，不自动重发。",
+                style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        }
         runCatching { value.parsed() }.exceptionOrNull()?.message?.let {
             Text(it, color = MiuixTheme.colorScheme.error, style = MiuixTheme.textStyles.footnote2)
         }

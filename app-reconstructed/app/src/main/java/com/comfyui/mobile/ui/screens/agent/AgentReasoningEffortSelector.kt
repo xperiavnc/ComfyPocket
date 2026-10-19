@@ -45,7 +45,7 @@ internal fun AgentReasoningEffortSelector(
             }
         }
         Text(
-            "随当前模型配置保存，聊天和画图均生效。具体支持档位取决于模型与服务商；极高传 xhigh，Max 传 max。不支持时会显示接口错误，请选择「跟随模型」；不会自动降档或重发。",
+            "聊天和画图共用。可选档位以模型服务商支持情况为准。",
             fontSize = 12.sp,
             color = scheme.onSurfaceVariantSummary
         )
