@@ -149,7 +149,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     var showManageAuxNodesDialog by remember { mutableStateOf(false) }
     var showCharacterLoreDialog by remember { mutableStateOf(false) }
     var selectedCharacterLoreToEdit by remember { mutableStateOf<CharacterLore?>(null) }
-    var quickEditTriggerLore by remember { mutableStateOf<CharacterLore?>(null) }
     var showImageViewer by remember { mutableStateOf(false) }
     var fullScreenMediaIndex by remember { mutableStateOf(0) }
     var showClearMediaConfirmDialog by remember { mutableStateOf(false) }
@@ -768,7 +767,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             showCharacterLoreDialog = true
         },
         onSelectCharacterLoreToEdit = { lore ->
-            quickEditTriggerLore = lore
+            selectedCharacterLoreToEdit = lore
+            showCharacterLoreDialog = true
         },
         onToggleCharacterLore = { id ->
             viewModel.toggleCharacterLoreEnabled(id)
@@ -1044,9 +1044,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             showCharacterLoreDialog = false
             selectedCharacterLoreToEdit = null
         },
-        onSaveLore = { name, triggers, existingId, enabled ->
-            viewModel.addOrUpdateCharacterLore(name, triggers, existingId, enabled)
-        },
+        onSaveLore = viewModel::saveCharacterLore,
         onToggleLore = { id ->
             viewModel.toggleCharacterLoreEnabled(id)
         },
@@ -1054,56 +1052,5 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             viewModel.removeCharacterLore(id)
         }
     )
-
-    // 快捷编辑角色触发词弹窗（长按胶囊直接唤起）
-    quickEditTriggerLore?.let { lore ->
-        var draftTriggers by remember(lore.id) { mutableStateOf(lore.triggerWords) }
-        OverlayDialog(
-            show = true,
-            title = "快捷编辑「${lore.name}」触发词",
-            onDismissRequest = { quickEditTriggerLore = null }
-    ) {
-            DialogFormColumn(
-                footer = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-                        TextButton(
-                            text = "取消",
-                            onClick = { quickEditTriggerLore = null },
-                            modifier = Modifier.weight(1f),
-                    )
-                        Button(
-                            onClick = {
-                                val clean = draftTriggers.trim()
-                                if (clean.isNotBlank()) {
-                                    viewModel.addOrUpdateCharacterLore(lore.name, clean, lore.id, lore.isEnabled)
-                                    quickEditTriggerLore = null
-                                } else {
-                                    AppToast.show(context, "触发词不能为空")
-                                }
-                            },
-                            modifier = Modifier.weight(1f),
-                            colors = ButtonDefaults.buttonColorsPrimary()
-    ) {
-                            Text("保存", fontSize = 13.sp)
-                        }
-                    }
-                }
-    ) {
-                TextField(
-                    value = draftTriggers,
-                    onValueChange = { draftTriggers = it },
-                    label = "专属外貌与 LoRA 触发词",
-                    useLabelAsPlaceholder = true,
-                    singleLine = false,
-                    minLines = 3,
-                    maxLines = 6,
-                    modifier = Modifier.fillMaxWidth()
-    )
-            }
-        }
-    }
 
 }

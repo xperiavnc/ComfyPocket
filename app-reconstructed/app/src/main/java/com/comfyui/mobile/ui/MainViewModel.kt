@@ -2927,6 +2927,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun addOrUpdateCharacterLore(name: String, triggerWords: String, existingId: String? = null, enabled: Boolean? = null) =
         MainViewModelAgent.addOrUpdateCharacterLore(this, name, triggerWords, existingId, enabled)
 
+    fun saveCharacterLore(lore: CharacterLore) =
+        MainViewModelAgent.saveCharacterLore(this, lore)
+
     fun toggleCharacterLoreEnabled(id: String) =
         MainViewModelAgent.toggleCharacterLoreEnabled(this, id)
 

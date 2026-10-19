@@ -54,7 +54,7 @@ cd app-reconstructed
 
 调试 APK 按 **软件名＋版本号** 自动导出到
 `app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk`，
-例如 `ComfyPocket-0.0.37-model-confirm.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
+例如 `ComfyPocket-0.0.38-character-outfits.apk`。文件名中的版本自动读取 Gradle 配置，无需手动改名。
 应用安装后的显示名也是 **ComfyPocket**；AGP 内部 `app-debug.apk` 仍保留以兼容构建元数据。
 安装包名为 `com.comfyui.mobile.rebuilt`，源码 namespace 为 `com.comfyui.mobile`。
 服务地址和 API 密钥在应用中配置，不应提交到仓库。
@@ -80,6 +80,14 @@ Agent、控制页和应用页共用的**本地模型选择器**接通模型中�
 源码构建词库包使用 `python app-reconstructed/tools/pack_local_tag_library.py`，不需要重新下载数据。
 
 ## 当前验证状态
+
+- `0.0.38-character-outfits`（versionCode 40）：角色库由 App 本地确定名称 / 手填别名匹配，
+  直接注入本轮档案，不依赖 AI 记得调用或猜别名。续改保留已确认角色 / 服装，
+  支持可选常驻、重名反馈、多套服装与默认项、临时换装、单角色固定触发词漏词补齐。
+  角色列表可搜索，编辑页保存 / 取消固定，服装草稿随角色一起保存；旧资料及备份兼容。
+  已验证完整 debug 构建与 112 套 / 731 项 Android 测试（新增 48 项），以及同输入旧版失败 /
+  新版通过、真实可选词库身份隔离、工作流写入、深浅色窄屏大字体原生渲染。
+  不增加模型轮次、不自动加载 LoRA、不改底栏或原页面切换。验证边界见 Agent 说明。
 
 - `0.0.37-model-confirm`（versionCode 39）：触发词从模型列表移到选中确认页，
   列表保留模型文件名和中文标注；确认页采用紧凑头部、触发词 / 简介优先、

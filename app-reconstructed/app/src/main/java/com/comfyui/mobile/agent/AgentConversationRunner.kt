@@ -10,7 +10,9 @@ data class AgentReply(
     val shouldDraw: Boolean = false,
     val parseError: String? = null,
     /** null preserves workflow defaults; an explicit empty string clears the negative input. */
-    val negativePrompt: String? = null
+    val negativePrompt: String? = null,
+    val characterSelections: List<com.comfyui.mobile.model.AgentCharacterSelection>? = null,
+    val characterStatus: String? = null
 )
 
 data class AgentProgress(val reasoning: String, val content: String)

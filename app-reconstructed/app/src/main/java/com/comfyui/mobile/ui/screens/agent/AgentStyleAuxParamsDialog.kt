@@ -313,13 +313,13 @@ fun AgentStyleAuxParamsDialog(
 
                     if (characterLores.isEmpty()) {
                         Text(
-                            text = "暂无角色。点击“管理词库”登记，开启并在对话中提到角色名即可自动触发。",
+                            text = "暂无角色。点击“管理词库”登记角色、别名与服装，绘图时自动匹配。",
                             style = MiuixTheme.textStyles.footnote1,
                             color = scheme.onSurfaceVariantSummary
     )
                     } else {
                         Text(
-                            text = "💡 单击切换启用/停用，长按修改触发词",
+                            text = "单击启用 / 停用，长按管理角色与服装；启用不等于常驻。",
                             style = MiuixTheme.textStyles.footnote1.copy(fontSize = 11.sp),
                             color = scheme.onSurfaceVariantSummary
     )
@@ -353,7 +353,7 @@ fun AgentStyleAuxParamsDialog(
                                     contentAlignment = Alignment.Center
     ) {
                                     Text(
-                                        text = lore.name,
+                                        text = if (lore.alwaysActive == true) "${lore.name} · 常驻" else lore.name,
                                         fontSize = 12.sp,
                                         color = if (active) scheme.primary else scheme.onSurfaceVariantSummary,
                                         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,

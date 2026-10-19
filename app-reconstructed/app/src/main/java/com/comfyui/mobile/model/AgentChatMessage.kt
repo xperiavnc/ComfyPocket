@@ -17,7 +17,9 @@ data class AgentChatMessage(
     val localTagReport: com.comfyui.mobile.taglib.LocalTagReport? = null,
     /** Nullable for older conversations and responses that omitted the negative field. */
     val expandedNegativePrompt: String? = null,
-    val negativePromptStatus: String? = null
+    val negativePromptStatus: String? = null,
+    val characterSelections: List<AgentCharacterSelection>? = null,
+    val characterStatus: String? = null
     )
 
 @Immutable

@@ -141,6 +141,165 @@ class AgentRuntimeIntegrationTest {
     private fun submittedNegative(): String = JsonParser.parseString(promptBodies.last()).asJsonObject["prompt"]
         .asJsonObject["2"].asJsonObject["inputs"].asJsonObject["text"].asString
 
+    @Test fun characterRecordIsReinjectedForFollowupWithoutRepeatingItsName() {
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            id = "star", name = "星澜", triggerWords = "xl_token, blue hair"))
+        responses += success("""{"reply":"好","prompt":"1girl, xl_token, blue hair","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画星澜")
+        awaitDone()
+        responses += success("""{"reply":"好","prompt":"1girl, rain","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("保持人物，换成雨夜背景")
+        awaitDone()
+        val system = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"]
+            .asJsonArray.first().asJsonObject["content"].asString
+        println("CHARACTER_FOLLOWUP injected=${system.contains("xl_token")} calls=${llmBodies.size} submissions=${promptBodies.size}")
+        assertTrue("Follow-up must receive the original character record without repeating its name", system.contains("xl_token"))
+        assertEquals(2, llmBodies.size)
+        assertEquals(2, promptBodies.size)
+    }
+
+    @Test fun registeredAliasOutfitAndMissingFixedKeysReachActualWorkflowAndPersistAcrossReload() {
+        val winter = com.comfyui.mobile.model.CharacterOutfit("winter", "冬装", "winter_token, coat")
+        val casual = com.comfyui.mobile.model.CharacterOutfit("casual", "便服", "casual_token, shirt")
+        vm.saveCharacterLore(com.comfyui.mobile.model.CharacterLore(
+            id = "star", name = "星澜", triggerWords = "xl_token, blue hair",
+            aliases = listOf("小澜"), fixedTriggerWords = "xl_token",
+            outfits = listOf(winter, casual), defaultOutfitId = winter.id))
+        responses += success("""{"reply":"好","prompt":"1girl, rain","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画小澜")
+        awaitDone()
+        assertEquals("1girl, rain, xl_token, winter_token, coat", graphText())
+        assertTrue(vm.agentMessages.value.last().characterStatus!!.contains("补齐 3 项"))
+        vm._agentMessages.value = MainViewModelAgent.loadAgentMessages(vm)
+        assertEquals("star", vm.agentMessages.value.last().characterSelections!!.single().loreId)
+        assertEquals("winter", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
+        responses += success("""{"reply":"好","prompt":"1girl, xl_token, winter_token, coat","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("她换成便服")
+        awaitDone()
+        assertEquals("1girl, xl_token, casual_token, shirt", graphText())
+        assertEquals("casual", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
+        val messages = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
+        val system = messages.first().asJsonObject["content"].asString
+        assertTrue(system.contains("casual_token"))
+        assertFalse(system.contains("winter_token"))
+        assertTrue(system.contains("不猜译名"))
+        assertEquals(2, llmBodies.size)
+        assertEquals(2, promptBodies.size)
+        println("CHARACTER_OUTFIT actual=${graphText()} selection=${vm.agentMessages.value.last().characterSelections} calls=${llmBodies.size}")
+    }
+
+    @Test fun duplicateAliasStopsBeforeModelInsteadOfGuessingAndExactNameStillWorks() {
+        vm._characterLores.value = listOf(
+            com.comfyui.mobile.model.CharacterLore("a", "星澜", "a_token", aliases = listOf("小蓝")),
+            com.comfyui.mobile.model.CharacterLore("b", "月汐", "b_token", aliases = listOf("小蓝")))
+        vm.sendAgentMessage("画小蓝")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("角色别名有重名"))
+        assertTrue(llmBodies.isEmpty())
+        assertTrue(promptBodies.isEmpty())
+        responses += success("""{"reply":"好","prompt":"b_token","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画月汐")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("b", vm.agentMessages.value.last().characterSelections!!.single().loreId)
+        assertEquals(1, llmBodies.size)
+    }
+
+    @Test fun pinnedDisabledAndExplicitSkipLibraryAreResolvedByAppNotAssistantClaims() {
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "star", "星澜", "xl_token", alwaysActive = true, fixedTriggerWords = "xl_token"))
+        responses += success("""{"reply":"好","prompt":"1girl","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画雨夜人像")
+        awaitDone()
+        assertEquals("1girl, xl_token", graphText())
+        responses += success("""{"reply":"我猜是星澜","prompt":"landscape","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("这次不用角色库，画风景")
+        awaitDone()
+        assertEquals("landscape", graphText())
+        assertTrue(vm.agentMessages.value.last().characterSelections!!.isEmpty())
+        vm.toggleCharacterLoreEnabled("star")
+        responses += success("""{"reply":"好","prompt":"1girl","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画星澜")
+        awaitDone()
+        assertEquals("1girl", graphText())
+        assertTrue(vm.agentMessages.value.last().characterSelections!!.isEmpty())
+        assertFalse(JsonParser.parseString(llmBodies.last()).asJsonObject["messages"]
+            .asJsonArray.first().asJsonObject["content"].asString.contains("xl_token"))
+    }
+
+    @Test fun characterCompletionRunsBeforeExistingPositiveNegativeConflictValidation() {
+        withNegativeWorkflow()
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "star", "星澜", "xl_token", fixedTriggerWords = "xl_token"))
+        responses += success("""{"reply":"好","prompt":"1girl","negative_prompt":"xl_token","should_draw":true}""")
+        vm.sendAgentMessage("画星澜")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(promptBodies.isEmpty())
+        assertEquals("before", graphText())
+        assertTrue(vm.agentMessages.value.last().expandedPrompt!!.contains("xl_token"))
+        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("正反向提示词包含相同标签"))
+    }
+
+    @Test fun assistantProposedAliasOrCharacterIdsCannotSelectAnUnmatchedRecord() {
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "star", "星澜", "xl_token", aliases = listOf("小澜"), fixedTriggerWords = "xl_token"))
+        responses += success("""{"reply":"我猜这个昵称是星澜","prompt":"1girl","negative_prompt":"","should_draw":true,"characterSelections":[{"loreId":"star"}]}""")
+        vm.sendAgentMessage("画一个未登记昵称的人物")
+        awaitDone()
+        assertEquals("1girl", graphText())
+        assertTrue(vm.agentMessages.value.last().characterSelections!!.isEmpty())
+        val system = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"]
+            .asJsonArray.first().asJsonObject["content"].asString
+        assertTrue(system.contains("星澜"))
+        assertTrue(system.contains("小澜"))
+        assertFalse(system.contains("xl_token"))
+        assertTrue(system.contains("不从上表擅自选择未关联角色"))
+        assertEquals(1, promptBodies.size)
+    }
+
+    @Test fun blankReplyForAnotherCharacterDoesNotRecycleThePreviousCharactersPrompt() {
+        vm._characterLores.value = listOf(
+            com.comfyui.mobile.model.CharacterLore("a", "星澜", "a_token", fixedTriggerWords = "a_token"),
+            com.comfyui.mobile.model.CharacterLore("b", "月汐", "b_token", fixedTriggerWords = "b_token"))
+        responses += success("""{"reply":"好","prompt":"1girl, a_token","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画星澜")
+        awaitDone()
+        responses += success("""{"reply":"好","prompt":"","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画月汐")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, promptBodies.size)
+        assertEquals("1girl, a_token", graphText())
+        assertNull(vm.agentMessages.value.last().expandedPrompt)
+        assertTrue(vm.agentMessages.value.last().characterSelections!!.isEmpty())
+    }
+
+    @Test fun registeredAliasDoesNotGetReinterpretedByOptionalOfflineCharacterDictionary() {
+        com.comfyui.mobile.taglib.TagLibraryTestData.install(app, vm.localTagLibrary)
+        vm._agentPromptSettings.value = AgentPromptSettings(true)
+        val raw = kotlinx.coroutines.runBlocking { vm.localTagLibrary.forRequest("画初音未来，蓝发") }
+        assertTrue(raw.entries.any { it.kind == "character" && it.name == "hatsune_miku" })
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "custom", "用户登记的角色", "user_exact_trigger", aliases = listOf("初音未来"),
+            fixedTriggerWords = "user_exact_trigger"))
+        responses += success("""{"reply":"好","prompt":"1girl, blue hair","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画初音未来，蓝发")
+        awaitDone()
+        val report = requireNotNull(vm.agentMessages.value.last().localTagReport)
+        assertTrue(report.entries.none { it.kind == "character" })
+        assertTrue(report.entries.any { it.name == "blue hair" })
+        val messages = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
+        val dictionary = messages.first { it.asJsonObject["content"].asString.contains("离线词库候选") }
+            .asJsonObject["content"].asString
+        assertFalse(dictionary.contains("hatsune_miku"))
+        assertEquals("1girl, blue hair, user_exact_trigger", graphText())
+        assertEquals("custom", vm.agentMessages.value.last().characterSelections!!.single().loreId)
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+    }
+
     @Test fun negativePromptReachesTheRealSubmissionHistoryAndSavedConversation() {
         withNegativeWorkflow()
         responses += success("""{"reply":"好","prompt":"cat, rain","negative_prompt":"template_embedding, (blurry:1.2), extra limbs","should_draw":true}""")

@@ -192,6 +192,13 @@ fun AgentBubble(msg: AgentChatMessage) {
 
 
                 if (!isUser) {
+                    if (!msg.characterStatus.isNullOrBlank()) {
+                        Text(
+                            text = msg.characterStatus,
+                            style = MiuixTheme.textStyles.footnote1,
+                            color = scheme.onSurfaceVariantSummary
+                        )
+                    }
                     AgentPromptDetails(msg.expandedPrompt, msg.expandedNegativePrompt, msg.negativePromptStatus)
                 }
                 // 提交出图异常提示（若有），独立渲染在下方，绝不冲掉正文对话

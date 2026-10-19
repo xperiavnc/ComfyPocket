@@ -314,7 +314,30 @@ data class CharacterLore(
     val id: String = java.util.UUID.randomUUID().toString(),
     val name: String,
     val triggerWords: String,
-    val enabled: Boolean? = true
+    val enabled: Boolean? = true,
+    // Nullable additions: Gson does not run Kotlin defaults when reading older backups.
+    val aliases: List<String>? = null,
+    val alwaysActive: Boolean? = null,
+    /** Only these user-designated keys are automatically completed, not the whole appearance. */
+    val fixedTriggerWords: String? = null,
+    val outfits: List<CharacterOutfit>? = null,
+    val defaultOutfitId: String? = null
     ) {
     val isEnabled: Boolean get() = enabled != false
 }
+
+@Immutable
+data class CharacterOutfit(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val name: String,
+    val triggerWords: String
+)
+
+/** App-resolved IDs, never inferred from an assistant's free-form claim. */
+@Immutable
+data class AgentCharacterSelection(
+    val loreId: String,
+    val outfitId: String? = null,
+    /** A custom outfit must not silently fall back to the saved default on the next edit. */
+    val customOutfit: Boolean? = null
+)

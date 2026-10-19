@@ -149,6 +149,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     expandedPrompt = reply.prompt.takeIf(String::isNotBlank),
                                     expandedNegativePrompt = reply.negativePrompt,
                                     thinkingContent = reply.thinking.takeIf(String::isNotBlank),
+                                    characterSelections = reply.characterSelections,
+                                    characterStatus = reply.characterStatus,
                                     isThinking = false, errorMessage = null
                                 )
                             }

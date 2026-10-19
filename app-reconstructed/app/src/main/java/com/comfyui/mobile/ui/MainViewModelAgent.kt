@@ -683,7 +683,7 @@ object MainViewModelAgent {
             if (idx != -1) {
                 val old = list[idx]
                 val targetEnabled = enabled ?: old.isEnabled
-                list[idx] = CharacterLore(id = existingId, name = cleanName, triggerWords = cleanTriggers, enabled = targetEnabled)
+                list[idx] = old.copy(name = cleanName, triggerWords = cleanTriggers, enabled = targetEnabled)
                 vm.showToast("已更新角色设定: $cleanName")
             } else {
                 list.add(0, CharacterLore(id = existingId, name = cleanName, triggerWords = cleanTriggers, enabled = enabled ?: true))
@@ -704,6 +704,37 @@ object MainViewModelAgent {
         }
         persistCharacterLores(vm, list)
         vm._characterLores.value = list
+    }
+
+    fun saveCharacterLore(vm: MainViewModel, lore: CharacterLore) {
+        val clean = lore.copy(
+            name = lore.name.trim(), triggerWords = lore.triggerWords.trim(),
+            aliases = lore.aliases.orEmpty().map(String::trim).filter(String::isNotBlank).distinct(),
+            fixedTriggerWords = lore.fixedTriggerWords?.trim(),
+            outfits = lore.outfits.orEmpty().map { it.copy(name = it.name.trim(), triggerWords = it.triggerWords.trim()) }
+        )
+        if (clean.name.isBlank() || clean.triggerWords.isBlank()) {
+            vm.showToast("请填写角色名与触发词")
+            return
+        }
+        val list = vm._characterLores.value.toMutableList()
+        if (list.any { it.id != clean.id && it.name.equals(clean.name, ignoreCase = true) }) {
+            vm.showToast("角色名已存在，请使用不同名称")
+            return
+        }
+        if (clean.outfits.orEmpty().any { it.name.isBlank() || it.triggerWords.isBlank() } ||
+            clean.outfits.orEmpty().map { it.name.lowercase(java.util.Locale.ROOT) }.distinct().size != clean.outfits.orEmpty().size
+        ) {
+            vm.showToast("请填写完整服装名称与触发词，服装名称不要重复")
+            return
+        }
+        val target = clean.copy(defaultOutfitId = clean.defaultOutfitId
+            ?.takeIf { id -> clean.outfits.orEmpty().any { it.id == id } })
+        val index = list.indexOfFirst { it.id == target.id }
+        if (index < 0) list.add(0, target) else list[index] = target
+        persistCharacterLores(vm, list)
+        vm._characterLores.value = list
+        vm.showToast("已保存角色与服装：${target.name}")
     }
 
     fun removeCharacterLore(vm: MainViewModel, id: String) {
@@ -1169,16 +1200,14 @@ object MainViewModelAgent {
             }
         }
 
-        val allLores = settings.lores
-        // 只有处于“已启用”状态的角色才参与匹配；未启用（关闭）的角色彻底不生效，绝不读取
-        // 仅当用户当前输入中明确提及了该角色名时才触发注入，不再强制常驻，告别被动绑定
-        val matchedLores = allLores.filter { lore ->
-            val cleanName = lore.name.trim()
-            lore.isEnabled && cleanName.isNotBlank() && userText.contains(cleanName, ignoreCase = true)
+        val characterContext = com.comfyui.mobile.agent.AgentCharacterPolicy.resolve(
+            settings.lores, userText, priorHistory)
+        if (characterContext.ambiguousNames.isNotEmpty()) {
+            return Result.failure(com.comfyui.mobile.agent.AgentExecutionException(
+                "角色别名有重名（${characterContext.ambiguousNames.joinToString("、")}），请使用登记的完整角色名，或为角色设置不同别名。"))
         }
-
         val systemPrompt = com.comfyui.mobile.agent.AgentPromptPolicy.system(
-            persona, drawRules, matchedLores)
+            persona, drawRules, emptyList()) + characterContext.promptData()
 
         val messages = mutableListOf<com.comfyui.mobile.network.ChatMessageDto>()
         messages.add(com.comfyui.mobile.network.ChatMessageDto("system", systemPrompt))
@@ -1221,19 +1250,21 @@ object MainViewModelAgent {
 
         val totalChars = messages.sumOf { (it.content ?: "").length }
         vm.addLog(
-            "Agent Prompt 准备就绪: 总字符数=${totalChars}, 激活角色=${if (matchedLores.isEmpty()) "无" else matchedLores.map { it.name }.joinToString()}",
+            "Agent Prompt 准备就绪: 总字符数=${totalChars}, 激活角色=${characterContext.characters.joinToString { "${it.lore.name}(${it.reason})" }.ifEmpty { "无" }}",
             LogType.INFO
         )
 
         return try {
             if (settings.tagSettings.useLocalLibrary) {
-                val report = try {
-                    vm.localTagLibrary.forRequest(userText)
+                val rawReport = try {
+                    vm.localTagLibrary.forRequest(
+                        com.comfyui.mobile.agent.AgentCharacterPolicy.lookupText(characterContext, userText))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
                     com.comfyui.mobile.taglib.LocalTagReport(error = "本地词库读取失败")
                 }
+                val report = com.comfyui.mobile.agent.AgentCharacterPolicy.constrainCandidates(characterContext, rawReport)
                 checkCurrent()
                 if (report.available) {
                     onLocalTagReport(report)
@@ -1268,8 +1299,9 @@ object MainViewModelAgent {
                     generationLimits = settings.generationLimits).getOrThrow()
             }
             checkCurrent()
-            Result.success(parseAgentLlmReply(vm, output.content, output.reasoning,
-                userText = userText, previousPrompt = settings.lastPrompt))
+            val parsed = parseAgentLlmReply(vm, output.content, output.reasoning,
+                userText = userText, previousPrompt = settings.lastPrompt.takeIf { characterContext.reusePreviousPrompt }.orEmpty())
+            Result.success(com.comfyui.mobile.agent.AgentCharacterPolicy.complete(parsed, characterContext, userText))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
