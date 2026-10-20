@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class AgentPhase {
-    PREPARING, GENERATING, APPLYING, SUBMITTING, WAITING_USER, COMPLETED, STOPPED, FAILED
+    PREPARING, DECIDING, GENERATING, APPLYING, SUBMITTING, WAITING_USER, COMPLETED, STOPPED, FAILED
 }
 
 /** Contains identities and lifecycle only, never keys, prompts or server credentials. */

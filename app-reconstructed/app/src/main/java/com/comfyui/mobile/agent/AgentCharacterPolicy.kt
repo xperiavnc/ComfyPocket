@@ -19,9 +19,11 @@ data class ResolvedAgentCharacter(
     val outfit: CharacterOutfit?,
     val customOutfit: Boolean,
     val reason: String,
-    val outfitSource: AgentOutfitSource = AgentOutfitSource.UNSPECIFIED
+    val outfitSource: AgentOutfitSource = AgentOutfitSource.UNSPECIFIED,
+    val overriddenProfileTags: List<String> = emptyList()
 ) {
-    val selection get() = AgentCharacterSelection(lore.id, outfit?.id, customOutfit)
+    val selection get() = AgentCharacterSelection(lore.id, outfit?.id, customOutfit,
+        overriddenProfileTags.ifEmpty { null })
 }
 
 data class AgentCharacterContext(
@@ -49,6 +51,9 @@ data class AgentCharacterContext(
                 "角色对话别名（仅识别用，不是绘画标签）" to item.lore.aliases.orEmpty(),
                 "角色绘画外貌参考" to item.lore.triggerWords,
                 "固定绘画标签" to item.lore.fixedTriggerWords.orEmpty(),
+                "默认必须保留的角色绘画词" to item.lore.fixedTriggerWords?.takeIf(String::isNotBlank).orEmpty()
+                    .ifBlank { item.lore.triggerWords },
+                "用户已修改而不再采用的原档案词" to item.overriddenProfileTags,
                 "当前服装参考" to item.outfit?.name.orEmpty(),
                 "当前服装ID" to item.outfit?.id.orEmpty(),
                 "当前服装绘画标签" to item.outfit?.triggerWords.orEmpty(),
@@ -162,7 +167,7 @@ object AgentCharacterPolicy {
     private val fresh = Regex(
         """(?i)新(?:的)?(?:人物|角色)|换.{0,3}(?:角色|人物)|重新开始|从头开始|不沿用|全新画面|new\s+(?:character|subject)|start\s+over""")
     private val continuation = Regex(
-        """(?i)我选择|选择|选用|按这个|保持|保留|继续|沿用|上一张|上张|同一|还是|不变|她|他|它|这位|换|改|调整|再来|再画|重画|重新生成|加上|增加|去掉|删掉|移除|再生成|keep|same|again|change|replace|continue|choose|use this|her\b|him\b""")
+        """(?i)我选择|选择|选用|按这个|保持|保留|继续|沿用|上一张|上张|同一|还是|不变|她|他|它|这位|换|改|调整|再来|再画|重画|重新生成|加上|增加|去掉|删掉|移除|再生成|清空.{0,8}(?:正向|反向|负向|提示词)|(?:clear|empty|reset).{0,16}(?:positive|negative|prompt)|keep|same|again|change|replace|continue|choose|use this|her\b|him\b""")
     private val wardrobeEdit = Regex(
         """(?i)自定义服装|按描述设计新服装|custom outfit|(?:换|改|穿|脱|去掉|移除|不要|不用|不穿|别穿|删掉|摘)[^，,。;；\n]{0,16}(?:装|衣|裙|服|裤|帽|袜|鞋|披风|外套|领带|围巾|手套)|穿着|身穿|wearing|(?:change|replace|remove)[^,.;\n]{0,15}(?:outfit|clothes|dress|jacket|costume|hat|shoes|coat)""")
     private val unspecifiedWardrobe = Regex(
@@ -343,7 +348,9 @@ object AgentCharacterPolicy {
                 lore in named -> "名称/别名"
                 lore in carried -> "沿用上一画面"
                 else -> "常驻"
-            }, source)
+            }, source, last?.overriddenProfileTags.orEmpty().filter { old ->
+                pieces(lore.triggerWords).any { tagKey(it) == tagKey(old) }
+            })
         }
         val priorIds = previous.map { it.loreId }.toSet()
         val currentIds = characters.map { it.lore.id }.toSet()
@@ -365,11 +372,23 @@ object AgentCharacterPolicy {
     }
 
     /**
-     * Only explicit fixed keys and the selected outfit are auto-completed for a single character.
-     * Appearance prose is never appended. Multi-person binding remains the model's responsibility.
+     * Explicit fixed keys take precedence; legacy profiles without that optional field use their
+     * original drawing words. Validated user overrides prevent old appearance from returning later.
+     * Multi-person binding remains the model's responsibility, never mechanically flattened.
      */
-    fun complete(reply: AgentReply, context: AgentCharacterContext, userText: String = ""): AgentReply {
-        val completed = completeCharacter(reply, selectedContext(reply, context), userText)
+    fun complete(
+        reply: AgentReply, context: AgentCharacterContext, userText: String = "",
+        profileOverrides: List<AgentProfileTagOverride> = emptyList()
+    ): AgentReply {
+        val adjusted = context.copy(characters = context.characters.map { character ->
+            val declared = pieces(character.lore.triggerWords).associateBy(::tagKey)
+            val overrides = profileOverrides.filter { it.characterId == character.lore.id &&
+                it.sourceQuote.length in 2..2000 && userText.contains(it.sourceQuote, ignoreCase = true) &&
+                tagKey(it.tag) in declared }
+                .mapNotNull { declared[tagKey(it.tag)] }
+            character.copy(overriddenProfileTags = (character.overriddenProfileTags + overrides).distinctBy(::tagKey))
+        })
+        val completed = completeCharacter(reply, selectedContext(reply, adjusted), userText)
         return completed.copy(
             positiveAliases = AgentPromptAliases.align(completed.prompt, completed.positiveAliases),
             negativeAliases = AgentPromptAliases.align(completed.negativePrompt, completed.negativeAliases)
@@ -458,7 +477,7 @@ object AgentCharacterPolicy {
         if (context.characters.size == 1 &&
             !Regex("不(?:要|用)(?:自动)?补(?:齐|词)|不(?:要|用)追加").containsMatchIn(userText)) {
             val item = context.characters.single()
-            val required = (pieces(item.lore.fixedTriggerWords.orEmpty()) + pieces(item.outfit?.triggerWords.orEmpty()))
+            val required = (profileWords(item) + pieces(item.outfit?.triggerWords.orEmpty()))
                 .filterNot { key -> mentions(userText, key).any { excluded(userText, it) } }
             val protected = (required + pieces(item.lore.triggerWords) + context.dictionaryCandidateTags)
                 .map(::tagKey).toSet()
@@ -473,7 +492,9 @@ object AgentCharacterPolicy {
                 removed = source.size - kept.size
                 if (removed > 0) prompt = kept.joinToString(", ")
             }
-            val missing = required.distinctBy(::normalized).filter { mentions(prompt, it).isEmpty() }
+            val missing = required.distinctBy(::tagKey).filter { key ->
+                pieces(prompt).none { tagKey(it) == tagKey(key) }
+            }
             if (missing.isNotEmpty()) {
                 prompt = listOf(prompt.trim().trimEnd(','), missing.joinToString(", ")).filter(String::isNotBlank).joinToString(", ")
                 added += missing.size
@@ -488,9 +509,17 @@ object AgentCharacterPolicy {
             if (removed > 0) append("；移除 $removed 项旧服装词")
             if (removedDialogueTerms > 0) append("；过滤 $removedDialogueTerms 项角色对话识别词")
             if (context.characters.size > 1) append("；多人按角色提供，不全局拼词")
+            else append("；档案绘画词已核对")
         }
         return reply.copy(prompt = prompt, negativePrompt = cleanNegative,
             characterSelections = context.characters.map { it.selection }, characterStatus = summary)
+    }
+
+    private fun profileWords(item: ResolvedAgentCharacter): List<String> {
+        val fixed = item.lore.fixedTriggerWords.orEmpty()
+        if (fixed.isNotBlank()) return pieces(fixed)
+        val overridden = item.overriddenProfileTags.map(::tagKey).toSet()
+        return pieces(item.lore.triggerWords).filterNot { tagKey(it) in overridden }
     }
 
     private fun removeDialogueTerms(

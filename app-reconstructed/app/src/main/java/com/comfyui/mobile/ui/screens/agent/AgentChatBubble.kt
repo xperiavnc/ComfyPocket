@@ -117,7 +117,7 @@ fun AgentBubble(
                 // 1. 思考中状态提示（包含实时流式打字展示）
                 if (msg.isThinking) {
                     Text(
-                        text = "✨深度求索中...",
+                        text = msg.activity ?: "✨深度求索中...",
                         style = MiuixTheme.textStyles.body2.copy(
                             fontWeight = FontWeight.Medium,
                             color = scheme.primary

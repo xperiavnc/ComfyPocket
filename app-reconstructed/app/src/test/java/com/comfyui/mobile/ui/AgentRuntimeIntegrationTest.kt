@@ -51,10 +51,119 @@ class AgentRuntimeIntegrationTest {
     private lateinit var store: ViewModelStore
     private val responses = LinkedBlockingQueue<MockResponse>()
     private val llmBodies = CopyOnWriteArrayList<String>()
+    /** Separate requests: decisions do not consume a queued final-answer fixture. */
+    private val decisionBodies = CopyOnWriteArrayList<String>()
     private val promptBodies = CopyOnWriteArrayList<String>()
     private val uploadBodies = CopyOnWriteArrayList<String>()
     private val gson = Gson()
     private val tagRequests = CopyOnWriteArrayList<RecordedRequest>()
+    private var automaticDecisions = true
+
+    private fun nativeAction(name: String, arguments: String, id: String = "call-question"): MockResponse =
+        MockResponse().setHeader("Content-Type", "text/event-stream").setBody("data: " + gson.toJson(mapOf(
+            "choices" to listOf(mapOf("delta" to mapOf("tool_calls" to listOf(mapOf(
+                "index" to 0, "id" to id, "type" to "function",
+                "function" to mapOf("name" to name, "arguments" to arguments)))),
+                "finish_reason" to "tool_calls")))) + "\n\n")
+
+    @Test fun nativeQuestionToolOpensFormBeforeAnyWorkflowMutation() {
+        automaticDecisions = false
+        responses += nativeAction("ask_user_question",
+            """{"reply":"两种要求互斥，需要你来选。","questions":[{"id":"choice","question":"本轮采用哪个方案？","options":[{"id":"first","label":"第一种"},{"id":"second","label":"第二种"}],"multi_select":false}]}""")
+        vm.sendAgentMessage("画面里这两个要求有冲突，你先确认")
+        awaitDone()
+        val last = vm.agentMessages.value.last()
+        println("NATIVE_QUESTION phase=${vm.agentSessionState.value.turn?.phase} question=${last.clarification?.questions?.firstOrNull()?.id} submissions=${promptBodies.size}")
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("choice", last.clarification!!.questions!!.single().id)
+        assertTrue(promptBodies.isEmpty())
+        assertTrue(uploadBodies.isEmpty())
+        assertNull(vm.agentWorkflow)
+        assertTrue(vm.llmClient.activeRequestIds.isEmpty())
+        val request = JsonParser.parseString(decisionBodies.single()).asJsonObject
+        assertEquals("required", request["tool_choice"].asString)
+        assertFalse(request["parallel_tool_calls"].asBoolean)
+        assertEquals(listOf("ask_user_question", "continue_task"),
+            request["tools"].asJsonArray.map { it.asJsonObject["function"].asJsonObject["name"].asString })
+    }
+
+    @Test fun nativeQuestionInvocationAndAnswersSurviveRoomRestartAndResumeAsAToolResult() {
+        automaticDecisions = false
+        saveSuzuran()
+        responses += nativeAction("ask_user_question",
+            """{"reply":"先选服装。","questions":[{"id":"wardrobe","question":"铃兰穿哪套？","options":[{"id":"casual","label":"常服"},{"id":"formal","label":"礼服","description":"正式连衣裙"}],"multi_select":false}]}""",
+            "original-question-id")
+        vm.sendAgentMessage("画铃兰，背景和动作你来")
+        awaitDone()
+        val pending = vm.agentMessages.value.last()
+        assertEquals("original-question-id", pending.clarification!!.toolInvocation!!.id)
+        assertFalse(vm.answerAgentQuestions(pending.id, emptyList()))
+        assertEquals(1, decisionBodies.size)
+        store.clear()
+        kotlinx.coroutines.runBlocking { vm.agentWorkspace.awaitClosed() }
+        vm.repository.disconnect()
+        vm = MainViewModel(app)
+        store = ViewModelStore().apply { put("agent", vm) }
+        pumpUntil { vm.agentWorkspace.ready }
+        vm._llmBaseUrl.value = server.url("/v1").toString()
+        vm._llmApiKey.value = "fixture-key"
+        vm._llmModel.value = "fixture-model"
+        vm.repository.setBaseUrlOnly(server.url("/").toString())
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(pending.clarification, vm.agentMessages.value.last().clarification)
+        responses += nativeAction("continue_task",
+            """{"summary":"用户选定礼服，背景动作交给我。","outfit_selections":[{"character_id":"suzuran","outfit_id":"formal"}]}""", "ready-after-answer")
+        responses += success("""{"action":"draw","reply":"按礼服绘制。","prompt":"portrait","negative_prompt":"","should_draw":true}""")
+        assertTrue(vm.answerAgentQuestions(pending.id, listOf(AgentQuestionAnswer("wardrobe", listOf("formal")))))
+        awaitDone()
+        assertEquals(2, decisionBodies.size)
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        val resumed = JsonParser.parseString(decisionBodies.last()).asJsonObject["messages"].asJsonArray
+        val nativeAssistant = resumed.single { it.asJsonObject["tool_calls"]?.isJsonArray == true }.asJsonObject
+        assertEquals("original-question-id", nativeAssistant["tool_calls"].asJsonArray.single().asJsonObject["id"].asString)
+        val answer = resumed.single { it.asJsonObject["role"].asString == "tool" }.asJsonObject
+        assertEquals("original-question-id", answer["tool_call_id"].asString)
+        val values = JsonParser.parseString(answer["content"].asString).asJsonObject["answers"].asJsonArray.single().asJsonObject
+        assertEquals("wardrobe", values["id"].asString)
+        assertEquals("formal", values["option_ids"].asJsonArray.single().asString)
+        assertEquals("礼服", values["selected"].asJsonArray.single().asString)
+        assertEquals("portrait, suzuran_token, formal_token, dress", graphText())
+        assertFalse((graphText() as String).contains("casual_token"))
+        assertFalse(vm.answerAgentQuestions(pending.id, listOf(AgentQuestionAnswer("wardrobe", listOf("casual")))))
+        println("NATIVE_RESUME restart=true exactToolId=true structuredAnswer=true decisions=${decisionBodies.size} compositions=${llmBodies.size} submissions=${promptBodies.size}")
+    }
+
+    @Test fun stoppingDuringTheDecisionPhaseDoesNotComposeOrOpenAPartialQuestion() {
+        automaticDecisions = false
+        responses += blocked("")
+        vm.sendAgentMessage("先核对这里的冲突")
+        pumpUntil { decisionBodies.size == 1 }
+        assertEquals(AgentPhase.DECIDING, vm.agentSessionState.value.turn!!.phase)
+        vm.stopAgentGeneration()
+        awaitDone()
+        assertEquals(AgentPhase.STOPPED, vm.agentSessionState.value.turn!!.phase)
+        assertNull(vm.agentMessages.value.last().clarification)
+        assertNull(vm.agentMessages.value.last().activity)
+        assertTrue(llmBodies.isEmpty())
+        assertTrue(promptBodies.isEmpty())
+        assertTrue(vm.llmClient.activeRequestIds.isEmpty())
+    }
+
+    @Test fun originalProfileWordsReachActualWorkflowWithoutDuplicatingThemInTheOptionalFixedField() {
+        vm.saveCharacterLore(com.comfyui.mobile.model.CharacterLore(
+            "saved", "小黑", "user_identity, white hair, red eyes",
+            outfits = listOf(com.comfyui.mobile.model.CharacterOutfit("uniform", "校服", "user_uniform"))))
+        responses += success("""{"action":"draw","reply":"好","prompt":"portrait, rain","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("帮我生成小黑图片，校服，背景构图动作你来")
+        awaitDone()
+        assertEquals("portrait, rain, user_identity, white hair, red eyes, user_uniform", graphText())
+        assertTrue(vm.agentMessages.value.last().characterStatus!!.contains("补齐 4 项"))
+        assertEquals(1, decisionBodies.size)
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        println("ORIGINAL_PROFILE actual=${graphText()}")
+    }
 
     private fun event(text: String) = "data: " + gson.toJson(mapOf(
         "choices" to listOf(mapOf("delta" to mapOf("content" to text)))
@@ -74,8 +183,14 @@ class AgentRuntimeIntegrationTest {
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.path?.substringBefore('?')) {
                 "/v1/chat/completions" -> {
-                    llmBodies += request.body.readUtf8()
-                    responses.poll(5, TimeUnit.SECONDS) ?: MockResponse().setResponseCode(500)
+                    val body = request.body.readUtf8()
+                    val json = JsonParser.parseString(body).asJsonObject
+                    val deciding = json["tool_choice"]?.asString == "required" ||
+                        json["messages"].asJsonArray.first().asJsonObject["content"].asString.contains("交互决策步骤")
+                    if (deciding) decisionBodies += body else llmBodies += body
+                    if (deciding && automaticDecisions)
+                        nativeAction("continue_task", """{"summary":"本地模拟模型决定继续，后续响应由测试指定。"}""", "call-ready")
+                    else responses.poll(5, TimeUnit.SECONDS) ?: MockResponse().setResponseCode(500)
                 }
                 "/tags.json", "/tag_aliases.json", "/wiki_pages/cat.json" -> {
                     tagRequests += request
@@ -174,7 +289,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals(2, llmBodies.size)
         assertEquals(1, promptBodies.size)
         assertEquals("portrait, formal_token, dress, suzuran_token", graphText())
-        val answerContext = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last()
+        val answerContext = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
             .asJsonObject["content"].asString
         assertTrue(answerContext.contains("\"id\":\"suzuran-outfit\""))
         assertTrue(answerContext.contains("\"option_ids\":[\"formal\"]"))
@@ -298,7 +413,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals("portrait, xl_token, casual_token", graphText())
         assertEquals("one", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
         val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
-            .last().asJsonObject["content"].asString
+            .last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asString
         assertTrue(current.contains(task))
         assertTrue(current.contains("常服"))
         assertFalse(current.contains("礼服"))
@@ -360,7 +475,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
         assertEquals(2, llmBodies.size)
         assertEquals(1, promptBodies.size)
-        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last()
+        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
             .asJsonObject["content"].asString
         assertTrue(current.contains("画星澜，保留蓝色外套"))
         assertTrue(current.contains("全身"))
@@ -384,7 +499,7 @@ class AgentRuntimeIntegrationTest {
         responses += success("""{"action":"draw","reply":"好","prompt":"blue coat, full body, rain, neon lighting","should_draw":true}""")
         vm.answerAgentQuestions(vm.agentMessages.value.last().id, listOf(AgentQuestionAnswer("light", text = "霓虹光")))
         awaitDone()
-        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last()
+        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
             .asJsonObject["content"].asString
         for (term in listOf("画星澜，保留蓝色外套", "全身", "帽子；手套", "雨夜街道", "霓虹光")) assertTrue(current.contains(term))
         assertEquals(3, llmBodies.size)
@@ -434,7 +549,7 @@ class AgentRuntimeIntegrationTest {
         responses += success("""{"action":"draw","reply":"改做新任务","prompt":"dog","should_draw":true}""")
         vm.sendAgentMessage("画一只狗")
         awaitDone()
-        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last().asJsonObject["content"]
+        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"]
         assertTrue(last.isJsonPrimitive)
         assertTrue(last.asString.contains("画一只狗"))
         assertFalse(last.asString.contains("蓝色外套"))
@@ -480,7 +595,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals(1, promptBodies.size)
         val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
         assertEquals("uploaded.png", graph["2"].asJsonObject["inputs"].asJsonObject["image"].asString)
-        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last().asJsonObject["content"].asJsonArray
+        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asJsonArray
         assertTrue(last[0].asJsonObject["text"].asString.contains("参考这张图画星澜"))
         assertEquals("image_url", last[1].asJsonObject["type"].asString)
         println("ASK_RESTART phase=${vm.agentSessionState.value.turn!!.phase} uploads=${uploadBodies.size} submissions=${promptBodies.size}")
@@ -1068,7 +1183,7 @@ class AgentRuntimeIntegrationTest {
         val prompt = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
         assertEquals("cat", prompt["1"].asJsonObject["inputs"].asJsonObject["text"].asString)
         assertEquals("uploaded.png", prompt["2"].asJsonObject["inputs"].asJsonObject["image"].asString)
-        val content = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray.last()
+        val content = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
             .asJsonObject["content"].asJsonArray
         assertEquals("image_url", content[1].asJsonObject["type"].asString)
         assertFalse(File(app.cacheDir, "agent_upload_${vm.agentSessionState.value.turn!!.id}").exists())
@@ -1097,11 +1212,12 @@ class AgentRuntimeIntegrationTest {
         assertEquals(1, promptBodies.size)
         assertTrue(tagRequests.isEmpty())
         val body = JsonParser.parseString(llmBodies.single()).asJsonObject
-        assertFalse(body.has("tools"))
+        assertEquals(listOf("ask_user_question"),
+            body["tools"].asJsonArray.map { it.asJsonObject["function"].asJsonObject["name"].asString })
         val messages = body["messages"].asJsonArray
         assertTrue(messages.any { it.asJsonObject["content"].asString.contains("离线词库候选") })
         assertTrue(messages.any { it.asJsonObject["content"].asString.contains("blue hair") })
-        assertTrue(messages.last().asJsonObject["content"].asString.startsWith("画蓝发人物"))
+        assertTrue(messages.last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asString.startsWith("画蓝发人物"))
         assertTrue(vm.agentMessages.value.last().localTagReport!!.entries.any { it.name == "blue hair" })
         assertEquals("blue hair, my_trigger", vm.agentPromptOutput.value.positive)
         assertEquals("blurry, bad anatomy", vm.agentPromptOutput.value.negative)

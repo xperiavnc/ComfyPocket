@@ -101,11 +101,11 @@ internal fun AgentCharacterEditor(
                 LoreFieldLabel("AI 对话别名 / 昵称")
                 TextField(aliases, { aliases = it }, label = "只用于对话匹配，多个用逗号分隔", useLabelAsPlaceholder = true,
                     minLines = 1, maxLines = 2, modifier = Modifier.fillMaxWidth().testTag("lore-aliases"))
-                LoreFieldLabel("角色绘画外貌参考")
+                LoreFieldLabel("角色绘画标签 / 外貌")
                 TextField(words, { words = it; error = null }, label = "外貌描述或绘画标签（不含名字、别名和服装）",
                     useLabelAsPlaceholder = true, minLines = 2, maxLines = 4,
                     modifier = Modifier.fillMaxWidth().testTag("lore-words"))
-                Text("仅这里的内容提供给 AI 作为角色外貌参考。名字 / 别名只触发角色匹配，不会复制到正向或反向提示词。服装单独设为预设。",
+                Text("未单独填写固定词时，这里的绘画词默认保留，单角色漏写会补齐。用户明确修改的外貌按本轮指令替换；名字 / 别名仅作对话识别，服装单独设为预设。",
                     style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                 TextButton(if (advanced) "收起调用设置" else "调用与漏词补齐",
                     { advanced = !advanced }, modifier = Modifier.fillMaxWidth().testTag("lore-advanced"))
@@ -113,7 +113,7 @@ internal fun AgentCharacterEditor(
                     LoreFieldLabel("固定绘画标签 · 漏写时自动补齐")
                     TextField(fixed, { fixed = it }, label = "必须保留的绘画标签（可选）", useLabelAsPlaceholder = true,
                         minLines = 2, maxLines = 3, modifier = Modifier.fillMaxWidth().testTag("lore-fixed-words"))
-                    Text("只填必须原样出现在正向提示词中的模型 / LoRA 标签。单角色漏写时自动补齐；不要填角色名称、别名或整段外貌。",
+                    Text("留空时沿用上方角色绘画词。填写后以这组必须词为准，上方其余外貌仅作参考；单角色漏写时补齐，不填对话识别名称或别名。",
                         style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

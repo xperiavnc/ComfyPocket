@@ -68,7 +68,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             val partial = it.content.takeIf { c -> c.isNotBlank() && c != "✨深度求索中..." }
             it.copy(
                 content = partial ?: reason,
-                isThinking = false,
+                isThinking = false, activity = null,
                 errorMessage = if (submitting) {
                     "$reason；服务端已接收的任务可能继续运行"
                 } else reason
@@ -136,7 +136,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                             settings = settings, requestId = turn.id,
                             currentNegativePrompt = workflowContext.negativePrompt,
                             workflowModelFacts = workflowContext.modelFacts,
-                            onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) },
+                            onAgentProgress = progress,
                             checkCurrent = { session.requireCurrent(turn) },
                             onLocalTagReport = { report ->
                                 withContext(Dispatchers.Main) {
@@ -151,11 +151,16 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     }
                 }
                 var lastUi = 0L
+                var lastShown: AgentProgress? = null
                 val observer = object : AgentConversationObserver {
                     override suspend fun progress(progress: AgentProgress) {
                         val now = System.nanoTime()
-                        if (lastUi != 0L && now - lastUi < 40_000_000L) return
+                        val firstPayload = progress.content.isNotBlank() && lastShown?.content.isNullOrBlank() ||
+                            progress.reasoning.isNotBlank() && lastShown?.reasoning.isNullOrBlank()
+                        val stageChanged = progress.activity != lastShown?.activity
+                        if (!firstPayload && !stageChanged && lastUi != 0L && now - lastUi < 40_000_000L) return
                         lastUi = now
+                        lastShown = progress
                         withContext(Dispatchers.Main) {
                             session.requireCurrent(turn)
                             val content = if (mode == AgentMode.CHAT) progress.content
@@ -164,7 +169,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                 it.copy(
                                     content = content.ifBlank { if (mode == AgentMode.DRAW) "✨深度求索中..." else "" },
                                     thinkingContent = progress.reasoning.takeIf(String::isNotBlank),
-                                    isThinking = content.isBlank()
+                                    isThinking = content.isBlank(), activity = progress.activity
                                 )
                             }
                         }
@@ -192,7 +197,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     clarification = clarification,
                                     // Also use the ordinary attachment store, so Room/export can relocate these URIs.
                                     attachments = if (clarification != null) attachments.ifEmpty { null } else null,
-                                    isThinking = false, errorMessage = null
+                                    isThinking = false, errorMessage = null, activity = null
                                 )
                             }
                         }
@@ -220,7 +225,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                             val hasReply = it.content.isNotBlank() && it.content != "✨深度求索中..."
                             it.copy(
                                 content = if (hasReply) it.content else message,
-                                errorMessage = message, isThinking = false
+                                errorMessage = message, isThinking = false, activity = null
                             )
                         }
                         vm.addLog("Agent 本轮失败: ${if (e is LlmException) e.errorType else e.javaClass.simpleName}", LogType.ERROR)
@@ -269,7 +274,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     "clarification_options" to message.clarification.options))
                 else -> message.content
             }
-            return AgentContextMessage(ChatMessageDto(message.role, content), imagesById[message.id].orEmpty())
+            return AgentContextMessage(ChatMessageDto(message.role, content,
+                reasoning_content = message.thinkingContent?.takeIf { message.role == "assistant" }),
+                imagesById[message.id].orEmpty())
         }
         // A resumed chat still receives the original reference images after a restart/history trim.
         AgentQuestionPolicy.continuation(history.last().content, history.dropLast(1))?.attachments.orEmpty()
@@ -277,21 +284,24 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             ?.let { original ->
                 imagesById[history.last().id] = (imagesById[history.last().id].orEmpty() + original).distinct().take(4)
             }
+        val finalSystem = AgentPromptPolicy.chat(settings.persona)
+        val decisionSystem = AgentInteractionProtocol.decisionSystem(settings.persona, "", AgentMode.CHAT)
+        val resume = AgentQuestionPolicy.toolContinuation(history.last().content, history.dropLast(1),
+            history.last().clarificationAnswer).map { AgentContextMessage(it) }
         val selected = AgentContextBudget.fit(
-            AgentContextMessage(ChatMessageDto("system", AgentPromptPolicy.chat(settings.persona))),
-            history.dropLast(1).map(::context), listOf(context(history.last())),
-            settings.generationLimits, defaultHistoryMessages = 19)
+            AgentContextMessage(ChatMessageDto("system", finalSystem)),
+            history.dropLast(1).map(::context), listOf(context(history.last())) + resume,
+            settings.generationLimits, defaultHistoryMessages = 19,
+            reservedInputTokens = AgentInteractionProtocol.contextReserve(finalSystem, decisionSystem))
         vm.addLog("Agent 上下文：保守估算 ${selected.estimatedInputTokens} tokens，裁剪 ${selected.removedMessages} 条历史", LogType.INFO)
         val messages = selected.messages.map { it.message }
         val images = selected.messages.mapIndexedNotNull { index, item ->
             item.images.takeIf { it.isNotEmpty() }?.let { index to it }
         }.toMap()
-        val output = vm.llmClient.chatCompletionsStream(
-            settings.baseUrl, settings.apiKey, settings.model, messages, messageImages = images,
-            requestId = turn.id, reasoningEffort = settings.effort,
-            generationLimits = settings.generationLimits,
-            onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) }
-        ).getOrThrow()
+        val outcome = interact(turn.id, settings, messages, images, decisionSystem,
+            checkCurrent = { session.requireCurrent(turn) }, progress = progress)
+        outcome.question?.let { return it }
+        val output = checkNotNull(outcome.output)
         val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(output.content, preserveNaturalLanguage = true)
         return if (parsed.clarification != null) {
             AgentReply(parsed.reply.ifBlank { parsed.clarification.question }, thinking = output.reasoning.orEmpty(),
@@ -300,6 +310,50 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             if (parsed.action == AgentAction.RESPOND) parsed.reply else output.content,
             thinking = output.reasoning.orEmpty(), action = AgentAction.RESPOND)
     }
+
+    /** The same native/compatibility interaction loop is used by both chat and drawing. */
+    internal suspend fun interact(
+        requestId: String, settings: AgentLlmSettings, messages: List<ChatMessageDto>,
+        images: Map<Int, List<String>>, decisionSystem: String, streaming: Boolean = true,
+        checkCurrent: suspend () -> Unit,
+        progress: suspend (AgentProgress) -> Unit = {}
+    ): AgentInteractionOutcome = AgentInteractionLoop(
+        AgentInteractionModel { request, onProgress ->
+            checkCurrent()
+            session.state.value.turn?.takeIf { it.id == requestId }?.let {
+                session.advance(it, if (request.deciding) AgentPhase.DECIDING else AgentPhase.GENERATING)
+            }
+            val cost = request.messages.mapIndexed { index, message ->
+                AgentContextBudget.estimate(AgentContextMessage(message, images[index].orEmpty()))
+            }.sum() + request.tools?.let { vm.gson.toJson(it).toByteArray(Charsets.UTF_8).size } .orZero()
+            settings.generationLimits.contextTokens?.let { budget ->
+                if (cost + settings.generationLimits.outputReserve > budget) throw AgentExecutionException(
+                    "本轮交互上下文约需 $cost tokens，连同输出预留超过预算 $budget；未截断原任务或工具答案。")
+            }
+            if (streaming) vm.llmClient.chatCompletionsStream(
+                settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
+                requestId = requestId, reasoningEffort = settings.effort,
+                generationLimits = settings.generationLimits, tools = request.tools, toolChoice = request.toolChoice
+            ) { _, _, reasoning, content -> onProgress(AgentProgress(reasoning, content,
+                if (request.deciding) "正在核对任务与待确认项…" else "正在编写结果…")) }.getOrThrow()
+            else vm.llmClient.chatCompletions(
+                settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
+                requestId = requestId, reasoningEffort = settings.effort, generationLimits = settings.generationLimits,
+                tools = request.tools, toolChoice = request.toolChoice).getOrThrow()
+        },
+        initialTextProtocol = vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model),
+        onTextProtocol = {
+            vm.llmClient.useTextToolProtocol(settings.baseUrl, settings.model)
+            vm.addLog("Agent 交互：当前服务使用结构化 JSON 动作兼容协议", LogType.INFO)
+        },
+        initialAutoToolChoice = vm.llmClient.usesAutoToolChoice(settings.baseUrl, settings.model),
+        onAutoToolChoice = {
+            vm.llmClient.useAutoToolChoice(settings.baseUrl, settings.model)
+            vm.addLog("Agent 交互：当前服务保留原生工具，使用自动工具选择兼容协议", LogType.INFO)
+        }
+    ).run(messages, decisionSystem, checkCurrent, progress)
+
+    private fun Int?.orZero(): Int = this ?: 0
 
     private inner class WorkflowPort(
         private val turn: AgentTurn,

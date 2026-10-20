@@ -47,18 +47,22 @@ data class AgentContextSelection(
  */
 object AgentContextBudget {
     fun estimate(value: AgentContextMessage): Int =
-        value.message.content.orEmpty().toByteArray(Charsets.UTF_8).size + 16 + value.images.size * 4096
+        (value.message.content.orEmpty() + value.message.reasoning_content.orEmpty() +
+            value.message.tool_calls?.let { com.google.gson.Gson().toJson(it) }.orEmpty())
+            .toByteArray(Charsets.UTF_8).size + 16 + value.images.size * 4096
 
     fun fit(
         system: AgentContextMessage,
         history: List<AgentContextMessage>,
         current: List<AgentContextMessage>,
         limits: AgentGenerationLimits,
-        defaultHistoryMessages: Int
+        defaultHistoryMessages: Int,
+        reservedInputTokens: Int = 0
     ): AgentContextSelection {
         limits.validated()
         val fixed = listOf(system) + current
-        val fixedCost = fixed.sumOf(::estimate)
+        require(reservedInputTokens >= 0)
+        val fixedCost = fixed.sumOf(::estimate) + reservedInputTokens
         val available = limits.contextTokens?.minus(limits.outputReserve)
         if (available != null && fixedCost > available) throw AgentExecutionException(
             "本轮指令、系统规则和参考资料约需 $fixedCost tokens，加上输出预留 ${limits.outputReserve} " +
@@ -81,6 +85,6 @@ object AgentContextBudget {
         }
         val kept = selected.asReversed().flatten()
         val result = listOf(system) + kept + current
-        return AgentContextSelection(result, history.size - kept.size, result.sumOf(::estimate))
+        return AgentContextSelection(result, history.size - kept.size, result.sumOf(::estimate) + reservedInputTokens)
     }
 }

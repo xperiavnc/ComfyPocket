@@ -132,4 +132,26 @@ object AgentQuestionPolicy {
             sourceRequest = clarification.sourceRequest?.takeIf(String::isNotBlank) ?: source(userText, history),
             answerHistory = exchanges(userText, history, answerValues, structuredAnswer).ifEmpty { null }
         )
+
+    /** Complete the exact native invocation, including after Room restore. Never fabricate a tool ID. */
+    fun toolContinuation(
+        userText: String, history: List<AgentChatMessage>,
+        structuredAnswer: AgentClarificationAnswer? = null
+    ): List<com.comfyui.mobile.network.ChatMessageDto> {
+        val message = continuation(userText, history) ?: return emptyList()
+        val clarification = message.clarification ?: return emptyList()
+        val invocation = clarification.toolInvocation ?: return emptyList()
+        if (invocation.id.isBlank() || invocation.name != AgentInteractionProtocol.ASK ||
+            AgentInteractionProtocol.objectValue(invocation.arguments) == null) return emptyList()
+        val answer = exchanges(userText, history, structuredAnswer = structuredAnswer).lastOrNull()
+            ?: return emptyList()
+        val result = if (answer.answersJson != null) answer.answersJson else com.google.gson.Gson().toJson(
+            mapOf("status" to "user_replied", "custom" to userText,
+                "instruction" to "这是用户自然语言回答；自行核对是否已答全，未决定的必要项继续提问，不猜选。"))
+        return listOf(
+            com.comfyui.mobile.network.ChatMessageDto("assistant", reasoning_content = message.thinkingContent,
+                tool_calls = listOf(com.comfyui.mobile.network.ChatToolCall(invocation.id,
+                    com.comfyui.mobile.network.ChatFunctionCall(invocation.name, invocation.arguments)))),
+            com.comfyui.mobile.network.ChatMessageDto("tool", result, tool_call_id = invocation.id))
+    }
 }

@@ -318,7 +318,7 @@ data class CharacterLore(
     // Nullable additions: Gson does not run Kotlin defaults when reading older backups.
     val aliases: List<String>? = null,
     val alwaysActive: Boolean? = null,
-    /** Only these user-designated keys are automatically completed, not the whole appearance. */
+    /** Explicit must-keep keys. If blank, the original triggerWords field supplies the default keys. */
     val fixedTriggerWords: String? = null,
     val outfits: List<CharacterOutfit>? = null,
     val defaultOutfitId: String? = null
@@ -341,5 +341,7 @@ data class AgentCharacterSelection(
     val loreId: String,
     val outfitId: String? = null,
     /** A custom outfit must not silently fall back to the saved default on the next edit. */
-    val customOutfit: Boolean? = null
+    val customOutfit: Boolean? = null,
+    /** User-grounded appearance overrides survive subsequent background/negative-only edits. */
+    val overriddenProfileTags: List<String>? = null
 )

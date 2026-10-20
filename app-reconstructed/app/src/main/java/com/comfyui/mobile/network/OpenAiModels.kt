@@ -15,6 +15,7 @@ data class ChatCompletionRequest(
     val stream: Boolean? = null,
     val reasoning_effort: String? = null,
     val tools: List<ChatToolDefinition>? = null,
+    val tool_choice: String? = null,
     val parallel_tool_calls: Boolean? = null,
     val max_completion_tokens: Int? = null,
     val max_tokens: Int? = null
@@ -43,8 +44,18 @@ data class ChatStreamChoice(
 data class ChatStreamDelta(
     val role: String? = null,
     val content: String? = null,
-    val reasoning_content: String? = null
+    val reasoning_content: String? = null,
+    val tool_calls: List<ChatStreamToolCall>? = null
     )
+
+/** Tool arguments, names and IDs may all arrive in separate/interleaved SSE chunks. */
+data class ChatStreamToolCall(
+    val index: Int? = null,
+    val id: String? = null,
+    val type: String? = null,
+    val function: ChatStreamFunctionCall? = null
+)
+data class ChatStreamFunctionCall(val name: String? = null, val arguments: String? = null)
 
 data class ChatErrorDto(
     val message: String? = null,

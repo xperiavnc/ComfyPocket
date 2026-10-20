@@ -56,4 +56,28 @@ class AgentContextBudgetTest {
         assertEquals(4096, AgentGenerationLimits(16384).validated().outputReserve)
         assertEquals(OutputTokenParameter.COMPLETION, OutputTokenParameter.fromStored("unknown"))
     }
+
+    @Test fun toolSchemaReserveTrimsHistoryButKeepsTheCurrentTaskWhole() {
+        val history = listOf(message("user", "old".repeat(100)), message("assistant", "answer".repeat(100)))
+        val current = message("user", "原始任务和已确认答案")
+        val selected = AgentContextBudget.fit(message("system", "rules"), history, listOf(current),
+            AgentGenerationLimits(2048, 128), 4, reservedInputTokens = 1500)
+        assertEquals(2, selected.removedMessages)
+        assertEquals(current, selected.messages.last())
+        assertTrue(selected.estimatedInputTokens >= 1500)
+        assertTrue(selected.estimatedInputTokens + 128 <= 2048)
+    }
+
+    @Test fun nativeToolArgumentsAndReplayedReasoningConsumeInputBudget() {
+        val call = com.comfyui.mobile.network.ChatToolCall("q",
+            com.comfyui.mobile.network.ChatFunctionCall("ask_user_question", """{"questions":[{"id":"q1","question":"哪套？"}]}"""))
+        val native = AgentContextMessage(ChatMessageDto("assistant", reasoning_content = "reason".repeat(100),
+            tool_calls = listOf(call)))
+        assertTrue(AgentContextBudget.estimate(native) > 600)
+        assertThrows(AgentExecutionException::class.java) {
+            AgentContextBudget.fit(message("system", "rules"), emptyList(),
+                listOf(native, message("tool", "answer")), AgentGenerationLimits(1024, 128), 4,
+                reservedInputTokens = 500)
+        }
+    }
 }

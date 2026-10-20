@@ -34,7 +34,8 @@ data class LlmCompletionOutput(
     val content: String,
     val reasoning: String? = null,
     val requestId: String = "",
-    val toolCalls: List<com.comfyui.mobile.network.ChatToolCall> = emptyList()
+    val toolCalls: List<com.comfyui.mobile.network.ChatToolCall> = emptyList(),
+    val finishReason: String? = null
 )
 
 class LlmClient(
@@ -51,6 +52,13 @@ class LlmClient(
 ) {
     private class ActiveCall(val call: Call, val cancelled: AtomicBoolean = AtomicBoolean(false))
     private val activeCalls = ConcurrentHashMap<String, ActiveCall>()
+    // Session-local capability evidence only; never persist credentials or guess by model name.
+    private val textOnlyTools = ConcurrentHashMap.newKeySet<String>()
+    private val autoOnlyTools = ConcurrentHashMap.newKeySet<String>()
+    fun usesTextToolProtocol(baseUrl: String, model: String) = "${resolveEndpoint(baseUrl)}\n$model" in textOnlyTools
+    fun useTextToolProtocol(baseUrl: String, model: String) { textOnlyTools += "${resolveEndpoint(baseUrl)}\n$model" }
+    fun usesAutoToolChoice(baseUrl: String, model: String) = "${resolveEndpoint(baseUrl)}\n$model" in autoOnlyTools
+    fun useAutoToolChoice(baseUrl: String, model: String) { autoOnlyTools += "${resolveEndpoint(baseUrl)}\n$model" }
     val activeRequestIds: Set<String> get() = buildSet { activeCalls.forEach { (id, _) -> add(id) } }
 
     fun cancelRequest(requestId: String) {
@@ -199,7 +207,8 @@ class LlmClient(
         requestId: String = UUID.randomUUID().toString(),
         reasoningEffort: AgentReasoningEffort = AgentReasoningEffort.DEFAULT,
         tools: List<com.comfyui.mobile.network.ChatToolDefinition>? = null,
-        generationLimits: AgentGenerationLimits = AgentGenerationLimits()
+        generationLimits: AgentGenerationLimits = AgentGenerationLimits(),
+        toolChoice: String? = null
     ): Result<LlmCompletionOutput> = withContext(Dispatchers.IO) {
         var endpoint = ""
         var connecting = true
@@ -209,7 +218,7 @@ class LlmClient(
             endpoint = resolveEndpoint(baseUrl)
             val body = buildBody(ChatCompletionRequest(
                 model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null,
-                reasoning_effort = reasoningEffort.wireValue, tools = tools,
+                reasoning_effort = reasoningEffort.wireValue, tools = tools, tool_choice = toolChoice,
                 parallel_tool_calls = if (tools.isNullOrEmpty()) null else false,
                 max_completion_tokens = generationLimits.outputTokens.takeIf {
                     generationLimits.outputParameter == OutputTokenParameter.COMPLETION },
@@ -229,6 +238,10 @@ class LlmClient(
                 }
                 val choice = parsed?.choices?.firstOrNull()
                 val calls = choice?.message?.tool_calls.orEmpty()
+                if (calls.isNotEmpty()) {
+                    if (tools.isNullOrEmpty()) throw incomplete(endpoint)
+                    try { validateToolCalls(calls) } catch (_: Exception) { throw incomplete(endpoint) }
+                }
                 if (choice?.finish_reason != null && choice.finish_reason != "stop" &&
                     !(choice.finish_reason == "tool_calls" && !tools.isNullOrEmpty() && calls.isNotEmpty())) throw incomplete(endpoint)
                 val content = choice?.message?.content.orEmpty().trim()
@@ -236,8 +249,7 @@ class LlmClient(
                 if (content.isBlank() && reasoning.isBlank() && calls.isEmpty()) {
                     throw LlmException(LlmErrorType.EMPTY_RESPONSE, "大模型返回了空响应。", endpoint = endpoint)
                 }
-                LlmCompletionOutput(content.ifBlank { if (calls.isEmpty()) reasoning else "" },
-                    reasoning.ifBlank { null }, requestId, calls)
+                LlmCompletionOutput(content, reasoning.ifBlank { null }, requestId, calls, choice?.finish_reason)
             }
             Result.success(output)
         } catch (e: CancellationException) {
@@ -258,6 +270,8 @@ class LlmClient(
         requestId: String = UUID.randomUUID().toString(),
         reasoningEffort: AgentReasoningEffort = AgentReasoningEffort.DEFAULT,
         generationLimits: AgentGenerationLimits = AgentGenerationLimits(),
+        tools: List<com.comfyui.mobile.network.ChatToolDefinition>? = null,
+        toolChoice: String? = null,
         onProgress: suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit
     ): Result<LlmCompletionOutput> = withContext(Dispatchers.IO) {
         var endpoint = ""
@@ -269,6 +283,8 @@ class LlmClient(
             val body = buildBody(ChatCompletionRequest(
                 model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null,
                 stream = true, reasoning_effort = reasoningEffort.wireValue,
+                tools = tools, tool_choice = toolChoice,
+                parallel_tool_calls = if (tools.isNullOrEmpty()) null else false,
                 max_completion_tokens = generationLimits.outputTokens.takeIf {
                     generationLimits.outputParameter == OutputTokenParameter.COMPLETION },
                 max_tokens = generationLimits.outputTokens.takeIf {
@@ -281,7 +297,9 @@ class LlmClient(
                     ?: throw LlmException(LlmErrorType.EMPTY_RESPONSE, "模型响应流为空。", endpoint = endpoint)
                 val content = StringBuilder()
                 val reasoning = StringBuilder()
+                val toolCalls = LlmToolCallAccumulator()
                 var finished = false
+                var finishReason: String? = null
                 while (!source.exhausted()) {
                     currentCoroutineContext().ensureActive()
                     val line = source.readUtf8Line()?.trim() ?: break
@@ -299,27 +317,34 @@ class LlmClient(
                     }
                     val choice = chunk.choices?.firstOrNull()
                     val finish = choice?.finish_reason
-                    if (finish != null) {
-                        if (finish != "stop") throw incomplete(endpoint)
-                        finished = true
-                    }
                     val r = choice?.delta?.reasoning_content.orEmpty()
                     val c = choice?.delta?.content.orEmpty()
+                    try { toolCalls.append(choice?.delta?.tool_calls.orEmpty()) }
+                    catch (_: Exception) { throw incomplete(endpoint) }
                     reasoning.append(r)
                     content.append(c)
                     if (r.isNotEmpty() || c.isNotEmpty()) {
                         onProgress(r, c, reasoning.toString(), content.toString())
                     }
-                    if (finish == "stop") break
+                    if (finish != null) {
+                        if (finish != "stop" && finish != "tool_calls") throw incomplete(endpoint)
+                        finishReason = finish
+                        finished = true
+                        break
+                    }
                 }
+                val calls = try { toolCalls.completed() } catch (_: Exception) { throw incomplete(endpoint) }
+                if ((calls.isNotEmpty() && tools.isNullOrEmpty()) ||
+                    (finishReason == "tool_calls" && calls.isEmpty())) throw incomplete(endpoint)
                 val finalContent = content.toString().trim()
                 val finalReasoning = reasoning.toString().trim()
-                if (finalContent.isBlank() && finalReasoning.isBlank()) {
+                if (finalContent.isBlank() && finalReasoning.isBlank() && calls.isEmpty()) {
                     // No silent non-stream retry: avoid a second billable request.
                     throw LlmException(LlmErrorType.EMPTY_RESPONSE, "模型返回了空响应流；未自动重发。", endpoint = endpoint)
                 }
                 if (!finished) throw incomplete(endpoint)
-                LlmCompletionOutput(finalContent.ifBlank { finalReasoning }, finalReasoning.ifBlank { null }, requestId)
+                // A reasoning-only result is not a final answer and never becomes a prompt/action.
+                LlmCompletionOutput(finalContent, finalReasoning.ifBlank { null }, requestId, calls, finishReason)
             }
             Result.success(output)
         } catch (e: CancellationException) {

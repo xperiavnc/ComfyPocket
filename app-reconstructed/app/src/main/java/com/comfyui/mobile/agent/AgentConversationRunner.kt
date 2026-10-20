@@ -22,7 +22,7 @@ data class AgentReply(
 )
 
 enum class AgentAction { ASK_USER, RESPOND, APPLY_PROMPT, DRAW }
-data class AgentProgress(val reasoning: String, val content: String)
+data class AgentProgress(val reasoning: String, val content: String, val activity: String? = null)
 enum class AgentMode { CHAT, DRAW }
 data class AgentRunResult(val reply: AgentReply, val submittedId: String? = null)
 

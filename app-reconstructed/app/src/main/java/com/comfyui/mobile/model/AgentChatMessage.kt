@@ -11,8 +11,13 @@ data class AgentClarification(
     val sourceRequest: String? = null,
     /** Nullable so conversations saved before structured questions remain readable by Gson. */
     val questions: List<AgentUserQuestion>? = null,
-    val answerHistory: List<AgentQuestionExchange>? = null
+    val answerHistory: List<AgentQuestionExchange>? = null,
+    /** Exact model-issued call, retained across Room/restart and completed only by a human reply. */
+    val toolInvocation: AgentQuestionInvocation? = null
 )
+
+@Immutable
+data class AgentQuestionInvocation(val id: String, val name: String, val arguments: String)
 
 @Immutable
 data class AgentQuestionOption(val id: String, val label: String, val description: String? = null)
@@ -66,7 +71,9 @@ data class AgentChatMessage(
     val clarification: AgentClarification? = null,
     val clarificationAnswer: AgentClarificationAnswer? = null,
     val positiveAliases: List<com.comfyui.mobile.agent.AgentPromptAlias>? = null,
-    val negativeAliases: List<com.comfyui.mobile.agent.AgentPromptAlias>? = null
+    val negativeAliases: List<com.comfyui.mobile.agent.AgentPromptAlias>? = null,
+    /** Transient progress label; cleared at every terminal state. */
+    val activity: String? = null
     )
 
 @Immutable

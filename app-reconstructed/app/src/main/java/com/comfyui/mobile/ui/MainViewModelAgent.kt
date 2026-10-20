@@ -1271,6 +1271,7 @@ object MainViewModelAgent {
         answerLookupText: String? = null,
         structuredAnswer: com.comfyui.mobile.model.AgentClarificationAnswer? = null,
         onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null,
+        onAgentProgress: (suspend (com.comfyui.mobile.agent.AgentProgress) -> Unit)? = null,
         checkCurrent: suspend () -> Unit = {},
         onLocalTagReport: suspend (com.comfyui.mobile.taglib.LocalTagReport) -> Unit = {}
     ): Result<AgentLlmResult> {
@@ -1327,7 +1328,8 @@ object MainViewModelAgent {
                     }
                     append("}")
                 }
-                messages.add(com.comfyui.mobile.network.ChatMessageDto("assistant", assistantJson))
+                messages.add(com.comfyui.mobile.network.ChatMessageDto("assistant", assistantJson,
+                    reasoning_content = hist.thinkingContent))
             }
         }
 
@@ -1391,6 +1393,15 @@ object MainViewModelAgent {
                         com.comfyui.mobile.network.ChatMessageDto("user", vm.localTagLibrary.context(report)))
                 }
             }
+            // Refresh enriched facts after local lookup; candidates never replace saved profile fields.
+            val finalSystem = com.comfyui.mobile.agent.AgentPromptPolicy.system(persona, drawRules, emptyList()) +
+                characterContext.promptData()
+            messages[0] = com.comfyui.mobile.network.ChatMessageDto("system", finalSystem)
+            val decisionSystem = com.comfyui.mobile.agent.AgentInteractionProtocol.decisionSystem(
+                persona, characterContext.promptData(), com.comfyui.mobile.agent.AgentMode.DRAW)
+            val currentRequestIndex = messages.lastIndex
+            messages.addAll(com.comfyui.mobile.agent.AgentQuestionPolicy.toolContinuation(
+                userText, priorHistory, structuredAnswer))
             val historyCount = recentHistory.size
             val selection = com.comfyui.mobile.agent.AgentContextBudget.fit(
                 com.comfyui.mobile.agent.AgentContextMessage(messages.first()),
@@ -1398,31 +1409,32 @@ object MainViewModelAgent {
                     com.comfyui.mobile.agent.AgentContextMessage(it) },
                 messages.drop(1 + historyCount).mapIndexed { index, message ->
                     com.comfyui.mobile.agent.AgentContextMessage(message,
-                        if (index == messages.size - historyCount - 2) imageDataUrls else emptyList())
-                }, settings.generationLimits, defaultHistoryMessages = 4)
+                        if (index + 1 + historyCount == currentRequestIndex) imageDataUrls else emptyList())
+                }, settings.generationLimits, defaultHistoryMessages = 4,
+                reservedInputTokens = com.comfyui.mobile.agent.AgentInteractionProtocol.contextReserve(finalSystem, decisionSystem))
             messages.clear()
             messages.addAll(selection.messages.map { it.message })
             vm.addLog("Agent 上下文：保守估算 ${selection.estimatedInputTokens} tokens，裁剪 ${selection.removedMessages} 条历史", LogType.INFO)
             checkCurrent()
-            val output = if (onProgress != null) {
-                vm.llmClient.chatCompletionsStream(
-                    settings.baseUrl, settings.apiKey, settings.model, messages,
-                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
-                    generationLimits = settings.generationLimits,
-                    onProgress = onProgress).getOrThrow()
-            } else {
-                vm.llmClient.chatCompletions(
-                    settings.baseUrl, settings.apiKey, settings.model, messages,
-                    images = imageDataUrls, requestId = requestId, reasoningEffort = settings.effort,
-                    generationLimits = settings.generationLimits).getOrThrow()
-            }
+            val imageMessages = selection.messages.mapIndexedNotNull { index, item ->
+                item.images.takeIf { it.isNotEmpty() }?.let { index to it }
+            }.toMap()
+            val outcome = vm.agentRuntime.interact(requestId, settings, messages, imageMessages, decisionSystem,
+                streaming = onProgress != null || onAgentProgress != null, checkCurrent = checkCurrent,
+                progress = { progress ->
+                    if (onAgentProgress != null) onAgentProgress(progress)
+                    else onProgress?.invoke("", "", progress.reasoning, progress.content)
+                })
             checkCurrent()
-            val parsed = parseAgentLlmReply(vm, output.content, output.reasoning,
+            val output = outcome.output
+            val parsed = outcome.question ?: parseAgentLlmReply(vm, checkNotNull(output).content, output.reasoning,
                 userText = userText, previousPrompt = settings.lastPrompt.takeIf {
                     characterContext.reusePreviousPrompt &&
                         priorHistory.lastOrNull { message -> message.role == "assistant" }?.clarification == null
                 }.orEmpty())
-            val completed = com.comfyui.mobile.agent.AgentCharacterPolicy.complete(parsed, characterContext, taskText)
+            val planned = parsed.copy(outfitSelections = parsed.outfitSelections ?: outcome.plan?.outfits?.ifEmpty { null })
+            val completed = com.comfyui.mobile.agent.AgentCharacterPolicy.complete(planned, characterContext, taskText,
+                outcome.plan?.profileOverrides.orEmpty())
             Result.success(completed.copy(
                 positiveAliases = com.comfyui.mobile.agent.AgentPromptAliases.align(
                     completed.prompt, completed.positiveAliases, aliasDictionary),
