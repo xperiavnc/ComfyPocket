@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -13,8 +14,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 43
-        versionName = "0.0.41-tag-library-copy"
+        versionCode = 44
+        versionName = "0.0.42-agent-workspace-storage"
     }
 
     buildFeatures {
@@ -55,6 +56,10 @@ kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_17
     }
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 // Miuix's Android classes target Java 21. APK desugaring still targets Java 17,
@@ -104,6 +109,9 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.12.0")
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.room:room-runtime:2.8.5")
+    implementation("androidx.room:room-ktx:2.8.5")
+    ksp("androidx.room:room-compiler:2.8.5")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

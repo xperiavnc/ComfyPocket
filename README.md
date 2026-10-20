@@ -117,6 +117,13 @@ Bridge **不依赖 Lora Manager**，也不打包进 APK。更新时替换完整�
 
 更多配置、角色规则与执行边界见 [Agent 文档](app-reconstructed/AGENT.md)。
 
+#### Agent 工作区开发进度
+
+`0.0.42-agent-workspace-storage` 完成 P1.1 存储基础：Room、旧数据迁移器、
+执行 / 附件归属及可移植备份接口。**本版尚未启用自动迁移，也没有新增项目 / 多会话页面**；
+现有 Agent 保持旧读写和原界面。下一批 P1.2 将统一接入生产读写、任务回调及 `.cui.bak`，
+阶段状态与后续验收见 [工作区计划](app-reconstructed/AGENT_WORKSPACE_PLAN.md)。
+
 ### 模型中心与在线集市
 
 - **本地模型**：同步 ComfyUI 注册目录，查看封面、模型简介、版本说明、触发词及人工中文标注。
