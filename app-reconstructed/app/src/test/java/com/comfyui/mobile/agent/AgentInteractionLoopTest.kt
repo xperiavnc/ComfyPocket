@@ -64,6 +64,40 @@ class AgentInteractionLoopTest {
         assertNull(result.question)
     }
 
+    @Test fun providerThatIgnoresNativeToolChoiceFallsBackToModelSelectedJsonAction() = runBlocking {
+        val fixture = Fixture(
+            LlmCompletionOutput("""分析中：可能返回 {"action":"continue_task","summary":"猜测"}，但还未确认。"""),
+            LlmCompletionOutput("""{"action":"continue_task","summary":"用户已将背景交给我决定。"}"""),
+            LlmCompletionOutput("正式答复")
+        )
+        var textFallbacks = 0
+        val result = AgentInteractionLoop(fixture, onTextProtocol = { textFallbacks++ })
+            .run(messages, "decision")
+        assertEquals("正式答复", result.output!!.content)
+        assertEquals(3, fixture.requests.size)
+        assertEquals("required", fixture.requests[0].toolChoice)
+        assertNotNull(fixture.requests[0].tools)
+        assertNull(fixture.requests[1].toolChoice)
+        assertNull(fixture.requests[1].tools)
+        assertTrue(fixture.requests[1].messages.first().content!!.contains("接口兼容动作协议"))
+        assertTrue(fixture.requests[1].messages.last().content!!.contains("结构化动作兼容重试"))
+        assertFalse(fixture.requests[1].messages.any { it.content.orEmpty().contains("猜测") })
+        assertNull(fixture.requests[2].tools)
+        assertEquals(1, textFallbacks)
+    }
+
+    @Test fun fencedCompleteJsonActionIsAcceptedButProseIsNeverMined() = runBlocking {
+        val fenced = """```json
+            |{"action":"ask_user","reply":"请选择","questions":[{"id":"q","question":"哪套？"}]}
+            |```""".trimMargin()
+        val fixture = Fixture(LlmCompletionOutput(fenced))
+        val result = AgentInteractionLoop(fixture, initialTextProtocol = true).run(messages, "decision")
+        assertNotNull(result.question)
+        assertEquals("q", result.question!!.clarification!!.questions!!.single().id)
+        assertNull(AgentInteractionProtocol.objectValue(
+            """分析：{"action":"ask_user","questions":[{"id":"q"}]}还要再想想。"""))
+    }
+
     @Test fun compositionMayDiscoverAnotherConflictAndCallTheSameQuestionTool() = runBlocking {
         val fixture = Fixture(ready(), tool(AgentInteractionProtocol.ASK, questions, "later-question"))
         val result = AgentInteractionLoop(fixture).run(messages, "decision")
@@ -116,10 +150,14 @@ class AgentInteractionLoopTest {
         assertTrue(fixture.requests.all { it.deciding })
     }
 
-    @Test fun reasoningOnlyDoesNotBecomeContentOrTriggerASilentSecondRequest() = runBlocking {
-        val fixture = Fixture(LlmCompletionOutput("", reasoning = "still thinking"))
+    @Test fun reasoningOnlyDoesNotBecomeContentAndGetsOneCleanStructuredRetry() = runBlocking {
+        val fixture = Fixture(
+            LlmCompletionOutput("", reasoning = "still thinking"),
+            LlmCompletionOutput("", reasoning = "still thinking")
+        )
         assertTrue(runCatching { AgentInteractionLoop(fixture).run(messages, "decision") }.exceptionOrNull() is AgentExecutionException)
-        assertEquals(1, fixture.requests.size)
+        assertEquals(2, fixture.requests.size)
+        assertNull(fixture.requests.last().messages.lastOrNull { it.role == "assistant" })
     }
 
     @Test fun explicitUnsupportedToolsUsesJsonDecisionAndCachesOnlyThatEvidence() = runBlocking {

@@ -114,19 +114,32 @@ class AgentInteractionLoop(
                 val action = call?.function?.name ?: AgentInteractionProtocol.string(obj, "action")
                 if (action in listOf(AgentInteractionProtocol.ASK, "ask_user")) {
                     val question = AgentInteractionProtocol.question(obj, call).copy(thinking = output.reasoning.orEmpty())
-                    if (call == null) { textProtocol = true; onTextProtocol() }
+                    if (call == null && !textProtocol) { textProtocol = true; onTextProtocol() }
                     return AgentInteractionOutcome(question = question)
                 }
                 require(action == AgentInteractionProtocol.CONTINUE) { "尚未形成可执行决策；不要直接编写提示词" }
                 plan = AgentInteractionProtocol.plan(obj)
                 ready = output
-                if (call == null) { textProtocol = true; onTextProtocol() }
+                if (call == null && !textProtocol) { textProtocol = true; onTextProtocol() }
                 break
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
-                if (attempt == 1 || output.content.isBlank() && output.toolCalls.isEmpty())
-                    throw AgentExecutionException("模型未形成有效交互决策，本轮未修改工作流。${e.message.orEmpty()}")
-                repair(decision, output, e.message.orEmpty(), true)
+                if (attempt == 1) throw AgentExecutionException(
+                    "模型没有返回可执行的交互动作，本轮未修改工作流。已尝试一次结构化格式兼容重试。")
+                if (output.toolCalls.isEmpty()) {
+                    // A compatible endpoint/model may accept tools but ignore required tool_choice.
+                    // Retry once with a model-selected JSON action; never mine prose/reasoning for questions
+                    // or replay the failed model text into the retry context.
+                    if (!textProtocol) {
+                        textProtocol = true
+                        onTextProtocol()
+                    }
+                    decision += ChatMessageDto("user",
+                        "【结构化动作兼容重试】上次响应没有形成可执行动作。请遵循系统中的 JSON 动作协议，" +
+                            "只返回 ask_user 或 continue_task 对象；不要输出普通文字、分析过程或最终提示词。")
+                } else {
+                    repair(decision, output, e.message.orEmpty(), true)
+                }
             }
         }
         val decisionOutput = checkNotNull(ready)

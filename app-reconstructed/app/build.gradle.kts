@@ -14,8 +14,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 49
-        versionName = "0.0.47-agent-decisions"
+        versionCode = 50
+        versionName = "0.0.48-agent-json-fallback"
     }
 
     buildFeatures {

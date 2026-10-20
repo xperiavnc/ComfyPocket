@@ -224,7 +224,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                         MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = true) {
                             val hasReply = it.content.isNotBlank() && it.content != "✨深度求索中..."
                             it.copy(
-                                content = if (hasReply) it.content else message,
+                                // The dedicated error panel below already displays this failure.
+                                // Keep it out of the ordinary reply body to avoid duplicate red/white text.
+                                content = if (hasReply) it.content else "",
                                 errorMessage = message, isThinking = false, activity = null
                             )
                         }
@@ -344,7 +346,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         initialTextProtocol = vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model),
         onTextProtocol = {
             vm.llmClient.useTextToolProtocol(settings.baseUrl, settings.model)
-            vm.addLog("Agent 交互：当前服务使用结构化 JSON 动作兼容协议", LogType.INFO)
+            vm.addLog("Agent 交互：切换到 JSON 动作兼容模式（原生工具不可用或未返回动作）", LogType.INFO)
         },
         initialAutoToolChoice = vm.llmClient.usesAutoToolChoice(settings.baseUrl, settings.model),
         onAutoToolChoice = {

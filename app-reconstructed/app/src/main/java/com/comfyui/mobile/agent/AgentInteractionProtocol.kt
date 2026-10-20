@@ -149,6 +149,7 @@ $facts
         return AgentTaskPlan(summary, outfits, overrides)
     }
 
+    /** Only a complete JSON object (optionally fenced) is a valid decision; prose is never mined. */
     fun objectValue(raw: String): JsonObject? = runCatching {
         JsonParser.parseString(AgentReplyParser.stripFences(raw)).takeIf { it.isJsonObject }?.asJsonObject
     }.getOrNull()

@@ -1,7 +1,24 @@
 # Agent
 
-当前版本：`0.0.47-agent-decisions`，versionCode `49`。保留聊天、提示词扩写与自动出图，
+当前版本：`0.0.48-agent-json-fallback`，versionCode `50`。保留聊天、提示词扩写与自动出图，
 不调整底栏、动画或导航。模型中心说明见 [MODEL_CENTER.md](MODEL_CENTER.md)。
+
+## 0.0.48 原生动作无响应时的有限 JSON 兼容重试
+
+- 截图显示模型返回普通思考文字后，没有提交 `ask_user_question` 或 `continue_task`，
+  原实现虽有一次纠错请求，但仍使用同一套原生工具协议，模型可能再次返回相同格式而失败。
+- 第一次原生决策没有任何工具调用、也没有完整合法动作对象时，只重试一次结构化 JSON 决策；
+  使用 `ask_user` / `continue_task` 动作。缓存仅按 endpoint/model 保留在内存，避免之后仍强制走
+  已观察到不工作的原生工具动作通道。
+- 不把失败响应的普通文字或思考内容追加到第二次上下文；不从推理内容、普通提问句或嵌入的
+  JSON 片段里提取动作。只有完整 JSON 对象（可用完整代码围栏包裹）能作为文本兼容动作；
+  问题仍由模型选择，不能将提问语义猜测为问卷。
+- 若重试仍没有动作，停止本轮，不修改工作流；错误提示不复述模型的内部纠错说明。
+- 回归测试覆盖：接受原生工具但无工具调用、切到 JSON 后模型选择继续、reasoning-only 干净重试、
+  完整围栏 JSON 解析与禁止从普通文字片段抽取动作。真实模型是否服从兼容协议仍需真机复测。
+- 本批执行 `gradlew.bat :app:testDebugUnitTest :app:assembleDebug --console=plain`，
+  共 123 个测试类、920 项测试，失败/错误/跳过均为 0；APK 为
+  `ComfyPocket-0.0.48-agent-json-fallback.apk`，versionCode `50`。
 
 ## 0.0.47 独立交互决策、原生提问工具与档案词绑定
 

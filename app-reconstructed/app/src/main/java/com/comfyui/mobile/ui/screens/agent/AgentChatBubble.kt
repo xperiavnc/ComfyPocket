@@ -188,7 +188,7 @@ fun AgentBubble(
                 }
 
                 // 3. 最终回复内容 (非占位状态时显示，包含流式打字中)
-                if (!msg.isThinking || msg.content != "✨深度求索中...") {
+                if ((!msg.isThinking || msg.content != "✨深度求索中...") && msg.content.isNotBlank()) {
                     SelectionContainer {
                         Text(
                             text = msg.content,

@@ -87,6 +87,52 @@ class AgentRuntimeIntegrationTest {
             request["tools"].asJsonArray.map { it.asJsonObject["function"].asJsonObject["name"].asString })
     }
 
+    @Test fun ignoredNativeToolChoiceRetriesAsJsonAndCanOpenQuestionForm() {
+        automaticDecisions = false
+        responses += success("我先思考一下，再决定如何处理。")
+        responses += success(
+            """{"action":"ask_user","reply":"需要你确认。","questions":[{"id":"choice","question":"本轮采用哪个方案？","options":[{"id":"first","label":"第一种"},{"id":"second","label":"第二种"}],"multi_select":false}]}"""
+        )
+        vm.sendAgentMessage("画面有冲突，先确认方案")
+        awaitDone()
+
+        val last = vm.agentMessages.value.last()
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("choice", last.clarification!!.questions!!.single().id)
+        assertNull(last.clarification.toolInvocation)
+        assertEquals(2, decisionBodies.size)
+        assertTrue(promptBodies.isEmpty())
+        assertTrue(uploadBodies.isEmpty())
+        assertNull(vm.agentWorkflow)
+
+        val nativeRequest = JsonParser.parseString(decisionBodies.first()).asJsonObject
+        assertEquals("required", nativeRequest["tool_choice"].asString)
+        assertTrue(nativeRequest.has("tools"))
+        val fallback = JsonParser.parseString(decisionBodies.last()).asJsonObject
+        assertFalse(fallback.has("tool_choice"))
+        assertFalse(fallback.has("tools"))
+        assertTrue(fallback["messages"].asJsonArray.first().asJsonObject["content"].asString
+            .contains("接口兼容动作协议"))
+        assertTrue(fallback["messages"].asJsonArray.last().asJsonObject["content"].asString
+            .contains("结构化动作兼容重试"))
+    }
+
+    @Test fun invalidActionsAfterTheBoundedFallbackShowOneErrorPanelNotDuplicateReplyText() {
+        automaticDecisions = false
+        responses += success("我先想一想。")
+        responses += success("这是一段普通回复，不含动作对象。")
+        vm.sendAgentMessage("这里存在冲突，请处理")
+        awaitDone()
+
+        val failed = vm.agentMessages.value.last()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(2, decisionBodies.size)
+        assertTrue(failed.content.isBlank())
+        assertTrue(failed.errorMessage!!.contains("已尝试一次结构化格式兼容重试"))
+        assertTrue(promptBodies.isEmpty())
+        assertTrue(uploadBodies.isEmpty())
+    }
+
     @Test fun nativeQuestionInvocationAndAnswersSurviveRoomRestartAndResumeAsAToolResult() {
         automaticDecisions = false
         saveSuzuran()
