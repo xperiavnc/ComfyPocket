@@ -212,7 +212,10 @@ app-reconstructed/app/build/outputs/ComfyPocket/ComfyPocket-<versionName>.apk
 
 ## 项目说明与致谢
 
-本仓库基于提供的源码快照重建构建配置并持续改进，不代表已恢复原始发布工程。
+本项目修改自 [HAIGC/ComfyUI-APP](https://github.com/HAIGC/ComfyUI-APP)。
+当前仓库基于该项目的源码快照重建构建配置，并在此基础上持续修改与扩展；
+不代表已恢复原始发布工程，也不表示与上游保持同步。
+应用图标引用 Pixiv 作品 ID `135715296`：[查看原作品](https://www.pixiv.net/artworks/135715296)。
 感谢 ComfyUI 及 Android、Compose、Miuix 等生态；词库所引用的 ai-tag-toolbox、
 Danbooru 中英对照等数据来源及许可说明见 [词库文档](app-reconstructed/TAG_LIBRARY.md)。
 

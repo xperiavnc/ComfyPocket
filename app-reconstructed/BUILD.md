@@ -1,6 +1,7 @@
 # 重建的 Android 工程
 
-本目录由用户提供的 `app.7z` 模块源码重建，不是原作者的完整构建配置。
+本项目修改自 [HAIGC/ComfyUI-APP](https://github.com/HAIGC/ComfyUI-APP)。
+本目录由提供的模块源码快照重建，不是上游项目的完整构建配置。
 原始 `src/` 放在 `app/src/`，Python 插件保持为独立目录。
 初始重建保留 Kotlin、Python、Manifest 和资源内容；后续版本的功能改动与验证记录见根目录 README 及本目录功能说明。
 
