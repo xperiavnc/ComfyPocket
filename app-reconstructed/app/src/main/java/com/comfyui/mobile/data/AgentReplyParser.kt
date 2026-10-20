@@ -58,7 +58,7 @@ object AgentReplyParser {
             val negative = optionalPromptField(obj, NEGATIVE_KEYS, preserveNaturalLanguage)
             val draw = boolField(obj, DRAW_KEYS)
             val action = actionField(stringField(obj, listOf("action")))
-            val clarification = clarificationField(obj, action) ?: waitingQuestion(reply)
+            val clarification = clarificationField(obj, action)
             if (clarification != null) return questionResult(reply, clarification)
             if (action == AgentAction.RESPOND) return Result(reply, "", false, action = action)
             if (prompt.isNotEmpty() || reply.isNotEmpty() || negative != null || action != null) {
@@ -82,7 +82,6 @@ object AgentReplyParser {
                 val question = salvageString(text, CLARIFICATION_QUESTION_KEYS).ifBlank { reply }
                 return questionResult(reply, freeQuestion(question))
             }
-            waitingQuestion(reply)?.let { return questionResult(reply, it) }
             if (action == AgentAction.RESPOND) return Result(reply, "", false, action = action)
             return Result(reply, prompt, draw, if (prompt.isEmpty() && draw != false) "模型返回的 JSON 无法解析" else null, negative, action = action)
         }
@@ -213,15 +212,6 @@ object AgentReplyParser {
             question.ifBlank { "请补充本轮任务需要确认的信息。" }.take(8000), "free_text"))
     )
 
-    /** Compatibility for models that narrate a deliberate pause but omit the action envelope.
-     * A question mark alone, or text inside prompt, never counts as an ask action.
-     */
-    private fun waitingQuestion(reply: String): AgentClarification? {
-        val waits = Regex(
-            """(?is)(?:等|待|等待|等到)(?:你|您|用户)(?:的)?(?:回答|答复|回复|确认|选择)|(?:你|您)(?:确认|回答|回复|选好|选择)(?:后|以后|之后|完)(?:我|再|[，,]|就)|(?:请|需要)(?:你|您)?先(?:确认|回答|选择|补充|提供)|(?:wait(?:ing)?\s+for\s+(?:your|the user's)\s+(?:answer|reply|confirmation)|after\s+you\s+(?:answer|confirm|choose))""")
-        return reply.takeIf { it.isNotBlank() && waits.containsMatchIn(it) }?.let(::freeQuestion)
-    }
-
     private fun questionsField(obj: JsonObject): List<AgentUserQuestion> {
         val values = obj["questions"]?.takeIf { it.isJsonArray }?.asJsonArray ?: return emptyList()
         val ids = mutableSetOf<String>()
@@ -319,7 +309,6 @@ object AgentReplyParser {
             ?: text.substring(0, matches.firstOrNull()?.range?.first ?: text.length)
         val reply = cleanReply(before.replace(
             Regex("""(?im)^\s*[\*#\-_\[\(]*(?:tip|reply|回复|提示)[\*\]\)]*\s*[:：]\s*"""), ""))
-        waitingQuestion(reply)?.let { return questionResult(reply, it) }
         val draw = sections.firstOrNull { it.first == "should_draw" }?.second?.let(::parseBoolString)
         return Result(reply, prompt, draw,
             if (prompt.isEmpty() && reply.isEmpty()) "未找到 prompt 字段" else null, negative)

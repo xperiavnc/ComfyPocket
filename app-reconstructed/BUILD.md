@@ -28,7 +28,7 @@
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.44-agent-ask-user`，版本号为 `46`。显示名 **ComfyPocket**；
+当前构建版本名为 `0.0.45-agent-led-questions`，版本号为 `47`。显示名 **ComfyPocket**；
 模型中心的手机直连资料 / 代理预览与详情说明见 `MODEL_CENTER.md`，Agent 见 `AGENT.md`，
 在线画廊见 `DANBOORU_GALLERY_PLAN.md`，底栏与动画说明见 `MATERIAL.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
@@ -70,7 +70,9 @@ gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plai
   不打包生成媒体本体。项目 / 多会话页面留待 P2 / P3，详见 `AGENT_WORKSPACE_PLAN.md`。
 - `0.0.44` 增加主动提问、等待回答与原任务续接，Chat 和绘图均支持单选、多选、填写题。
   提问不改工作流或提交；旧 `should_draw=false` 覆盖和普通问答沿用旧提示词的问题已修正。
-- 本版 debug APK 构建及 118 套 / 846 项 JVM、Compose、真实 ViewModel / Room 集成测试通过；
+- `0.0.45` 删除角色 / 服装 / 词库的本地强制提问与回复关键词判定，候选交给 AI 自主判断。
+  只有模型的显式结构化提问进入等待，保留原任务续接；普通文字不自动生成表单或回收旧图。
+- 本版 debug APK 构建及 118 套 / 856 项 JVM、Compose、真实 ViewModel / Room 集成测试通过；
   APK 版本与签名检查见本地验证记录。未进行手机安装、真机升级或真实服务出图验证。
 
 默认 APK 不携带离线词库。运行 `python tools/pack_local_tag_library.py` 可生成独立 ZIP，

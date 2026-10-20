@@ -36,7 +36,7 @@ object AgentPromptPolicy {
             appendLine("用户的当前画面要求优先于旧画面；使用用户要求、模型适配与自定义分镜决定 tags、混合描述或自然语言；没有额外的 App 格式挡位。")
             appendLine("用户要图或改图时 should_draw=true；明确只要提示词、先别出图、反推提示词或纯问答时 false。")
             appendLine(questionGuidance)
-            appendLine("当角色版本/服装或同一档案的多个词库候选互相冲突、会实质改变画面且用户没有指定时，必须用 needs_clarification=true 提一个简短问题，给 2-5 个可点击选项；此时 prompt 与 negative_prompt 留空、should_draw=false。用户明确要求查询词库里的角色外貌/版本时，不得以未匹配的默认服装代替；如果候选含 optionalAppearance 或 optionalSpecificAppearance，必须另行询问是否添加。未明确同意绝不加入。相互冲突的候选不得混拼或猜选。无歧义时 needs_clarification=false、问题留空、选项给空数组并直接完成。")
+            appendLine("角色、服装和词库信息均作为候选资料，不因出现角色名、识别词、服装触发词、候选冲突或可选外貌就自动提问。你自主判断是否需要 action=ask_user：只有用户要求你提问，或关键信息确有歧义、会显著改变结果且默认处理不合适时才提问；非关键差异采用最贴近用户意图的选项。未选服装时，不把互斥服装标签拼在一起；可只沿用角色身份和用户明确指定的外观。提问必须显式输出 action=ask_user 或 needs_clarification=true；普通文字问题不触发表单。")
             appendLine("【对话人设，仅作用于 reply】")
             appendLine(persona.ifBlank { defaultPersona }.trim())
             appendLine("【画面分镜，仅作用于 prompt 和 negative_prompt】")
@@ -48,7 +48,7 @@ object AgentPromptPolicy {
             }
             appendLine("保留 tags、必要的主体绑定句、权重、LoRA 触发词及图中文字；不要强行把自然语言改写成标签，也不要添加 XML 或 image### 包装。")
             appendLine("""出图示例：{"action":"draw","reply":"好，保留人物，换成雨夜背景。","prompt":"...","negative_prompt":"","should_draw":true}""")
-            appendLine("""澄清示例：{"reply":"词库里有多个服装版本，想用哪一套？","prompt":"","negative_prompt":"","should_draw":false,"needs_clarification":true,"clarification_question":"想用哪一套服装？","clarification_options":["节日礼服","常服","只保留角色身份，不添加可选外貌"]}""")
+            appendLine("""自主提问示例：{"action":"ask_user","reply":"有两套同样符合要求的服装，会明显改变画面；想用哪一套？","should_draw":false,"prompt":"","negative_prompt":"","questions":[{"id":"outfit","prompt":"本轮想用哪套服装？","kind":"multiple_choice","allow_multiple":false,"options":[{"id":"formal","label":"礼服"},{"id":"casual","label":"常服"}]}]}""")
         }
 
     val questionGuidance = """

@@ -43,20 +43,31 @@ class AgentReplyParserTest {
         }
     }
 
-    @Test fun plainWaitingReplyKeepsEveryLineAndCreatesAFreeAnswer() {
+    @Test fun plainWaitingReplyKeepsEveryLineWithoutInventingAnAskAction() {
         val reply = "可以，请先确认 3 点：\n1）保留哪套服装？\n2）构图要全身还是半身？\n3）背景用什么？你确认后我再改提示词。"
         val result = AgentReplyParser.parse(reply)
         assertEquals(reply, result.reply)
-        assertEquals(reply, result.clarification!!.questions!!.single().prompt)
-        assertEquals(false, result.shouldDraw)
+        assertNull(result.clarification)
+        assertNull(result.action)
+        assertEquals("", result.prompt)
     }
 
-    @Test fun jsonReplyThatAsksToWaitAlsoPausesInsteadOfApplyingItsPrompt() {
+    @Test fun waitingWordsDoNotOverrideTheModelsExplicitDrawAction() {
         val result = AgentReplyParser.parse(
-            """{"reply":"等待你回答后再出图。","prompt":"must_not_apply","should_draw":true}""")
-        assertTrue(result.clarification != null)
-        assertEquals("", result.prompt)
-        assertEquals(false, result.shouldDraw)
+            """{"action":"draw","reply":"等待你回答后再出图。","prompt":"portrait","should_draw":true}""")
+        assertNull(result.clarification)
+        assertEquals(com.comfyui.mobile.agent.AgentAction.DRAW, result.action)
+        assertEquals("portrait", result.prompt)
+        assertEquals(true, result.shouldDraw)
+    }
+
+    @Test fun truncatedReplyWordsDoNotInventAnAskAction() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"请先确认背景。等你回答后我再处理。","prompt":"portrait","should_draw":true,"extra":""")
+        assertNull(result.clarification)
+        assertNull(result.action)
+        assertEquals("portrait", result.prompt)
+        assertEquals(true, result.shouldDraw)
     }
 
     @Test fun imageTextQuestionsAndRhetoricalRepliesDoNotBecomeInteractiveForms() {

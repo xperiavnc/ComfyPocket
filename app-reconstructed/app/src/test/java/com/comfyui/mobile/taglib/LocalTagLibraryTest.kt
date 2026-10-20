@@ -65,6 +65,14 @@ class LocalTagLibraryTest {
         assertEquals("negative", result.category)
         assertTrue(library.forRequest("蓝发，不要模糊，no bad anatomy").entries.any { it.category == "negative" })
     }
+    @Test fun characterCandidatesDoNotForceAQuestionOrAnOptionalAppearanceStep() = runBlocking {
+        val candidate = library.search("初音未来", "character").first()
+        val context = library.context(LocalTagReport(listOf(candidate)))
+        assertTrue(context.contains("不会自动触发表单"))
+        assertTrue(context.contains("模型才输出 ask_user"))
+        assertFalse(context.contains("必须先用 clarification_question"))
+        assertFalse(context.contains("先询问用户是否添加"))
+    }
     @Test fun newDanbooruTranslationsAreSearchableInBothLanguagesAndChineseSentences() = runBlocking {
         for (query in listOf("机械魔法少女", "mechanical_magical_girl", "mechanical magical girl")) {
             val result = library.search(query).first { it.name == "mechanical_magical_girl" }

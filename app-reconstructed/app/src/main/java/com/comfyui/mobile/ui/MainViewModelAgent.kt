@@ -1291,15 +1291,6 @@ object MainViewModelAgent {
         val taskText = com.comfyui.mobile.agent.AgentQuestionPolicy.lookupText(answerLookupText ?: userText, priorHistory)
         var characterContext = com.comfyui.mobile.agent.AgentCharacterPolicy.resolve(
             settings.lores, taskText, priorHistory)
-        characterContext.clarification?.let { clarification ->
-            return Result.success(AgentLlmResult(
-                tip = clarification.question,
-                shouldDraw = false,
-                characterSelections = characterContext.characters.map { it.selection },
-                characterStatus = "需要确认后继续，不会改写工作流或提交出图",
-                clarification = clarification
-            ))
-        }
         val systemPrompt = com.comfyui.mobile.agent.AgentPromptPolicy.system(
             persona, drawRules, emptyList()) + characterContext.promptData()
 
@@ -1349,13 +1340,7 @@ object MainViewModelAgent {
                     vm.gson.toJson(currentNegativePrompt) +
                     "\n以此为基线核对本轮反向，保留仍适用的已有词与权重；按用户要求删改冲突项。原值为空不代表缺项，不为填满字段凑词。"))
         }
-        val originalDictionaryRequest = com.comfyui.mobile.agent.AgentCharacterPolicy
-            .dictionaryLookupText(userText, priorHistory)
-        val questionRequest = com.comfyui.mobile.agent.AgentQuestionPolicy.requestText(userText, priorHistory)
-        val confirmedUserRequest = if (questionRequest != userText) questionRequest
-        else if (originalDictionaryRequest != userText) {
-            "原始画面要求：\n$originalDictionaryRequest\n\n本次确认：\n${userText.trim()}"
-        } else userText.trim()
+        val confirmedUserRequest = com.comfyui.mobile.agent.AgentQuestionPolicy.requestText(userText, priorHistory)
         messages.add(com.comfyui.mobile.network.ChatMessageDto("user", confirmedUserRequest))
 
         val totalChars = messages.sumOf { (it.content ?: "").length }
@@ -1366,11 +1351,9 @@ object MainViewModelAgent {
 
         return try {
             if (settings.tagSettings.useLocalLibrary) {
-                val dictionaryLookupText = com.comfyui.mobile.agent.AgentCharacterPolicy
-                    .dictionaryLookupText(taskText, priorHistory)
                 val rawReport = try {
                     vm.localTagLibrary.forRequest(
-                        com.comfyui.mobile.agent.AgentCharacterPolicy.lookupText(characterContext, dictionaryLookupText))
+                        com.comfyui.mobile.agent.AgentCharacterPolicy.lookupText(characterContext, taskText))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (_: Exception) {
@@ -1390,24 +1373,12 @@ object MainViewModelAgent {
                     entries = (rawReport.entries.filterNot { it.kind == "character" } + profileCandidates)
                         .distinctBy { Triple(it.profileName, it.kind, it.name) }
                 )
-                val eligibleReport = com.comfyui.mobile.agent.AgentCharacterPolicy
+                val report = com.comfyui.mobile.agent.AgentCharacterPolicy
                     .constrainCandidates(characterContext, combinedReport)
-                val dictionaryResolution = com.comfyui.mobile.agent.AgentCharacterPolicy.resolveDictionaryCandidates(
-                    characterContext, eligibleReport, userText, priorHistory)
-                characterContext = dictionaryResolution.context
-                val report = com.comfyui.mobile.agent.AgentCharacterPolicy.constrainCandidates(
-                    characterContext, dictionaryResolution.report)
+                characterContext = com.comfyui.mobile.agent.AgentCharacterPolicy
+                    .withDictionaryCandidates(characterContext, report)
                 checkCurrent()
                 if (report.available) onLocalTagReport(report)
-                dictionaryResolution.clarification?.let { clarification ->
-                    return Result.success(AgentLlmResult(
-                        tip = clarification.question,
-                        shouldDraw = false,
-                        characterSelections = characterContext.characters.map { it.selection },
-                        characterStatus = "需要确认本地词库角色版本或可选外貌，不会改写工作流或提交出图",
-                        clarification = clarification
-                    ))
-                }
                 if (report.available) {
                     // Candidate data precedes the current user request, which remains authoritative.
                     messages.add(messages.lastIndex,
@@ -1587,7 +1558,11 @@ object MainViewModelAgent {
                 action = com.comfyui.mobile.agent.AgentAction.ASK_USER
             )
         }
-        if (parsed.action == com.comfyui.mobile.agent.AgentAction.RESPOND) {
+        // A text-only reply is conversation, even when the user asked to edit the last image.
+        // Removing keyword-based question inference must not revive the old prompt as a new render.
+        if (parsed.action == com.comfyui.mobile.agent.AgentAction.RESPOND ||
+            (parsed.action == null && parsed.prompt.isBlank() && parsed.shouldDraw != true &&
+                parsed.negativePrompt == null && parsed.reply.isNotBlank())) {
             return AgentLlmResult(parsed.reply, thinking = thinking,
                 action = com.comfyui.mobile.agent.AgentAction.RESPOND)
         }

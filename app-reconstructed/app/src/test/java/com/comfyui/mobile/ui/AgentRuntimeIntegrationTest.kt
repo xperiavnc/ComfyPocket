@@ -146,7 +146,88 @@ class AgentRuntimeIntegrationTest {
         AgentQuestionAnswer("details", listOf("hat", "gloves")),
         AgentQuestionAnswer("background", text = "雨夜街道"))
 
-    @Test fun screenshotStylePlainQuestionsPauseWithoutRecoveringPreviousImage() {
+    @Test fun savedOutfitsNeverPreemptTheModelsQuestionOrResponse() {
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "star", "星澜", "xl_token", aliases = listOf("小黑"),
+            outfits = listOf(
+                com.comfyui.mobile.model.CharacterOutfit("one", "常服", "casual_token"),
+                com.comfyui.mobile.model.CharacterOutfit("two", "礼服", "dress_token"))))
+        responses += success("""{"action":"respond","reply":"先讨论你的画面要求。","should_draw":false}""")
+        vm.sendAgentMessage("我要画小黑图片，你来提问我要求试试")
+        awaitDone()
+        val message = vm.agentMessages.value.last()
+        println("QUESTION_OWNER calls=${llmBodies.size} phase=${vm.agentSessionState.value.turn!!.phase} question=${message.clarification?.question}")
+        assertEquals(1, llmBodies.size)
+        assertEquals("先讨论你的画面要求。", message.content)
+        assertNull(message.clarification)
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(promptBodies.isEmpty())
+    }
+
+    @Test fun multipleOutfitsDoNotBlockAModelThatChoosesToDrawWithoutQuestions() {
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "star", "星澜", "xl_token", fixedTriggerWords = "xl_token",
+            outfits = listOf(
+                com.comfyui.mobile.model.CharacterOutfit("one", "常服", "casual_token"),
+                com.comfyui.mobile.model.CharacterOutfit("two", "礼服", "dress_token"))))
+        responses += success("""{"action":"draw","reply":"按本轮要求绘制。","prompt":"portrait, casual_token","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画星澜")
+        awaitDone()
+        assertEquals(1, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("portrait, casual_token, xl_token", graphText())
+        assertNull(vm.agentMessages.value.last().clarification)
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        println("MODEL_DIRECT calls=${llmBodies.size} submissions=${promptBodies.size} positive=${graphText()}")
+    }
+
+    @Test fun modelAskedOutfitAnswersContinueWithoutTheRemovedLocalQuestionLoop() {
+        vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
+            "star", "星澜", "xl_token", aliases = listOf("小黑"), fixedTriggerWords = "xl_token",
+            outfits = listOf(
+                com.comfyui.mobile.model.CharacterOutfit("one", "常服", "casual_token"),
+                com.comfyui.mobile.model.CharacterOutfit("two", "礼服", "dress_token"))))
+        responses += success("""{"action":"ask_user","reply":"这次想穿哪套？","questions":[{"id":"outfit","prompt":"服装选哪套？","kind":"multiple_choice","options":[{"id":"casual","label":"常服"},{"id":"dress","label":"礼服"}]}]}""")
+        val task = "我要画小黑图片，你来提问我要求试试"
+        vm.sendAgentMessage(task)
+        awaitDone()
+        assertEquals(1, llmBodies.size)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(promptBodies.isEmpty())
+        val message = vm.agentMessages.value.last()
+        assertEquals("这次想穿哪套？", message.content)
+        responses += success("""{"action":"draw","reply":"按常服绘制。","prompt":"portrait","negative_prompt":"","should_draw":true}""")
+        assertTrue(vm.answerAgentQuestions(message.id, listOf(AgentQuestionAnswer("outfit", listOf("casual")))))
+        awaitDone()
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("portrait, xl_token, casual_token", graphText())
+        assertEquals("one", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
+        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
+            .last().asJsonObject["content"].asString
+        assertTrue(current.contains(task))
+        assertTrue(current.contains("常服"))
+        assertFalse(current.contains("礼服"))
+        assertNull(vm.agentMessages.value.last().clarification)
+        println("MODEL_OUTFIT_ANSWER calls=${llmBodies.size} submissions=${promptBodies.size} positive=${graphText()}")
+    }
+
+    @Test fun plainReplyAfterAnEditNeitherStartsAFormNorRendersTheOldPrompt() {
+        responses += success("""{"action":"draw","reply":"好","prompt":"cat, rain","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        responses += success("请先确认想用什么背景，等你回答后我再处理。")
+        vm.sendAgentMessage("把背景改一下")
+        awaitDone()
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat, rain", graphText())
+        assertNull(vm.agentMessages.value.last().clarification)
+        assertNull(vm.agentMessages.value.last().expandedPrompt)
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+    }
+
+    @Test fun plainWaitingWordsDoNotTriggerAQuestionOrRecoverPreviousImage() {
         responses += success("""{"reply":"好","prompt":"cat, rain","should_draw":true}""")
         vm.sendAgentMessage("画猫")
         awaitDone()
@@ -154,14 +235,14 @@ class AgentRuntimeIntegrationTest {
         vm.sendAgentMessage("你能提问我吗")
         awaitDone()
         val message = vm.agentMessages.value.last()
-        println("ASK_PLAIN phase=${vm.agentSessionState.value.turn!!.phase} submissions=${promptBodies.size} positive=${graphText()}")
-        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        println("ASK_KEYWORD phase=${vm.agentSessionState.value.turn!!.phase} calls=${llmBodies.size} submissions=${promptBodies.size} positive=${graphText()}")
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
         assertEquals("cat, rain", graphText())
         assertEquals(1, promptBodies.size)
         assertNull(message.expandedPrompt)
         assertNull(message.errorMessage)
         assertTrue(message.content.contains("3）全身还是半身"))
-        assertEquals("free_text", message.clarification!!.questions!!.single().kind)
+        assertNull(message.clarification)
     }
 
     @Test fun autonomousBatchQuestionRejectsPartialAndStaleAnswersThenContinuesExactlyOnce() {
@@ -411,7 +492,7 @@ class AgentRuntimeIntegrationTest {
         val system = messages.first().asJsonObject["content"].asString
         assertTrue(system.contains("casual_token"))
         assertFalse(system.contains("winter_token"))
-        assertTrue(system.contains("AI 不需要自行选择角色或服装"))
+        assertTrue(system.contains("App 仅提供已匹配资料与待定候选"))
         assertFalse(system.contains("换成日常穿搭"))
         assertTrue(system.contains("App已按用户对话选定的服装预设绘画标签"))
         assertTrue(system.contains("不是绘画标签"))
@@ -423,25 +504,25 @@ class AgentRuntimeIntegrationTest {
         println("CHARACTER_OUTFIT actual=${graphText()} selection=${vm.agentMessages.value.last().characterSelections} calls=${llmBodies.size}")
     }
 
-    @Test fun duplicateAliasAsksBeforeModelAndSelectedNameContinues() {
+    @Test fun duplicateAliasReachesModelWithCandidatesAndNoAppQuestion() {
         vm._characterLores.value = listOf(
             com.comfyui.mobile.model.CharacterLore("a", "星澜", "a_token", aliases = listOf("小蓝")),
             com.comfyui.mobile.model.CharacterLore("b", "月汐", "b_token", aliases = listOf("小蓝")))
+        responses += success("""{"action":"ask_user","questions":[{"id":"who","prompt":"想画星澜还是月汐？","kind":"multiple_choice","allow_multiple":false,"options":[{"id":"a","label":"星澜"},{"id":"b","label":"月汐"}]}]}""")
         vm.sendAgentMessage("画小蓝")
         awaitDone()
         assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
-        assertEquals(listOf("星澜", "月汐"), vm.agentMessages.value.last().clarification!!.options)
-        assertTrue(llmBodies.isEmpty())
-        assertTrue(promptBodies.isEmpty())
-        responses += success("""{"reply":"好","prompt":"b_token","negative_prompt":"","should_draw":true}""")
-        vm.sendAgentMessage("我选择：月汐")
-        awaitDone()
-        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
-        assertEquals("b", vm.agentMessages.value.last().characterSelections!!.single().loreId)
         assertEquals(1, llmBodies.size)
+        assertTrue(promptBodies.isEmpty())
+        val system = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
+            .first().asJsonObject["content"].asString
+        assertTrue(system.contains("存在名称歧义"))
+        assertTrue(system.contains("星澜"))
+        assertTrue(system.contains("月汐"))
+        assertNull(vm.agentMessages.value.last().characterSelections?.takeIf { it.isNotEmpty() })
     }
 
-    @Test fun duplicateOutfitDialogueTriggerAsksBeforeModelAndWorkflow() {
+    @Test fun duplicateOutfitDialogueTriggerReachesModelWithoutPreemptiveAppQuestion() {
         vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
             "star", "星澜", "xl_token", aliases = listOf("小澜"),
             outfits = listOf(
@@ -450,13 +531,19 @@ class AgentRuntimeIntegrationTest {
                 com.comfyui.mobile.model.CharacterOutfit("two", "便服", "casual_token",
                     dialogueTriggers = listOf("换成演出服"))
             )))
+        responses += success("""{"action":"ask_user","questions":[{"id":"outfit","prompt":"使用冬装还是便服？","kind":"multiple_choice","allow_multiple":false,"options":[{"id":"one","label":"冬装"},{"id":"two","label":"便服"}]}]}""")
         vm.sendAgentMessage("画小澜，换成演出服")
         awaitDone()
         assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
-        assertEquals(listOf("冬装", "便服"), vm.agentMessages.value.last().clarification!!.options)
+        assertEquals(listOf("冬装", "便服"), vm.agentMessages.value.last().clarification!!.questions!!.single().options!!.map { it.label })
         assertNull(vm.agentMessages.value.last().expandedPrompt)
-        assertTrue(llmBodies.isEmpty())
+        assertEquals(1, llmBodies.size)
         assertTrue(promptBodies.isEmpty())
+        val system = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
+            .first().asJsonObject["content"].asString
+        assertTrue(system.contains("尚未选定的服装候选"))
+        assertTrue(system.contains("winter_token"))
+        assertTrue(system.contains("casual_token"))
     }
 
     @Test fun modelClarificationPersistsChoicesAndDoesNotRecoverOldPromptOrTouchWorkflow() {
@@ -548,7 +635,7 @@ class AgentRuntimeIntegrationTest {
         assertTrue(vm.agentMessages.value.last().characterSelections!!.isEmpty())
     }
 
-    @Test fun registeredAliasKeepsDictionaryVariantsScopedToItsProfile() {
+    @Test fun registeredAliasKeepsDictionaryCandidatesScopedAndLetsModelChooseWhetherToAsk() {
         com.comfyui.mobile.taglib.TagLibraryTestData.install(app, vm.localTagLibrary)
         vm._agentPromptSettings.value = AgentPromptSettings(true)
         val raw = kotlinx.coroutines.runBlocking { vm.localTagLibrary.forRequest("画初音未来，蓝发") }
@@ -556,17 +643,13 @@ class AgentRuntimeIntegrationTest {
         vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
             "custom", "用户登记的角色", "user_exact_trigger", aliases = listOf("初音未来"),
             fixedTriggerWords = "user_exact_trigger"))
-        responses += success("""{"reply":"好","prompt":"1girl, blue hair","negative_prompt":"","should_draw":true}""")
+        responses += success("""{"action":"ask_user","questions":[{"id":"version","prompt":"选择要用的版本？","kind":"multiple_choice","allow_multiple":false,"options":[{"id":"miku","label":"初音未来常服"},{"id":"other","label":"初音未来礼服"}]}]}""")
         vm.sendAgentMessage("画初音未来，蓝发")
         awaitDone()
         assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
-        assertEquals("character_dictionary_optional_appearance", vm.agentMessages.value.last().clarification!!.purpose)
-        assertTrue(llmBodies.isEmpty())
+        assertEquals(1, llmBodies.size)
         assertTrue(promptBodies.isEmpty())
 
-        vm.sendAgentMessage("我选择：不加入，仅用角色版本标签")
-        awaitDone()
-        assertNull("unexpected clarification: ${vm.agentMessages.value.last().clarification}", vm.agentMessages.value.last().clarification)
         val report = requireNotNull(vm.agentMessages.value.last().localTagReport)
         assertTrue(report.entries.none { it.kind == "character" && it.profileName == null })
         assertTrue(report.entries.any { it.kind == "character" && it.profileName == "用户登记的角色" })
@@ -576,10 +659,9 @@ class AgentRuntimeIntegrationTest {
             .asJsonObject["content"].asString
         assertTrue(dictionary.contains("hatsune_miku"))
         assertTrue(dictionary.contains("registeredProfile"))
-        assertEquals("1girl, blue hair, hatsune miku, vocaloid, user_exact_trigger", graphText())
-        assertEquals("custom", vm.agentMessages.value.last().characterSelections!!.single().loreId)
+        assertEquals("custom", vm.agentMessages.value.last().characterSelections?.singleOrNull()?.loreId)
         assertEquals(1, llmBodies.size)
-        assertEquals(1, promptBodies.size)
+        assertEquals(0, promptBodies.size)
     }
 
     @Test fun negativePromptReachesTheRealSubmissionHistoryAndSavedConversation() {

@@ -16,6 +16,14 @@ class AgentPromptPolicyTest {
         assertFalse(system.contains("generation.execute"))
         assertFalse(system.contains("vision.processOne"))
     }
+    @Test fun onlyTheModelChoosesWhenToAskAndCandidatesDoNotMandateQuestions() {
+        val system = AgentPromptPolicy.system("", "", emptyList())
+        assertTrue(system.contains("你自主判断是否需要 action=ask_user"))
+        assertTrue(system.contains("普通文字问题不触发表单"))
+        assertFalse(system.contains("必须另行询问"))
+        assertFalse(system.contains("必须用 needs_clarification=true"))
+        assertTrue(AgentPromptPolicy.chat("").contains("自行选择 action=\"ask_user\""))
+    }
     @Test fun personaAndVisualRulesDoNotCompeteWithTransportContract() {
         assertFalse(AgentPromptPolicy.defaultPersona.contains("should_draw"))
         assertFalse(AgentPromptPolicy.defaultDrawRules.contains("只输出最终"))
