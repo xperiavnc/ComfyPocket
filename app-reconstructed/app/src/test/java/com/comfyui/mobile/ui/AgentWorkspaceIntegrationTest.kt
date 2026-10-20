@@ -101,6 +101,294 @@ class AgentWorkspaceIntegrationTest {
     private fun message(id: String, content: String) =
         MainViewModelAgent.appendAgentMessage(vm, AgentChatMessage(id, "user", content))
 
+    private fun fresh(title: String): String {
+        val previous = vm.agentWorkspace.conversationId
+        vm.newAgentConversation(title)
+        pump { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM &&
+            vm.agentWorkspace.conversationId != previous }
+        return vm.agentWorkspace.conversationId!!
+    }
+
+    private fun open(id: String) {
+        vm.openAgentConversation(id)
+        pump { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM && vm.agentWorkspace.conversationId == id }
+    }
+
+    private fun delete(id: String) {
+        vm.requestDeleteAgentConversation(id)
+        pump { vm.agentConversationDeleteInfo.value?.conversation?.id == id }
+        vm.deleteAgentConversation(id)
+        pump { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM && vm.agentConversationDeleteInfo.value == null }
+        flush()
+    }
+
+    @Test fun newEmptySessionsStayTransientAndPersistOnlyAfterAMeaningfulEdit() {
+        val first = fresh("空白一")
+        val second = fresh("空白二")
+        assertNotEquals(first, second)
+        vm.updateAgentDraft(AgentInputDraft(scrollMessageId = null))
+        flush()
+        assertTrue(database { _, dao -> dao.allConversations().isEmpty() })
+        vm.updateAgentDraft(AgentInputDraft("保留草稿"))
+        flush()
+        assertEquals(second, database { _, dao -> dao.allConversations().single().id })
+        stop()
+        start()
+        assertEquals(second, vm.activeAgentConversation.value!!.id)
+        assertEquals("保留草稿", vm.agentInputDraft.value.text)
+    }
+
+    @Test fun switchingRestoresIndependentDraftsParametersPromptsModesAndDoesNotTouchActivityTime() {
+        val a = vm.agentWorkspace.conversationId!!
+        message("a", "A 内容")
+        vm._agentWorkflowSource.value = "saved"
+        vm._agentWorkflowId.value = "same.json"
+        vm.agentWorkflowParamValues["9:width"] = 768
+        vm._agentPromptOutput.value = com.comfyui.mobile.agent.AgentPromptOutput("positive A", "negative A")
+        vm.setAgentInteractionMode("chat")
+        vm.updateAgentDraft(AgentInputDraft("A 草稿", 1, 3, "a", 7))
+        flush()
+        val before = database { repo, _ -> repo.conversation(a)!!.updatedAt }
+        val b = fresh("会话 B")
+        assertTrue(vm.agentMessages.value.isEmpty())
+        assertTrue(vm.agentWorkflowParamValues.isEmpty())
+        assertEquals("", vm.agentPromptOutput.value.positive)
+        assertEquals("", vm.agentInputDraft.value.text)
+        message("b", "B 内容")
+        vm._agentWorkflowSource.value = "saved"
+        vm._agentWorkflowId.value = "same.json"
+        vm.agentWorkflowParamValues["9:width"] = 1024
+        vm._agentPromptOutput.value = com.comfyui.mobile.agent.AgentPromptOutput("positive B", "negative B")
+        vm.agentWorkspace.saveConfiguration()
+        vm.updateAgentDraft(AgentInputDraft("B 草稿"))
+        flush()
+        open(a)
+        assertEquals(listOf("A 内容"), vm.agentMessages.value.map { it.content })
+        assertEquals("A 草稿", vm.agentInputDraft.value.text)
+        assertEquals("chat", vm.agentInteractionMode.value)
+        assertEquals("negative A", vm.agentPromptOutput.value.negative)
+        assertEquals(768, (vm.agentWorkflowParamValues["9:width"] as Number).toInt())
+        flush()
+        assertEquals(before, database { repo, _ -> repo.conversation(a)!!.updatedAt })
+        open(b)
+        assertEquals("B 草稿", vm.agentInputDraft.value.text)
+        assertEquals(1024, (vm.agentWorkflowParamValues["9:width"] as Number).toInt())
+        assertEquals("negative B", vm.agentPromptOutput.value.negative)
+        stop()
+        start()
+        assertEquals(b, vm.agentWorkspace.conversationId)
+    }
+
+    @Test fun llmProfileSelectionStaysWithItsSessionAndNewSessionUsesTheGlobalDefault() {
+        val default = LlmProfile(id = "default", name = "默认配置",
+            baseUrl = server.url("/default").toString(), model = "default-model")
+        val custom = LlmProfile(id = "custom", name = "会话专用",
+            baseUrl = server.url("/custom").toString(), model = "custom-model")
+        vm.persistLlmProfiles(listOf(default, custom))
+        vm._llmProfiles.value = listOf(default, custom)
+        vm.prefs.edit().putString("current_llm_profile_id", default.id).commit()
+        vm.agentWorkspace.reload()
+        pump { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM }
+        val a = vm.agentWorkspace.conversationId!!
+        assertEquals(default.id, vm.activeAgentConversation.value!!.llmProfileId)
+        vm.selectLlmProfile(custom.id)
+        flush()
+        val b = fresh("使用默认 AI 的会话")
+        assertEquals(default.id, vm.currentLlmProfileId.value)
+        assertEquals(default.model, vm.llmModel.value)
+        message("b", "保留默认配置")
+        flush()
+        open(a)
+        assertEquals(custom.id, vm.currentLlmProfileId.value)
+        assertEquals(custom.model, vm.llmModel.value)
+        open(b)
+        assertEquals(default.id, vm.currentLlmProfileId.value)
+        assertEquals(default.id, vm.prefs.getString("current_llm_profile_id", null))
+        stop()
+        start()
+        assertEquals(b, vm.agentWorkspace.conversationId)
+        assertEquals(default.id, vm.currentLlmProfileId.value)
+        open(a)
+        assertEquals(custom.id, vm.currentLlmProfileId.value)
+    }
+
+    @Test fun renameUpdatesObservedIndexButOpeningHistoryDoesNotReorderIt() {
+        val a = vm.agentWorkspace.conversationId!!
+        message("a", "first")
+        flush()
+        val b = fresh("second")
+        message("b", "second")
+        flush()
+        pump { vm.agentConversations.value.size == 2 }
+        val order = vm.agentConversations.value.map { it.id }
+        open(a)
+        flush()
+        assertEquals(order, vm.agentConversations.value.map { it.id })
+        vm.renameAgentConversation(a, "新名字")
+        flush()
+        pump { vm.agentConversations.value.firstOrNull()?.title == "新名字" }
+        assertEquals("新名字", vm.activeAgentConversation.value!!.title)
+        assertEquals(a, vm.agentConversations.value.first().id)
+        assertEquals(b, vm.agentConversations.value.last().id)
+    }
+
+    @Test fun latePickerFromTransientOriginIsSavedToOriginAndDoesNotChangeActivePointer() {
+        val a = vm.agentWorkspace.conversationId!!
+        val owner = vm.captureAgentAttachmentOwner()!!
+        val b = fresh("会话 B")
+        vm.updateAgentDraft(AgentInputDraft("B 草稿"))
+        flush()
+        val source = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "late-A.txt").apply { writeText("A asset") }
+        io { vm.agentWorkspace.addAttachments(owner,
+            listOf(AgentAttachment("late-A", "file", source.toURI().toString(), source.name, 7))) }
+        flush()
+        assertTrue(vm.agentPendingAttachments.value.isEmpty())
+        assertTrue(database { repo, _ -> repo.state(a)!!.draftJson.contains("late-A") })
+        stop()
+        start()
+        assertEquals(b, vm.agentWorkspace.conversationId)
+        open(a)
+        pump { vm.agentPendingAttachments.value.singleOrNull()?.uri?.startsWith("file:") == true }
+        assertEquals("A asset", File(java.net.URI(vm.agentPendingAttachments.value.single().uri)).readText())
+    }
+
+    @Test fun lateMediaStaysInOriginAndDeletingOriginDetachesWithoutRebuildingIt() {
+        message("a", "A")
+        val a = vm.agentWorkspace.conversationId!!
+        val target = vm.agentWorkspace.currentTarget()
+        val link = io { vm.agentWorkspace.reserve("turn-a", target, "{}")!! }
+        io { vm.agentWorkspace.confirm(link, "a-remote") }
+        val b = fresh("B")
+        message("b", "B")
+        flush()
+        val media = MediaOutput("A.png", "", "output", MediaType.IMAGE, promptId = "a-remote",
+            workspaceEpoch = vm.agentWorkspace.callbackEpoch)
+        assertTrue(vm.agentWorkspace.record(media, target.key))
+        flush()
+        assertTrue(vm.agentLatestGenerationList.value.isEmpty())
+        open(a)
+        assertEquals("A.png", vm.agentLatestGenerationList.value.single().filename)
+        delete(a)
+        assertEquals(b, vm.agentWorkspace.conversationId)
+        vm.agentWorkspace.record(media, target.key)
+        flush()
+        assertTrue(vm.agentLatestGenerationList.value.isEmpty())
+        assertNull(database { repo, _ -> repo.conversation(a) })
+        val detached = database { _, dao -> dao.execution(link.id)!! }
+        assertNull(detached.conversationId)
+        assertNotNull(detached.detachedAt)
+        assertEquals("a-remote", detached.remoteId)
+        assertTrue(vm.taskStore.tasks.value.any { it.agentExecutionId == link.id && it.agentConversationId == null })
+    }
+
+    @Test fun deletingLastSessionCreatesFreshTransientIdentityAndKeepsOtherScopes() {
+        message("local", "local")
+        val a = vm.agentWorkspace.conversationId!!
+        val cloud = database { repo, _ -> repo.createConversation("cloud@ai", "cloud").id }
+        delete(a)
+        val empty = vm.agentWorkspace.conversationId!!
+        assertNotEquals(a, empty)
+        assertTrue(vm.agentMessages.value.isEmpty())
+        assertEquals("", vm.agentInputDraft.value.text)
+        flush()
+        assertNull(database { repo, _ -> repo.conversation(empty) })
+        assertNotNull(database { repo, _ -> repo.conversation(cloud) })
+    }
+
+    @Test fun switchingRestoresScrollAnchorBeyondRecentPageWithoutLosingOlderHistory() {
+        val a = vm.agentWorkspace.conversationId!!
+        repeat(435) { message("m-$it", "message $it") }
+        vm.updateAgentDraft(AgentInputDraft("draft", scrollMessageId = "m-10", scrollOffset = 26))
+        flush()
+        fresh("B")
+        open(a)
+        assertTrue(vm.agentMessages.value.any { it.id == "m-10" })
+        assertEquals("m-10", vm.agentInputDraft.value.scrollMessageId)
+        assertEquals(26, vm.agentInputDraft.value.scrollOffset)
+        assertEquals("m-434", vm.agentMessages.value.last().id)
+    }
+
+    @Test fun switchingInvalidatesInFlightIdentityAndPersistsThePartialReplyInItsOrigin() {
+        val a = vm.agentWorkspace.conversationId!!
+        val turn = vm.agentSession.begin("local:$a")!!
+        MainViewModelAgent.appendAgentMessage(vm, AgentChatMessage(turn.assistantId, "assistant", "partial", isThinking = true))
+        val oldVersion = vm.agentSession.contextVersion()
+        fresh("B")
+        assertFalse(vm.agentBusy.value)
+        assertFalse(vm.agentSession.isCurrent(turn))
+        assertTrue(vm.agentSession.contextVersion() > oldVersion)
+        assertTrue(vm.agentMessages.value.isEmpty())
+        open(a)
+        assertEquals("partial", vm.agentMessages.value.single().content)
+        assertFalse(vm.agentMessages.value.single().isThinking)
+        assertEquals("已切换会话", vm.agentMessages.value.single().errorMessage)
+    }
+
+    @Test fun queuedOldTemplateReadCannotOverwriteTheNewConversation() {
+        message("a", "A")
+        val a = vm.agentWorkspace.conversationId!!
+        val version = vm.agentSession.contextVersion()
+        fresh("B")
+        assertFalse(io { MainViewModelAgent.ensureAgentWorkflowLoaded(vm, expectedVersion = version) })
+        assertNull(vm.agentWorkflow)
+        assertTrue(vm.agentMessages.value.isEmpty())
+        assertNotEquals(a, vm.agentWorkspace.conversationId)
+    }
+
+    @Test fun modelSelectorOwnerExpiresAcrossSessionSwitchOrTemplateChange() {
+        message("a", "A")
+        val a = vm.agentWorkspace.conversationId!!
+        val owner = vm.captureAgentConfigurationOwner()
+        assertTrue(vm.isCurrentAgentConfiguration(owner))
+        fresh("B")
+        assertFalse(vm.isCurrentAgentConfiguration(owner))
+        open(a)
+        assertFalse(vm.isCurrentAgentConfiguration(owner))
+        val next = vm.captureAgentConfigurationOwner()
+        assertTrue(vm.isCurrentAgentConfiguration(next))
+        vm._agentWorkflowId.value = "different-template"
+        assertFalse(vm.isCurrentAgentConfiguration(next))
+    }
+
+    @Test fun pickerCapturedBeforeFirstSaveDoesNotRecreateDeletedOrigin() {
+        val owner = vm.captureAgentAttachmentOwner()!!
+        assertTrue(owner.mayCreate)
+        message("a", "persist A")
+        flush()
+        delete(owner.conversationId!!)
+        val source = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "deleted-A.txt").apply { writeText("late") }
+        io { vm.agentWorkspace.addAttachments(owner,
+            listOf(AgentAttachment("late", "file", source.toURI().toString(), source.name, 4))) }
+        flush()
+        assertNull(database { repo, _ -> repo.conversation(owner.conversationId) })
+        assertFalse(source.exists())
+        assertTrue(vm.agentPendingAttachments.value.isEmpty())
+    }
+
+    @Test fun saveFailureQueuedJustBeforeNewSessionCannotBeHiddenByTheLoad() {
+        message("a", "saved A")
+        flush()
+        val origin = vm.agentWorkspace.conversationId!!
+        database { _, dao ->
+            // The separate open helper shares the same on-disk database.
+            val db = AgentWorkspaceDatabase.open(app)
+            try { db.openHelper.writableDatabase.execSQL(
+                "CREATE TRIGGER fail_p2 BEFORE INSERT ON agent_messages WHEN NEW.id = 'fail-p2' BEGIN SELECT RAISE(ABORT, 'fixture'); END")
+            } finally { db.close() }
+        }
+        message("fail-p2", "unsaved A")
+        vm.newAgentConversation("B")
+        pump { vm.agentStorageStatus.value.mode == AgentStorageMode.BLOCKED }
+        database { _, _ ->
+            val db = AgentWorkspaceDatabase.open(app)
+            try { db.openHelper.writableDatabase.execSQL("DROP TRIGGER fail_p2") } finally { db.close() }
+        }
+        vm.retryAgentStorage()
+        pump { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM }
+        assertEquals(origin, vm.agentWorkspace.conversationId)
+        assertEquals(listOf("saved A", "unsaved A"), vm.agentMessages.value.map { it.content })
+    }
+
     private fun rewritePackage(file: File, transform: (String, ByteArray) -> ByteArray): ByteArray {
         val entries = linkedMapOf<String, ByteArray>()
         java.util.zip.GZIPInputStream(file.readBytes().drop(11).toByteArray().inputStream()).use { gzip ->

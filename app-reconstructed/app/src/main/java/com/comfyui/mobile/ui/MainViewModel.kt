@@ -2780,6 +2780,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     val agentStorageStatus get() = agentWorkspace.status
     val agentInputDraft get() = agentWorkspace.draft
     val agentHasEarlierMessages get() = agentWorkspace.hasEarlier
+    val agentConversations get() = agentWorkspace.conversations
+    val activeAgentConversation get() = agentWorkspace.activeConversation
+    val agentConversationDeleteInfo get() = agentWorkspace.deleteInfo
+    fun newAgentConversation(title: String = "新会话", onOpened: () -> Unit = {}) =
+        agentWorkspace.newConversation(title, onOpened)
+    fun openAgentConversation(id: String, onOpened: () -> Unit = {}) =
+        agentWorkspace.openConversation(id, onOpened)
+    fun renameAgentConversation(id: String, title: String) = agentWorkspace.renameConversation(id, title)
+    fun requestDeleteAgentConversation(id: String) = agentWorkspace.requestDelete(id)
+    fun dismissDeleteAgentConversation() = agentWorkspace.dismissDelete()
+    fun deleteAgentConversation(id: String) = agentWorkspace.deleteConversation(id)
     fun retryAgentStorage() = agentWorkspace.retry()
     fun agentReferenceWarning() = agentWorkspace.referenceWarning()
     fun useCurrentAgentConfiguration() = agentWorkspace.useCurrentConfiguration()
@@ -2878,6 +2889,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     val agentPendingAttachments = _agentPendingAttachments.asStateFlow()
 
     fun captureAgentAttachmentOwner() = agentWorkspace.captureAttachmentOwner()
+    fun captureAgentConfigurationOwner() = agentWorkspace.captureConfigurationOwner()
+    fun isCurrentAgentConfiguration(owner: AgentConfigurationOwner?) = agentWorkspace.ownsConfiguration(owner)
     fun addAgentImageAttachments(uris: List<android.net.Uri>, owner: AgentAttachmentOwner? = captureAgentAttachmentOwner()) =
         MainViewModelAgent.addAgentImageAttachments(this, uris, owner)
     fun addAgentFileAttachments(uris: List<android.net.Uri>, owner: AgentAttachmentOwner? = captureAgentAttachmentOwner()) =
@@ -2896,10 +2909,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     val agentLlmBusy: StateFlow<Boolean> = _agentBusy
 
     /** True while an Agent image job is queued/running (local Comfy or RH Agent task). */
-    val agentImageBusy: StateFlow<Boolean> = combine(_isRunning, taskStore.tasks) { running, tasks ->
-        running || tasks.any {
-            it.workflowKey?.startsWith(MainViewModelRhWorkflows.AGENT_KEY_PREFIX) == true &&
-                it.taskState.isActive
+    val agentImageBusy: StateFlow<Boolean> = combine(_isRunning, taskStore.tasks, agentStorageStatus) { running, tasks, storage ->
+        if (storage.mode == AgentStorageMode.LEGACY) running || tasks.any {
+            it.workflowKey?.startsWith(MainViewModelRhWorkflows.AGENT_KEY_PREFIX) == true && it.taskState.isActive
+        } else storage.mode == AgentStorageMode.ROOM && tasks.any {
+            it.agentConversationId == storage.conversationId && it.agentExecutionId != null && it.taskState.isActive
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 

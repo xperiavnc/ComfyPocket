@@ -15,8 +15,16 @@ import kotlinx.coroutines.flow.Flow
 /** Internal storage API. Production UI must use the repository, not this DAO. */
 @Dao
 abstract class AgentWorkspaceDao {
-    @Query("SELECT * FROM agent_conversations WHERE scope = :scope ORDER BY updatedAt DESC, id ASC")
+    @Query("""SELECT agent_conversations.* FROM agent_conversations
+        LEFT JOIN agent_projects ON agent_projects.id = agent_conversations.projectId
+        WHERE agent_conversations.scope = :scope AND agent_projects.archivedAt IS NULL
+        ORDER BY agent_conversations.updatedAt DESC, agent_conversations.id ASC""")
     abstract fun observeConversations(scope: String): Flow<List<AgentConversation>>
+    @Query("""SELECT agent_conversations.* FROM agent_conversations
+        LEFT JOIN agent_projects ON agent_projects.id = agent_conversations.projectId
+        WHERE agent_conversations.scope = :scope AND agent_projects.archivedAt IS NULL
+        ORDER BY agent_conversations.updatedAt DESC, agent_conversations.id ASC LIMIT 1""")
+    abstract suspend fun recentConversation(scope: String): AgentConversation?
     @Query("SELECT * FROM agent_conversations WHERE id = :id")
     abstract suspend fun conversation(id: String): AgentConversation?
     @Query("SELECT * FROM agent_conversation_state WHERE conversationId = :id")
@@ -45,6 +53,8 @@ abstract class AgentWorkspaceDao {
     abstract suspend fun assetByPath(path: String): AgentAsset?
     @Query("SELECT * FROM agent_asset_refs WHERE assetId = :id")
     abstract suspend fun refs(id: String): List<AgentAssetRef>
+    @Query("SELECT COUNT(DISTINCT assetId) FROM agent_asset_refs WHERE conversationId = :id")
+    abstract suspend fun conversationAssetCount(id: String): Int
     @Query("SELECT * FROM agent_assets WHERE id NOT IN (SELECT assetId FROM agent_asset_refs)")
     abstract suspend fun unreferencedAssets(): List<AgentAsset>
 

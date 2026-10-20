@@ -145,7 +145,7 @@ object NavigationDiagnostics {
         "画廊" -> "gallery"
         "AI应用" -> "ai_apps"
         "agent", "model_hub", "settings", "theme", "servers", "about", "console",
-        "agent_settings", "cloud_tasks", "ai_app/{id}" -> route
+        "agent_settings", "agent_sessions", "cloud_tasks", "ai_app/{id}" -> route
         else -> "<other>"
     }
 

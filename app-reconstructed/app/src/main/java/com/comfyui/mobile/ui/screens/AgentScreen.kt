@@ -63,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
@@ -136,6 +137,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val scrollBehavior = MiuixScrollBehavior()
 
     val storageStatus by viewModel.agentStorageStatus.collectAsState()
+    val activeConversation by viewModel.activeAgentConversation.collectAsState()
     val draft by viewModel.agentInputDraft.collectAsState()
     val hasEarlier by viewModel.agentHasEarlierMessages.collectAsState()
     val input = TextFieldValue(draft.text, TextRange(
@@ -169,11 +171,23 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     var cloudModelInitialType by remember { mutableStateOf("CHECKPOINT") }
     var cloudModelTargetNodeId by remember { mutableStateOf<String?>(null) }
     var cloudModelTargetKey by remember { mutableStateOf<String?>(null) }
+    var cloudModelOwner by remember { mutableStateOf<com.comfyui.mobile.ui.AgentConfigurationOwner?>(null) }
+    LaunchedEffect(storageStatus.conversationId) {
+        showModelSwitchDialog = false
+        showWorkflowSheet = false
+        showPromptDialog = false
+        showStyleParamsDialog = false
+        showSelectArtistNodeDialog = false
+        showManageAuxNodesDialog = false
+        showImageViewer = false
+        showClearMediaConfirmDialog = false
+        showCloudModelBrowser = false
+    }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
     var observedLastMessageId by rememberSaveable { mutableStateOf(messages.lastOrNull()?.id) }
     var restoredChat by remember(storageStatus.conversationId) { mutableStateOf(false) }
     LaunchedEffect(storageStatus.conversationId) {
-        if (storageStatus.conversationId == null) return@LaunchedEffect
+        if (storageStatus.conversationId == null || !storageStatus.writable) return@LaunchedEffect
         observedLastMessageId = messages.lastOrNull()?.id
         val index = messages.indexOfFirst { it.id == draft.scrollMessageId }
         listState.scrollToItem(if (index >= 0) index + if (hasEarlier) 1 else 0
@@ -182,7 +196,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         restoredChat = true
     }
     LaunchedEffect(storageStatus.conversationId, restoredChat) {
-        if (!restoredChat) return@LaunchedEffect
+        if (!restoredChat || !storageStatus.writable) return@LaunchedEffect
+        val origin = storageStatus.conversationId
         snapshotFlow { listState.isScrollInProgress to
             (listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset) }
             .collectLatest { (scrolling, anchor) ->
@@ -190,8 +205,10 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                     delay(250)
                     val id = (listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? String)
                         ?.takeUnless { it == "earlier" }
-                    viewModel.updateAgentDraft(viewModel.agentInputDraft.value.copy(
-                        scrollMessageId = id, scrollOffset = anchor.second))
+                    if (origin == viewModel.agentStorageStatus.value.conversationId &&
+                        viewModel.agentStorageStatus.value.writable)
+                        viewModel.updateAgentDraft(viewModel.agentInputDraft.value.copy(
+                            scrollMessageId = id, scrollOffset = anchor.second))
                 }
             }
     }
@@ -241,9 +258,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     // 0.8s "完成" micro-feedback when an image run ends.
     // IMPORTANT: do not wait for LaunchedEffect to latch briefComplete — that leaves one
     // Idle frame (overlay/chips flash) between imageBusy=false and BriefComplete.
-    var briefComplete by remember { mutableStateOf(false) }
-    var wasImageBusy by remember { mutableStateOf(false) }
-    var awaitingCompletePulse by remember { mutableStateOf(false) }
+    var briefComplete by remember(storageStatus.conversationId) { mutableStateOf(false) }
+    var wasImageBusy by remember(storageStatus.conversationId) { mutableStateOf(false) }
+    var awaitingCompletePulse by remember(storageStatus.conversationId) { mutableStateOf(false) }
 
     SideEffect {
         if (agentImageBusy) {
@@ -327,6 +344,20 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 .imePadding()
                 .padding(bottom = bottomPad)
     ) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
+                    .clip(RoundedCornerShape(14.dp)).background(scheme.surfaceContainer)
+                    .testTag("agent-open-sessions")
+                    .clickable { navController.navigate("agent_sessions") }
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(activeConversation?.title ?: "正在读取会话…", maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium))
+                }
+                Text("会话", style = MiuixTheme.textStyles.footnote1, color = scheme.primary)
+            }
             AgentImagePreviewCard(
                 mediaList = displayMediaList,
                 previewUrl = { viewModel.previewUrl(it) },
@@ -834,6 +865,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         onResetWorkflowClick = { viewModel.resetAgentSavedWorkflow() },
         isCloudMode = isCloudMode,
         onBrowseCloudModel = { nodeId, key, type ->
+            cloudModelOwner = viewModel.captureAgentConfigurationOwner()
             cloudModelTargetNodeId = nodeId
             cloudModelTargetKey = key
             cloudModelInitialType = type
@@ -852,6 +884,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 text = "加入角色库",
                 colors = ButtonDefaults.textButtonColorsPrimary(),
                 onClick = {
+                    if (!viewModel.isCurrentAgentConfiguration(cloudModelOwner)) return@TextButton
                     val targetNodeId = cloudModelTargetNodeId
                     val targetKey = cloudModelTargetKey
                     if (targetNodeId != null && targetKey != null) {
@@ -871,7 +904,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         onSelectModel = { item ->
             val targetNodeId = cloudModelTargetNodeId
             val targetKey = cloudModelTargetKey
-            if (targetNodeId != null && targetKey != null) {
+            if (viewModel.isCurrentAgentConfiguration(cloudModelOwner) && targetNodeId != null && targetKey != null) {
                 viewModel.updateAgentNodeValue(targetNodeId, targetKey, item.effectiveModelName)
                 viewModel.showToast("已选择模型: ${item.resourceName}")
             }
@@ -880,7 +913,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         onSelectModelWithTriggerNode = { item, textNode, triggers ->
             val targetNodeId = cloudModelTargetNodeId
             val targetKey = cloudModelTargetKey
-            if (targetNodeId != null && targetKey != null) {
+            if (viewModel.isCurrentAgentConfiguration(cloudModelOwner) && targetNodeId != null && targetKey != null) {
                 viewModel.updateAgentNodeValue(targetNodeId, targetKey, item.effectiveModelName)
                 val cur = textNode.text.trim()
                 val next = if (cur.isBlank()) triggers else "$cur, $triggers"

@@ -1132,6 +1132,68 @@ class AgentRuntimeIntegrationTest {
         assertTrue(promptBodies.isEmpty())
     }
 
+    @Test fun sessionSwitchCancelsRealLlmSocketAndKeepsItsPartialReplyOutOfTheNewSession() {
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
+        val origin = vm.agentWorkspace.conversationId!!
+        responses += blocked("A 部分回复")
+        vm.sendAgentMessage("A 的请求")
+        pumpUntil { vm.agentMessages.value.last().content == "A 部分回复" }
+        vm.newAgentConversation("B")
+        pumpUntil { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM &&
+            vm.agentWorkspace.conversationId != origin && vm.llmClient.activeRequestIds.isEmpty() }
+        assertFalse(vm.agentBusy.value)
+        assertTrue(vm.agentMessages.value.isEmpty())
+        assertTrue(promptBodies.isEmpty())
+        vm.openAgentConversation(origin)
+        pumpUntil { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM &&
+            vm.agentWorkspace.conversationId == origin }
+        assertEquals("A 部分回复", vm.agentMessages.value.last().content)
+        assertFalse(vm.agentMessages.value.last().isThinking)
+        assertEquals(1, llmBodies.size)
+    }
+
+    @Test fun deletingStreamingSessionCancelsItsSocketAndDoesNotRecreateDeletedMessages() {
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
+        val origin = vm.agentWorkspace.conversationId!!
+        responses += blocked("即将删除的部分回复")
+        vm.sendAgentMessage("临时任务")
+        pumpUntil { vm.agentMessages.value.last().content == "即将删除的部分回复" }
+        vm.requestDeleteAgentConversation(origin)
+        pumpUntil { vm.agentConversationDeleteInfo.value != null }
+        vm.deleteAgentConversation(origin)
+        pumpUntil { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM &&
+            vm.agentWorkspace.conversationId != origin && vm.llmClient.activeRequestIds.isEmpty() }
+        flushWorkspace()
+        assertTrue(vm.agentMessages.value.isEmpty())
+        assertFalse(vm.agentConversations.value.any { it.id == origin })
+        assertTrue(promptBodies.isEmpty())
+        assertEquals(1, llmBodies.size)
+    }
+
+    @Test fun pendingQuestionStaysWithItsSessionAndReturningDoesNotAutomaticallyResubmitIt() {
+        automaticDecisions = false
+        responses += nativeAction("ask_user_question",
+            """{"questions":[{"id":"outfit","question":"选择哪套服装？","options":[{"id":"a","label":"第一套"},{"id":"b","label":"第二套"}]}]}""",
+            "question-session-a")
+        vm.sendAgentMessage("先确定服装")
+        awaitDone()
+        val origin = vm.agentWorkspace.conversationId!!
+        val question = vm.agentMessages.value.last()
+        vm.newAgentConversation("无问题的会话 B")
+        pumpUntil { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM &&
+            vm.agentWorkspace.conversationId != origin }
+        assertTrue(vm.agentMessages.value.isEmpty())
+        assertFalse(vm.answerAgentQuestions(question.id, listOf(AgentQuestionAnswer("outfit", listOf("a")))))
+        vm.openAgentConversation(origin)
+        pumpUntil { vm.agentStorageStatus.value.mode == AgentStorageMode.ROOM &&
+            vm.agentWorkspace.conversationId == origin }
+        assertEquals(question.clarification, vm.agentMessages.value.last().clarification)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, decisionBodies.size)
+        assertTrue(llmBodies.isEmpty())
+        assertTrue(promptBodies.isEmpty())
+    }
+
     @Test fun changingServerInvalidatesCurrentTurnBeforeAnySubmission() {
         responses += blocked("""{"reply":"部分""")
         vm.sendAgentMessage("画猫")

@@ -19,6 +19,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 
 enum class AgentStorageMode { LOADING, ROOM, LEGACY, BLOCKED, RESTORING }
 data class AgentStorageStatus(val mode: AgentStorageMode = AgentStorageMode.LOADING,
@@ -42,9 +43,9 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
     val status = mutableStatus.asStateFlow()
     private var db: AgentWorkspaceDatabase? = null
     private val repository: AgentWorkspaceRepository
-        get() {
+        get() = synchronized(this) {
             val database = db ?: AgentWorkspaceDatabase.open(app).also { db = it }
-            return AgentWorkspaceRepository(database, directory, File(app.filesDir, "agent_attachments"), vm.gson)
+            AgentWorkspaceRepository(database, directory, File(app.filesDir, "agent_attachments"), vm.gson)
         }
     private data class Loaded(
         val row: AgentConversation, val state: AgentConversationState,
@@ -65,6 +66,17 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
     private val draftRevision = AtomicLong()
     private val persistedConversations = ConcurrentHashMap.newKeySet<String>()
     private val checkpoints = ConcurrentHashMap<String, Long>()
+    private var conversationObserver: Job? = null
+    private var observedScope: String? = null
+    private val transientRows = ConcurrentHashMap<String, AgentConversation>()
+    private val transientStates = ConcurrentHashMap<String, AgentConversationState>()
+    private val deletedConversations = ConcurrentHashMap.newKeySet<String>()
+    private val mutableConversations = MutableStateFlow<List<AgentConversation>>(emptyList())
+    val conversations = mutableConversations.asStateFlow()
+    private val mutableActiveConversation = MutableStateFlow<AgentConversation?>(null)
+    val activeConversation = mutableActiveConversation.asStateFlow()
+    private val mutableDeleteInfo = MutableStateFlow<AgentConversationDeleteInfo?>(null)
+    val deleteInfo = mutableDeleteInfo.asStateFlow()
     val hasEarlier = MutableStateFlow(false)
     val draft = MutableStateFlow(AgentInputDraft())
     val ready get() = status.value.writable
@@ -75,7 +87,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
     init {
         worker.launch {
             try { for (command in commands) command() }
-            finally { db?.close(); closed.complete(Unit); worker.cancel() }
+            finally { conversationObserver?.cancelAndJoin(); db?.close(); closed.complete(Unit); worker.cancel() }
         }
     }
 
@@ -127,7 +139,9 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
                     }
                     lastFailure = null
                 }
-                mutableStatus.value = AgentStorageStatus(AgentStorageMode.ROOM, "", active?.id)
+                vm.agentRuntime.stop("正在恢复会话", invalidateContext = true)
+                vm.agentWorkflowLoadVersion.incrementAndGet()
+                reload(active?.takeIf { it.scope == MainViewModelAgent.scope(vm) })
             } catch (e: Exception) {
                 mutableStatus.value = AgentStorageStatus(AgentStorageMode.BLOCKED, "会话保存失败，点击重试")
             }
@@ -157,13 +171,25 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         )
     }
 
-    private suspend fun load(scope: String, values: Map<String, *>): Loaded {
+    private suspend fun load(scope: String, values: Map<String, *>, requested: AgentConversation? = null): Loaded {
         migrateScope(scope, values)
-        val row = repository.primaryConversation(scope)
+        var row = requested ?: repository.primaryConversation(scope)
+        require(row.scope == scope)
         val stored = repository.state(row.id)
+        if (stored == null && row.llmProfileId == null) row = row.copy(
+            llmProfileId = vm.prefs.getString("current_llm_profile_id", null)
+                ?: vm._llmProfiles.value.firstOrNull()?.id)
         if (stored != null) persistedConversations.add(row.id)
-        val state = stored ?: AgentConversationState(row.id)
-        val page = repository.messagePage(row.id)
+        else transientRows[row.id] = row
+        val state = stored ?: transientStates[row.id] ?: AgentConversationState(row.id)
+        val page = repository.messagePage(row.id).toMutableList()
+        val anchor = vm.gson.fromJson(state.draftJson, AgentInputDraft::class.java).scrollMessageId
+        // Restore a saved reading position even when it lies outside the most recent page.
+        while (anchor != null && page.none { it.id == anchor } && page.firstOrNull()?.sequence?.let { it > 0 } == true) {
+            val earlier = repository.messagePage(row.id, page.first().sequence)
+            if (earlier.isEmpty()) break
+            page.addAll(0, earlier)
+        }
         reconcileTasks()
         // Staging files are kept through an active request; abandoned imports are reclaimed on a later start.
         importsDirectory.listFiles().orEmpty().filter {
@@ -173,7 +199,19 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
             repository.media(row.id), page.firstOrNull()?.sequence ?: 0, repository.executions(), repository.currentEpoch())
     }
 
-    fun reload() {
+    private fun observe(scope: String) {
+        if (observedScope == scope && conversationObserver?.isActive == true) return
+        conversationObserver?.cancel()
+        observedScope = scope
+        mutableConversations.value = emptyList()
+        conversationObserver = worker.launch {
+            repository.observeConversations(scope).collect { rows ->
+                if (observedScope == scope) mutableConversations.value = rows
+            }
+        }
+    }
+
+    fun reload(requested: AgentConversation? = null) {
         if (lastFailure != null) {
             mutableStatus.value = AgentStorageStatus(AgentStorageMode.BLOCKED, "有尚未保存的会话，请先重试保存")
             return
@@ -182,17 +220,29 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         val scope = MainViewModelAgent.scope(vm)
         val values = legacyValues()
         mutableStatus.value = AgentStorageStatus()
+        mutableActiveConversation.value = null
         vm._agentMessages.value = emptyList()
         vm._agentLatestGenerationList.value = emptyList()
         vm._agentPendingAttachments.value = emptyList()
+        vm._agentPromptOutput.value = AgentPromptOutput()
+        vm._agentLastExpandedPrompt.value = ""
+        vm.agentRunPromptIds.clear()
         draft.value = AgentInputDraft()
         vm.agentWorkflow = null
+        vm._agentWorkflowSource.value = ""
+        vm._agentWorkflowId.value = ""
+        vm._agentWorkflowLabel.value = ""
+        vm.agentWorkflowParamValues.clear()
         MainViewModelAgent.parseAgentEditableNodes(vm, null)
         vm.viewModelScope.launch {
             try {
-                val loaded = serial { load(scope, values) }
+                val loaded = serial {
+                    lastFailure?.let { throw it }
+                    load(scope, values, requested)
+                }
                 if (ticket.get() != next || scope != MainViewModelAgent.scope(vm)) return@launch
                 active = loaded.row
+                mutableActiveConversation.value = loaded.row
                 roomActivated = true
                 currentState = loaded.state
                 firstSequence = loaded.before
@@ -208,6 +258,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
                 loaded.links.forEach { link -> link.remoteId?.let { links[link.targetKey + ":" + it] = link } }
                 lastFailure = null
                 apply(loaded, next)
+                observe(scope)
                 mutableStatus.value = AgentStorageStatus(AgentStorageMode.ROOM, "", active?.id)
                 vm.agentRunPromptIds.clear()
                 vm.agentRunPromptIds.addAll(loaded.links.filter { it.conversationId == loaded.row.id }
@@ -234,6 +285,141 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
                     MainViewModelAgent.reloadLegacyAgentWorkflow(vm)
                 }
                 vm.addLog("Agent 工作区加载失败：${e.javaClass.simpleName}", LogType.ERROR)
+            }
+        }
+    }
+
+    private fun beginSwitch(): Boolean {
+        if (!usesRoom || !requireWritable()) return false
+        // Invalidate before clearing the display. The partial response is saved to its old owner.
+        vm.agentRuntime.stop("已切换会话", invalidateContext = true)
+        vm.agentWorkflowLoadVersion.incrementAndGet()
+        saveDraft()
+        mutableDeleteInfo.value = null
+        return true
+    }
+
+    fun openConversation(id: String, onOpened: () -> Unit = {}) {
+        if (id == active?.id) { onOpened(); return }
+        if (!beginSwitch()) return
+        val scope = MainViewModelAgent.scope(vm)
+        val previous = active
+        val operation = ticket.incrementAndGet()
+        mutableStatus.value = AgentStorageStatus(AgentStorageMode.LOADING, "正在切换会话")
+        vm.viewModelScope.launch {
+            try {
+                val row = serial {
+                    lastFailure?.let { throw it }
+                    repository.activateConversation(id, scope)
+                }
+                if (ticket.get() != operation || MainViewModelAgent.scope(vm) != scope) return@launch
+                reload(row)
+                onOpened()
+            } catch (e: Exception) {
+                if (ticket.get() != operation || MainViewModelAgent.scope(vm) != scope) return@launch
+                mutableStatus.value = AgentStorageStatus(
+                    if (lastFailure == null) AgentStorageMode.ROOM else AgentStorageMode.BLOCKED,
+                    if (lastFailure == null) "" else "有尚未保存的会话，请先重试保存", previous?.id)
+                vm.showToast("会话切换失败，请重试")
+            }
+        }
+    }
+
+    fun newConversation(title: String = "新会话", onOpened: () -> Unit = {}) {
+        val clean = title.trim().ifEmpty { "新会话" }
+        if (clean.length > 120 || !beginSwitch()) return
+        val time = System.currentTimeMillis()
+        val row = AgentConversation(java.util.UUID.randomUUID().toString(), MainViewModelAgent.scope(vm), clean,
+            mode = vm.prefs.getString("agent_interaction_mode", MainViewModel.AGENT_MODE_DRAW) ?: MainViewModel.AGENT_MODE_DRAW,
+            llmProfileId = vm.prefs.getString("current_llm_profile_id", null) ?: vm._llmProfiles.value.firstOrNull()?.id,
+            createdAt = time, updatedAt = time)
+        transientRows[row.id] = row
+        // Only scope/template defaults; never inherit the outgoing session's parameter overrides.
+        val defaults = runCatching {
+            val values = legacyValues().filterKeys { key ->
+                key.startsWith("agent_wf_") || key.startsWith("agent_prompt_binding_") ||
+                    key.startsWith("agent_target_node") || key.startsWith("agent_artist_node") ||
+                    key.startsWith("agent_aux_nodes")
+            }
+            AgentLegacyReader.read(values, vm.gson, onlyScope = row.scope).singleOrNull()?.workflowStateJson
+        }.getOrNull() ?: "{}"
+        transientStates[row.id] = AgentConversationState(row.id, workflowStateJson = defaults)
+        // A reserved ID lives in memory; simply opening an empty session creates no database shell.
+        reload(row)
+        onOpened()
+    }
+
+    fun renameConversation(id: String, title: String) {
+        if (!requireWritable()) return
+        val scope = MainViewModelAgent.scope(vm)
+        write {
+            val updated = repository.renameConversation(id, scope, title)
+            vm.viewModelScope.launch(Dispatchers.Main) {
+                if (active?.id == id) {
+                    active = active?.copy(title = updated.title, updatedAt = updated.updatedAt)
+                    mutableActiveConversation.value = active
+                }
+            }
+        }
+    }
+
+    fun requestDelete(id: String) {
+        if (!requireWritable()) return
+        val scope = MainViewModelAgent.scope(vm)
+        val operation = ticket.get()
+        vm.viewModelScope.launch {
+            try {
+                val info = serial {
+                    val base = repository.deleteInfo(id, scope)
+                    vm.taskStore.ensureLoaded()
+                    val terminal = setOf("SUCCESS", "SUCCEEDED", "COMPLETED", "FAILED", "ERROR", "CANCELLED", "CANCELED")
+                    val ids = repository.executions().filter { it.conversationId == id && it.detachedAt == null &&
+                        it.submissionState != "rejected" }.map { it.id }.toSet()
+                    base.copy(unfinishedTaskCount = ids.count { execution ->
+                        vm.taskStore.tasks.value.firstOrNull { it.agentExecutionId == execution }?.state?.uppercase() !in terminal
+                    })
+                }
+                if (scope == MainViewModelAgent.scope(vm) && ready && operation == ticket.get()) mutableDeleteInfo.value = info
+            } catch (e: Exception) { vm.showToast("会话已变更，请刷新后重试") }
+        }
+    }
+
+    fun dismissDelete() { mutableDeleteInfo.value = null }
+
+    fun deleteConversation(id: String) {
+        val info = mutableDeleteInfo.value?.takeIf { it.conversation.id == id } ?: return
+        if (!requireWritable()) return
+        val deletingActive = active?.id == id
+        if (deletingActive && !beginSwitch()) return
+        val scope = MainViewModelAgent.scope(vm)
+        val operation = ticket.incrementAndGet()
+        mutableDeleteInfo.value = null
+        mutableStatus.value = AgentStorageStatus(AgentStorageMode.LOADING, "正在删除会话")
+        vm.viewModelScope.launch {
+            try {
+                val next = serial {
+                    lastFailure?.let { throw it }
+                    require(info.conversation.scope == scope)
+                    repository.deleteConversation(id)
+                    deletedConversations.add(id)
+                    transientRows.remove(id)
+                    transientStates.remove(id)
+                    persistedConversations.remove(id)
+                    links.replaceAll { _, link -> if (link.conversationId == id)
+                        link.copy(conversationId = null, detachedAt = System.currentTimeMillis()) else link }
+                    reconcileTasks()
+                    if (deletingActive) repository.primaryConversation(scope) else active
+                }
+                if (ticket.get() != operation || MainViewModelAgent.scope(vm) != scope) return@launch
+                if (deletingActive) reload(next)
+                else mutableStatus.value = AgentStorageStatus(AgentStorageMode.ROOM, "", active?.id)
+                vm.showToast("已删除会话")
+            } catch (e: Exception) {
+                if (ticket.get() != operation || MainViewModelAgent.scope(vm) != scope) return@launch
+                mutableStatus.value = AgentStorageStatus(
+                    if (lastFailure == null) AgentStorageMode.ROOM else AgentStorageMode.BLOCKED,
+                    if (lastFailure == null) "" else "有尚未保存的会话，请先重试保存", active?.id)
+                vm.showToast("会话删除失败，请重试")
             }
         }
     }
@@ -266,7 +452,8 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         vm._agentLastExpandedPrompt.value = prompt.positive
         vm._agentLatestGenerationList.value = loaded.media
         vm._agentInteractionMode.value = loaded.row.mode
-        loaded.row.llmProfileId?.let { id ->
+        (loaded.row.llmProfileId ?: vm.prefs.getString("current_llm_profile_id", null)
+            ?: vm._llmProfiles.value.firstOrNull()?.id)?.let { id ->
             vm._llmProfiles.value.firstOrNull { it.id == id }?.let { profile ->
                 vm._currentLlmProfileId.value = id
                 vm._llmBaseUrl.value = profile.baseUrl
@@ -302,7 +489,10 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
 
     private suspend fun ensure(row: AgentConversation) {
         // Always keep the latest metadata instead of overwriting it from an older queued message.
-        if (repository.state(row.id) == null) repository.saveConversation(row)
+        if (repository.state(row.id) == null) {
+            repository.saveConversation(row, makeActive = active?.id == row.id)
+            transientStates.remove(row.id)?.let { repository.updateState(it) }
+        }
         persistedConversations.add(row.id)
     }
 
@@ -330,6 +520,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         val row = active?.copy(mode = vm._agentInteractionMode.value, llmProfileId = vm._currentLlmProfileId.value,
             workflowRef = "${vm._agentWorkflowSource.value}:${vm._agentWorkflowId.value}") ?: return
         active = row
+        mutableActiveConversation.value = row
         val workflow = vm.gson.toJson(mapOf(
             "source" to vm._agentWorkflowSource.value, "id" to vm._agentWorkflowId.value,
             "label" to vm._agentWorkflowLabel.value, "parameters" to vm.agentWorkflowParamValues.toMap(),
@@ -339,7 +530,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
             promptOutputJson = vm.gson.toJson(vm._agentPromptOutput.value))
         currentState = state
         write {
-            repository.saveConversation(row)
+            repository.saveConversation(row, makeActive = active?.id == row.id)
             persistedConversations.add(row.id)
             val persisted = repository.state(row.id)!!
             repository.updateState(persisted.copy(workflowStateJson = state.workflowStateJson,
@@ -355,7 +546,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         draftRevision.incrementAndGet()
         val attachments = vm._agentPendingAttachments.value.toList()
         if (value.text.isEmpty() && attachments.isEmpty() && savedMessages.isEmpty() &&
-            currentState?.workflowStateJson == "{}") return
+            row.id !in persistedConversations) return
         write { ensure(row); repository.saveDraft(row.id, vm.gson.toJson(value), attachments) }
     }
 
@@ -364,6 +555,16 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         return AgentAttachmentOwner(active?.id, MainViewModelAgent.scope(vm), epochs.get(), ticket.get(),
             mayCreate = active?.id?.let { it !in persistedConversations } == true)
     }
+
+    fun captureConfigurationOwner() = AgentConfigurationOwner(
+        active?.id, MainViewModelAgent.scope(vm), ticket.get(),
+        vm._agentWorkflowSource.value, vm._agentWorkflowId.value
+    )
+
+    fun ownsConfiguration(owner: AgentConfigurationOwner?): Boolean =
+        owner != null && ready && owner.conversationId == active?.id &&
+            owner.scope == MainViewModelAgent.scope(vm) && owner.ticket == ticket.get() &&
+            owner.source == vm._agentWorkflowSource.value && owner.workflowId == vm._agentWorkflowId.value
 
     suspend fun addAttachments(owner: AgentAttachmentOwner, added: List<AgentAttachment>) {
         if (owner.epoch != epochs.get()) { discardImports(added); return }
@@ -376,11 +577,11 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         }
         val id = owner.conversationId ?: return
         // The active origin can still be a transient empty conversation.
-        val row = active?.takeIf { it.id == id && it.scope == owner.scope }
+        val row = (active?.takeIf { it.id == id } ?: transientRows[id])?.takeIf { it.scope == owner.scope }
         val result = serial {
-            if (owner.epoch != epochs.get()) return@serial null
+            if (owner.epoch != epochs.get() || id in deletedConversations) return@serial null
             if (repository.conversation(id) == null) {
-                if (!owner.mayCreate || row == null || owner.ticket != ticket.get()) return@serial null
+                if (!owner.mayCreate || row == null) return@serial null
                 ensure(row)
             }
             val state = repository.state(id) ?: return@serial null
@@ -395,7 +596,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
             display(listOf(AgentChatMessage("draft", "user", "", attachments = merged))).single().attachments
         } ?: run { discardImports(added); return }
         withContext(Dispatchers.Main) {
-            if (active?.id == id && owner.epoch == epochs.get() && owner.ticket == ticket.get()) {
+            if (active?.id == id && owner.epoch == epochs.get()) {
                 draftRevision.incrementAndGet()
                 // Only append the imported items; edits/removals made while reading the file stay intact.
                 val addedIds = added.mapTo(hashSetOf()) { it.id }
@@ -432,13 +633,14 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
     fun loadEarlier() {
         val row = active ?: return
         val before = firstSequence
+        val loadTicket = ticket.get()
         if (!usesRoom || !hasEarlier.value) return
         hasEarlier.value = false
         vm.viewModelScope.launch {
             val page = serial { repository.messagePage(row.id, before).let { rows ->
                 rows to display(rows.map { vm.gson.fromJson(it.payloadJson, AgentChatMessage::class.java) })
             } }
-            if (active?.id != row.id) return@launch
+            if (active?.id != row.id || loadTicket != ticket.get()) return@launch
             firstSequence = page.first.firstOrNull()?.sequence ?: 0
             vm._agentMessages.value = (page.second + vm._agentMessages.value).distinctBy { it.id }
             savedMessages = vm._agentMessages.value
@@ -597,6 +799,10 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
 
     suspend fun restore(source: File, confirmed: Boolean) = serial {
         val result = repository.restoreFrom(source, confirmed)
+        deletedConversations.clear()
+        transientRows.clear()
+        transientStates.clear()
+        persistedConversations.clear()
         // Replacement advances the DB epoch again; publish it before finishRestore reconnects.
         epochs.set(repository.currentEpoch())
         result
@@ -615,7 +821,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         }
     }
 
-    fun close() { commands.close() }
+    fun close() { conversationObserver?.cancel(); commands.close() }
     suspend fun awaitClosed() { closed.await() }
 
     private suspend fun inventoryLegacyFiles() {
@@ -637,4 +843,9 @@ data class AgentInputDraft(
 data class AgentAttachmentOwner(
     val conversationId: String?, val scope: String, val epoch: Long, val ticket: Long,
     val mayCreate: Boolean = false
+)
+
+data class AgentConfigurationOwner(
+    val conversationId: String?, val scope: String, val ticket: Long,
+    val source: String, val workflowId: String
 )

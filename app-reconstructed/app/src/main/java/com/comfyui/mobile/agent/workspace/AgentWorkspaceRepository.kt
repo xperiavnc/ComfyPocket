@@ -23,6 +23,12 @@ data class AgentExecutionTarget(val backend: String, val serverId: String, val s
     val key: String get() = "target:" + workspaceId(backend, serverId, siteId.orEmpty())
 }
 
+data class AgentConversationDeleteInfo(
+    val conversation: AgentConversation,
+    val attachmentCount: Int,
+    val unfinishedTaskCount: Int
+)
+
 /**
  * Transactional storage boundary. Production writes are serialized by the ViewModel adapter.
  * Attachment mutations are confined to the managed workspace.
@@ -76,20 +82,44 @@ class AgentWorkspaceRepository(
     /** A stable primary ID is reserved in memory; an empty new scope is not persisted until edited. */
     suspend fun primaryConversation(scope: String): AgentConversation = locked {
         validScope(scope)
-        val existing = dao.meta("active:$scope")?.let { dao.conversation(it) }
-            ?: dao.migration(scope)?.conversationId?.let { dao.conversation(it) }
-            ?: dao.allConversations().lastOrNull { it.scope == scope }
-        existing ?: AgentConversation("primary-" + workspaceId(scope), scope, "新会话",
+        val existing = dao.meta("active:$scope")?.let { dao.conversation(it) }?.takeIf { it.scope == scope }
+            ?: dao.recentConversation(scope)
+        existing ?: AgentConversation(UUID.randomUUID().toString(), scope, "新会话",
             createdAt = now(), updatedAt = now())
     }
 
-    suspend fun saveConversation(row: AgentConversation) = locked {
+    /** Reading a conversation changes the active pointer, never the recent-activity ordering. */
+    suspend fun activateConversation(id: String, scope: String): AgentConversation = locked {
+        validScope(scope)
+        val row = requireNotNull(dao.conversation(id)) { "Conversation was deleted" }
+        require(row.scope == scope) { "Conversation scope differs" }
+        dao.putMeta(AgentWorkspaceMeta("active:$scope", row.id))
+        row
+    }
+
+    suspend fun renameConversation(id: String, scope: String, title: String): AgentConversation = locked {
+        val clean = title.trim()
+        require(clean.isNotEmpty() && clean.length <= 120) { "会话名称需为 1–120 个字符" }
+        val row = requireNotNull(dao.conversation(id)) { "Conversation was deleted" }
+        require(row.scope == scope) { "Conversation scope differs" }
+        row.copy(title = clean, updatedAt = now()).also { dao.putConversation(it) }
+    }
+
+    suspend fun deleteInfo(id: String, scope: String): AgentConversationDeleteInfo = locked {
+        val row = requireNotNull(dao.conversation(id)) { "Conversation was deleted" }
+        require(row.scope == scope)
+        AgentConversationDeleteInfo(row, dao.conversationAssetCount(id),
+            dao.allExecutions().count { it.conversationId == id && it.detachedAt == null &&
+                it.submissionState !in setOf("rejected", "completed", "failed") })
+    }
+
+    suspend fun saveConversation(row: AgentConversation, makeActive: Boolean = true) = locked {
         validScope(row.scope)
         database.withTransaction {
-            dao.putConversation(row.copy(updatedAt = now(),
+            dao.putConversation(row.copy(updatedAt = now(), title = dao.conversation(row.id)?.title ?: row.title,
                 lastMessagePreview = dao.conversation(row.id)?.lastMessagePreview ?: row.lastMessagePreview))
             if (dao.state(row.id) == null) dao.putState(AgentConversationState(row.id))
-            dao.putMeta(AgentWorkspaceMeta("active:${row.scope}", row.id))
+            if (makeActive) dao.putMeta(AgentWorkspaceMeta("active:${row.scope}", row.id))
         }
     }
 
