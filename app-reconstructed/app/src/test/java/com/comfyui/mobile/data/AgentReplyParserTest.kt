@@ -8,6 +8,84 @@ import org.junit.Test
 
 class AgentReplyParserTest {
 
+    @Test fun askUserActionWinsOverMisleadingPromptAndFalseClarificationFlag() {
+        val result = AgentReplyParser.parse(
+            """{"action":"ask_user","reply":"先问两个问题","prompt":"must_not_draw","should_draw":true,"needs_clarification":false,"questions":[{"id":"outfit","prompt":"哪种服装？","kind":"multiple_choice","allow_multiple":false,"options":[{"id":"a","label":"便服"},{"id":"b","label":"礼服"}]},{"id":"details","prompt":"补充细节？","kind":"free_text","placeholder":"自由填写"}]}""")
+        assertEquals("", result.prompt)
+        assertNull(result.negativePrompt)
+        assertEquals(false, result.shouldDraw)
+        assertEquals(com.comfyui.mobile.agent.AgentAction.ASK_USER, result.action)
+        val questions = result.clarification!!.questions!!
+        assertEquals(2, questions.size)
+        assertEquals(listOf("a", "b"), questions[0].options!!.map { it.id })
+        assertFalse(questions[0].allowMultiple)
+        assertEquals("free_text", questions[1].kind)
+        assertEquals("自由填写", questions[1].placeholder)
+    }
+
+    @Test fun askUserQuestionAliasAndMultipleSelectionAreAccepted() {
+        val result = AgentReplyParser.parse(
+            """{"action":"ask_user_question","questions":[{"id":"details","question":"保留哪些？","type":"multiple_choice","multi_select":true,"options":[{"id":"a","label":"帽子"},{"id":"b","label":"手套"}]}]}""")
+        assertTrue(result.clarification!!.questions!!.single().allowMultiple)
+        assertEquals("保留哪些？", result.clarification.questions!!.single().prompt)
+    }
+
+    @Test fun truncatedAskActionPausesEvenWithACompletePromptField() {
+        for (raw in listOf(
+            """{"action":"ask_user","reply":"请确认","prompt":"must_not_draw","questions":[{"id":"q1","prompt":"未完成""",
+            """{"needs_clarification":true,"reply":"请先确认","prompt":"must_not_draw","questions":[""",
+            """{"reply":"请确认","prompt":"must_not_draw","action":"ask_user"""
+        )) {
+            val result = AgentReplyParser.parse(raw)
+            assertEquals("", result.prompt)
+            assertEquals(false, result.shouldDraw)
+            assertTrue(result.clarification != null)
+        }
+    }
+
+    @Test fun plainWaitingReplyKeepsEveryLineAndCreatesAFreeAnswer() {
+        val reply = "可以，请先确认 3 点：\n1）保留哪套服装？\n2）构图要全身还是半身？\n3）背景用什么？你确认后我再改提示词。"
+        val result = AgentReplyParser.parse(reply)
+        assertEquals(reply, result.reply)
+        assertEquals(reply, result.clarification!!.questions!!.single().prompt)
+        assertEquals(false, result.shouldDraw)
+    }
+
+    @Test fun jsonReplyThatAsksToWaitAlsoPausesInsteadOfApplyingItsPrompt() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"等待你回答后再出图。","prompt":"must_not_apply","should_draw":true}""")
+        assertTrue(result.clarification != null)
+        assertEquals("", result.prompt)
+        assertEquals(false, result.shouldDraw)
+    }
+
+    @Test fun imageTextQuestionsAndRhetoricalRepliesDoNotBecomeInteractiveForms() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"在牌子上写出提问。","prompt":"A sign reading \"请先确认：需要什么？\"","should_draw":true}""",
+            preserveNaturalLanguage = true)
+        assertNull(result.clarification)
+        assertEquals(true, result.shouldDraw)
+        assertTrue(result.prompt.contains("请先确认"))
+        assertNull(AgentReplyParser.parse("""{"reply":"为什么不试试雨夜？","prompt":"rain"}""").clarification)
+    }
+
+    @Test fun respondActionNeverAppliesAnAccidentallyIncludedPrompt() {
+        val result = AgentReplyParser.parse(
+            """{"action":"respond","reply":"这是配置说明。","prompt":"must_not_apply","negative_prompt":"must_not_apply","should_draw":true}""")
+        assertEquals("", result.prompt)
+        assertNull(result.negativePrompt)
+        assertEquals(false, result.shouldDraw)
+        assertEquals(com.comfyui.mobile.agent.AgentAction.RESPOND, result.action)
+    }
+
+    @Test fun duplicateQuestionIdsAreNormalizedAndEmptyOptionsBecomeFreeText() {
+        val result = AgentReplyParser.parse(
+            """{"action":"ask_user","questions":[{"id":"same","prompt":"第一题","kind":"free_text"},{"id":"same","prompt":"第二题","kind":"multiple_choice","options":[null,{}]}]}""")
+        val questions = result.clarification!!.questions!!
+        assertEquals(2, questions.map { it.id }.distinct().size)
+        assertEquals("free_text", questions[1].kind)
+    }
+
     private fun assertNoJson(prompt: String) {
         for (bad in listOf("{", "}", "\"", "prompt", "reply", "should_draw", "\":")) {
             assertFalse("prompt leaked '$bad': $prompt", prompt.contains(bad))

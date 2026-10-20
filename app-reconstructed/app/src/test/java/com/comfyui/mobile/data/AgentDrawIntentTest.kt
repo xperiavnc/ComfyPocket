@@ -56,14 +56,26 @@ class AgentDrawIntentTest {
         assertTrue(r.prompt.contains("school uniform") || r.prompt.contains("1girl"))
     }
 
-    @Test fun drawModeOverridesLlmFalseForHuanZhuang() {
+    @Test fun drawModeRespectsLlmPauseForHuanZhuang() {
         val (draw, reason) = AgentDrawIntent.resolveShouldDraw(
             false, "换个服装", promptNonEmpty = true, preferDrawWhenAmbiguous = true
         )
-        assertTrue(draw)
-        assertEquals("draw_mode_override_llm_false", reason)
+        assertFalse(draw)
+        assertEquals("llm_false", reason)
     }
 
+    @Test fun ordinaryQuestionsDoNotRecoverPreviousRender() {
+        for (text in listOf("你能提问我吗", "你有什么建议", "关于这个设置我有个问题")) {
+            val result = AgentDrawIntent.recoverPromptIfNeeded("", text, "cat, rain")
+            assertFalse(result.recoveredFromLast)
+            assertEquals("", result.prompt)
+        }
+    }
+
+    @Test fun falseIsRespectedWithoutDrawModeBiasToo() {
+        assertFalse(AgentDrawIntent.resolveShouldDraw(false, "换成全身", true, false).first)
+    }
+
     @Test fun noPromptNeverDraws() {
         val (draw, reason) = AgentDrawIntent.resolveShouldDraw(true, "换个服装", promptNonEmpty = false)
         assertFalse(draw)

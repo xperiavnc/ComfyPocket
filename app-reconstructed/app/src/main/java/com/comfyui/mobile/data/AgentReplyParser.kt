@@ -1,6 +1,9 @@
 package com.comfyui.mobile.data
 
 import com.comfyui.mobile.model.AgentClarification
+import com.comfyui.mobile.model.AgentQuestionOption
+import com.comfyui.mobile.model.AgentUserQuestion
+import com.comfyui.mobile.agent.AgentAction
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -25,7 +28,8 @@ object AgentReplyParser {
         val error: String? = null,
         /** Missing / invalid = preserve existing; explicit "" = clear existing. */
         val negativePrompt: String? = null,
-        val clarification: AgentClarification? = null
+        val clarification: AgentClarification? = null,
+        val action: AgentAction? = null
     )
 
     private val PROMPT_KEYS = listOf("prompt", "tags", "positive")
@@ -40,20 +44,27 @@ object AgentReplyParser {
         val text = stripFences(raw).trim()
         if (text.isEmpty()) return Result("", "", null, "空响应")
 
-        // 1. Balanced JSON objects (string/escape aware), prefer the one carrying a prompt key.
+        // 1. An interaction wins over stray prompt objects. Inspect decoded fields, not quoted text.
         val candidates = balancedObjects(text)
-        val ordered = candidates.sortedByDescending { c -> PROMPT_KEYS.any { c.contains("\"$it\"") } }
-        for (candidate in ordered) {
-            val obj = parseObject(candidate) ?: parseObject(repairJson(candidate)) ?: continue
+        val ordered = candidates.mapNotNull { parseObject(it) ?: parseObject(repairJson(it)) }
+            .sortedByDescending { obj ->
+                if (actionField(stringField(obj, listOf("action"))) == AgentAction.ASK_USER ||
+                    boolField(obj, CLARIFICATION_KEYS) == true) 2
+                else if (PROMPT_KEYS.any(obj::has)) 1 else 0
+            }
+        for (obj in ordered) {
             val reply = cleanReply(stringField(obj, REPLY_KEYS))
             val prompt = sanitizePrompt(stringField(obj, PROMPT_KEYS), preserveNaturalLanguage)
             val negative = optionalPromptField(obj, NEGATIVE_KEYS, preserveNaturalLanguage)
             val draw = boolField(obj, DRAW_KEYS)
-            val clarification = clarificationField(obj)
-            if (prompt.isNotEmpty() || reply.isNotEmpty() || negative != null || clarification != null) {
+            val action = actionField(stringField(obj, listOf("action")))
+            val clarification = clarificationField(obj, action) ?: waitingQuestion(reply)
+            if (clarification != null) return questionResult(reply, clarification)
+            if (action == AgentAction.RESPOND) return Result(reply, "", false, action = action)
+            if (prompt.isNotEmpty() || reply.isNotEmpty() || negative != null || action != null) {
                 return Result(reply, prompt, draw,
-                    if (prompt.isEmpty() && clarification == null) "JSON 中没有有效的 prompt" else null,
-                    negative, clarification)
+                    if (prompt.isEmpty() && draw != false) "JSON 中没有有效的 prompt" else null,
+                    negative, action = action)
             }
         }
 
@@ -63,7 +74,17 @@ object AgentReplyParser {
             val prompt = sanitizePrompt(salvageString(text, PROMPT_KEYS), preserveNaturalLanguage)
             val negative = salvageOptionalString(text, NEGATIVE_KEYS)?.let { sanitizeOptionalPrompt(it, preserveNaturalLanguage) }
             val draw = salvageBool(text, DRAW_KEYS)
-            return Result(reply, prompt, draw, if (prompt.isEmpty()) "模型返回的 JSON 无法解析" else null, negative)
+            val action = actionField(salvageString(text, listOf("action")))
+            val asks = action == AgentAction.ASK_USER || salvageBool(text, CLARIFICATION_KEYS) == true ||
+                Regex(""""action"\s*:\s*"ask_user(?:_question)?(?:["\s,}]|$)""").containsMatchIn(text)
+            if (asks) {
+                // Truncation must not turn a question into a stale-prompt render.
+                val question = salvageString(text, CLARIFICATION_QUESTION_KEYS).ifBlank { reply }
+                return questionResult(reply, freeQuestion(question))
+            }
+            waitingQuestion(reply)?.let { return questionResult(reply, it) }
+            if (action == AgentAction.RESPOND) return Result(reply, "", false, action = action)
+            return Result(reply, prompt, draw, if (prompt.isEmpty() && draw != false) "模型返回的 JSON 无法解析" else null, negative, action = action)
         }
 
         // 3. Plain-text labelled format ("回复：… / prompt: …"); never dump the whole reply.
@@ -174,7 +195,74 @@ object AgentReplyParser {
         return emptyList()
     }
 
-    private fun clarificationField(obj: JsonObject): AgentClarification? {
+    private fun actionField(value: String): AgentAction? = when (value.trim().lowercase()) {
+        "ask_user", "ask_user_question" -> AgentAction.ASK_USER
+        "respond", "reply" -> AgentAction.RESPOND
+        "apply_prompt", "prompt_only" -> AgentAction.APPLY_PROMPT
+        "draw" -> AgentAction.DRAW
+        else -> null
+    }
+
+    private fun questionResult(reply: String, clarification: AgentClarification) = Result(
+        reply.ifBlank { clarification.question }, "", false, clarification = clarification, action = AgentAction.ASK_USER)
+
+    private fun freeQuestion(question: String) = AgentClarification(
+        question.ifBlank { "请补充本轮任务需要确认的信息。" }.take(8000),
+        emptyList(), purpose = "agent_question",
+        questions = listOf(AgentUserQuestion("q1",
+            question.ifBlank { "请补充本轮任务需要确认的信息。" }.take(8000), "free_text"))
+    )
+
+    /** Compatibility for models that narrate a deliberate pause but omit the action envelope.
+     * A question mark alone, or text inside prompt, never counts as an ask action.
+     */
+    private fun waitingQuestion(reply: String): AgentClarification? {
+        val waits = Regex(
+            """(?is)(?:等|待|等待|等到)(?:你|您|用户)(?:的)?(?:回答|答复|回复|确认|选择)|(?:你|您)(?:确认|回答|回复|选好|选择)(?:后|以后|之后|完)(?:我|再|[，,]|就)|(?:请|需要)(?:你|您)?先(?:确认|回答|选择|补充|提供)|(?:wait(?:ing)?\s+for\s+(?:your|the user's)\s+(?:answer|reply|confirmation)|after\s+you\s+(?:answer|confirm|choose))""")
+        return reply.takeIf { it.isNotBlank() && waits.containsMatchIn(it) }?.let(::freeQuestion)
+    }
+
+    private fun questionsField(obj: JsonObject): List<AgentUserQuestion> {
+        val values = obj["questions"]?.takeIf { it.isJsonArray }?.asJsonArray ?: return emptyList()
+        val ids = mutableSetOf<String>()
+        return values.take(6).mapIndexedNotNull { index, value ->
+            if (!value.isJsonObject) return@mapIndexedNotNull null
+            val item = value.asJsonObject
+            val prompt = stringField(item, listOf("prompt", "question")).trim().take(2000)
+            if (prompt.isBlank()) return@mapIndexedNotNull null
+            val proposed = stringField(item, listOf("id")).trim().take(80).ifBlank { "q${index + 1}" }
+            var id = proposed
+            while (!ids.add(id)) id += "_${index + 1}"
+            val optionIds = mutableSetOf<String>()
+            val options = item["options"]?.takeIf { it.isJsonArray }?.asJsonArray?.toList().orEmpty()
+                .take(8).mapIndexedNotNull option@ { optionIndex, option ->
+                    val label = when {
+                        option.isJsonObject -> stringField(option.asJsonObject, listOf("label")).trim()
+                        option.isJsonPrimitive && option.asJsonPrimitive.isString -> option.asString.trim()
+                        else -> ""
+                    }.take(1000)
+                    if (label.isBlank()) return@option null
+                    val optionId = if (option.isJsonObject) stringField(option.asJsonObject, listOf("id")).trim().take(80)
+                        .ifBlank { "o${optionIndex + 1}" } else "o${optionIndex + 1}"
+                    if (!optionIds.add(optionId)) return@option null
+                    AgentQuestionOption(optionId, label)
+                }
+            val free = stringField(item, listOf("kind", "type")) == "free_text" || options.isEmpty()
+            AgentUserQuestion(
+                id, prompt, if (free) "free_text" else "multiple_choice",
+                if (free) null else options, !free && boolField(item, listOf("allow_multiple", "allowMultiple", "multi_select")) == true,
+                stringField(item, listOf("placeholder")).trim().take(200).ifBlank { null }
+            )
+        }
+    }
+
+    private fun clarificationField(obj: JsonObject, action: AgentAction?): AgentClarification? {
+        if (action == AgentAction.ASK_USER) {
+            val questions = questionsField(obj)
+            return if (questions.isNotEmpty()) AgentClarification(
+                "请确认以下问题", emptyList(), purpose = "agent_question", questions = questions)
+            else freeQuestion(stringField(obj, CLARIFICATION_QUESTION_KEYS).ifBlank { stringField(obj, REPLY_KEYS) })
+        }
         val requested = boolField(obj, CLARIFICATION_KEYS)
         if (requested == false) return null
         val explicitQuestion = stringField(obj, listOf("clarification_question", "clarificationQuestion")).trim()
@@ -229,12 +317,12 @@ object AgentReplyParser {
         }?.second?.let { sanitizeOptionalPrompt(it, preserveNaturalLanguage) }
         val before = sections.firstOrNull { it.first in setOf("tip", "reply", "回复") }?.second
             ?: text.substring(0, matches.firstOrNull()?.range?.first ?: text.length)
-        val reply = cleanReply(
-            before.replace(Regex("""(?im)^\s*[\*#\-_\[\(]*(?:tip|reply|回复|提示)[\*\]\)]*\s*[:：]\s*"""), "")
-                .lines().firstOrNull { line -> line.any { it in '\u4e00'..'\u9fa5' } }.orEmpty()
-        )
+        val reply = cleanReply(before.replace(
+            Regex("""(?im)^\s*[\*#\-_\[\(]*(?:tip|reply|回复|提示)[\*\]\)]*\s*[:：]\s*"""), ""))
+        waitingQuestion(reply)?.let { return questionResult(reply, it) }
         val draw = sections.firstOrNull { it.first == "should_draw" }?.second?.let(::parseBoolString)
-        return Result(reply, prompt, draw, if (prompt.isEmpty()) "未找到 prompt 字段" else null, negative)
+        return Result(reply, prompt, draw,
+            if (prompt.isEmpty() && reply.isEmpty()) "未找到 prompt 字段" else null, negative)
     }
 
     // ---- sanitizers ----
@@ -281,7 +369,7 @@ object AgentReplyParser {
         val t = unescape(raw).trim().removeSurrounding("\"").trim()
         // A reply that is itself JSON is a parse leak, not a reply.
         if (t.startsWith("{") || t.contains("\"prompt\"") || t.contains("should_draw")) return ""
-        return t.lines().firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        return t
     }
 
     fun unescape(s: String): String {

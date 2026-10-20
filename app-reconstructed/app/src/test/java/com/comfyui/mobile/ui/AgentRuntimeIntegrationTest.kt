@@ -14,6 +14,7 @@ import com.comfyui.mobile.agent.PromptBindingMode
 import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.model.LlmProfile
 import com.comfyui.mobile.model.AgentAttachment
+import com.comfyui.mobile.model.AgentQuestionAnswer
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import java.io.File
@@ -139,6 +140,210 @@ class AgentRuntimeIntegrationTest {
     }
     private fun graphText() = ((vm.agentWorkflow!!["1"] as Map<*, *>)["inputs"] as Map<*, *>)["text"]
 
+    private val askThree = """{"action":"ask_user","reply":"先确认构图、配件和背景。","prompt":"must_not_apply","negative_prompt":"must_not_apply","should_draw":true,"questions":[{"id":"framing","prompt":"构图用哪种？","kind":"multiple_choice","options":[{"id":"full","label":"全身"},{"id":"half","label":"半身"}]},{"id":"details","prompt":"保留哪些配件？","kind":"multiple_choice","allow_multiple":true,"options":[{"id":"hat","label":"帽子"},{"id":"gloves","label":"手套"}]},{"id":"background","prompt":"背景有什么要求？","kind":"free_text"}]}"""
+    private val threeAnswers get() = listOf(
+        AgentQuestionAnswer("framing", listOf("full")),
+        AgentQuestionAnswer("details", listOf("hat", "gloves")),
+        AgentQuestionAnswer("background", text = "雨夜街道"))
+
+    @Test fun screenshotStylePlainQuestionsPauseWithoutRecoveringPreviousImage() {
+        responses += success("""{"reply":"好","prompt":"cat, rain","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        responses += success("可以，请先确认 3 点：\n1）使用哪套服装？\n2）保留帽子和手套吗？\n3）全身还是半身？你确认后我再改提示词。")
+        vm.sendAgentMessage("你能提问我吗")
+        awaitDone()
+        val message = vm.agentMessages.value.last()
+        println("ASK_PLAIN phase=${vm.agentSessionState.value.turn!!.phase} submissions=${promptBodies.size} positive=${graphText()}")
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("cat, rain", graphText())
+        assertEquals(1, promptBodies.size)
+        assertNull(message.expandedPrompt)
+        assertNull(message.errorMessage)
+        assertTrue(message.content.contains("3）全身还是半身"))
+        assertEquals("free_text", message.clarification!!.questions!!.single().kind)
+    }
+
+    @Test fun autonomousBatchQuestionRejectsPartialAndStaleAnswersThenContinuesExactlyOnce() {
+        responses += success(askThree)
+        vm.sendAgentMessage("画星澜，保留蓝色外套")
+        awaitDone()
+        assertNull(vm.agentWorkflow)
+        assertTrue(promptBodies.isEmpty())
+        val message = vm.agentMessages.value.last()
+        val size = vm.agentMessages.value.size
+        assertEquals(3, message.clarification!!.questions!!.size)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertFalse(vm.answerAgentQuestions(message.id, threeAnswers.dropLast(1)))
+        assertFalse(vm.answerAgentQuestions("old-message", threeAnswers))
+        assertEquals(size, vm.agentMessages.value.size)
+        assertEquals(1, llmBodies.size)
+        responses += success("""{"action":"draw","reply":"按你的选择绘制","prompt":"blue coat, full body, hat, gloves, rainy street","negative_prompt":"","should_draw":true}""")
+        assertTrue(vm.answerAgentQuestions(message.id, threeAnswers))
+        assertFalse(vm.answerAgentQuestions(message.id, threeAnswers))
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last()
+            .asJsonObject["content"].asString
+        assertTrue(current.contains("画星澜，保留蓝色外套"))
+        assertTrue(current.contains("全身"))
+        assertTrue(current.contains("帽子；手套"))
+        assertTrue(current.contains("雨夜街道"))
+        assertFalse(current.contains("半身"))
+        assertEquals(message.id, MainViewModelAgent.loadAgentMessages(vm).last { it.role == "user" }.clarificationAnswer?.messageId)
+        println("ASK_BATCH calls=${llmBodies.size} submissions=${promptBodies.size} answerLinked=true")
+    }
+
+    @Test fun modelCanAskAgainAndAllConfirmedAnswersStayInRequiredContext() {
+        responses += success(askThree)
+        vm.sendAgentMessage("画星澜，保留蓝色外套")
+        awaitDone()
+        responses += success("""{"action":"ask_user","reply":"再确认光照。","questions":[{"id":"light","prompt":"光照有什么要求？","kind":"free_text"}]}""")
+        vm.answerAgentQuestions(vm.agentMessages.value.last().id, threeAnswers)
+        awaitDone()
+        assertTrue(promptBodies.isEmpty())
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, vm.agentMessages.value.last().clarification!!.answerHistory!!.size)
+        responses += success("""{"action":"draw","reply":"好","prompt":"blue coat, full body, rain, neon lighting","should_draw":true}""")
+        vm.answerAgentQuestions(vm.agentMessages.value.last().id, listOf(AgentQuestionAnswer("light", text = "霓虹光")))
+        awaitDone()
+        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last()
+            .asJsonObject["content"].asString
+        for (term in listOf("画星澜，保留蓝色外套", "全身", "帽子；手套", "雨夜街道", "霓虹光")) assertTrue(current.contains(term))
+        assertEquals(3, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+    }
+
+    @Test fun unselectedNamesInQuestionWordingNeverActivateOtherCharacterRecords() {
+        vm._characterLores.value = listOf(
+            com.comfyui.mobile.model.CharacterLore("a", "星澜", "a_token", fixedTriggerWords = "a_token"),
+            com.comfyui.mobile.model.CharacterLore("b", "月汐", "b_token", fixedTriggerWords = "b_token"))
+        responses += success("""{"action":"ask_user","questions":[{"id":"who","prompt":"想画星澜还是月汐？","kind":"multiple_choice","options":[{"id":"a","label":"星澜"},{"id":"b","label":"月汐"}]}]}""")
+        vm.sendAgentMessage("画一个角色")
+        awaitDone()
+        responses += success("""{"action":"ask_user","questions":[{"id":"bg","prompt":"什么背景？","kind":"free_text"}]}""")
+        vm.answerAgentQuestions(vm.agentMessages.value.last().id, listOf(AgentQuestionAnswer("who", listOf("b"))))
+        awaitDone()
+        assertEquals(listOf("b"), vm.agentMessages.value.last().characterSelections!!.map { it.loreId })
+        responses += success("""{"action":"draw","reply":"好","prompt":"b_token, garden","should_draw":true}""")
+        vm.answerAgentQuestions(vm.agentMessages.value.last().id, listOf(AgentQuestionAnswer("bg", text = "花园")))
+        awaitDone()
+        assertEquals(listOf("b"), vm.agentMessages.value.last().characterSelections!!.map { it.loreId })
+        assertEquals("b_token, garden", graphText())
+        assertEquals(1, promptBodies.size)
+    }
+
+    @Test fun cancellingPendingQuestionIsLocalAndDoesNotSubmitOrRecallItLater() {
+        responses += success(askThree)
+        vm.sendAgentMessage("画星澜")
+        awaitDone()
+        val pendingId = vm.agentMessages.value.last().id
+        vm.sendAgentMessage("取消本次提问")
+        awaitDone()
+        assertEquals(1, llmBodies.size)
+        assertTrue(promptBodies.isEmpty())
+        assertNull(vm.agentWorkflow)
+        assertNull(vm.agentMessages.value.last().clarification)
+        assertFalse(vm.answerAgentQuestions(pendingId, threeAnswers))
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+    }
+
+    @Test fun newTaskDoesNotInheritPendingSourceRequestOrReferenceImage() {
+        val file = File(app.cacheDir, "unread-reference.jpg").apply { writeText("not an image") }
+        vm._agentPendingAttachments.value = listOf(AgentAttachment("old", "image", Uri.fromFile(file).toString(), file.name))
+        responses += success(askThree)
+        vm.sendAgentMessage("画星澜，保留蓝色外套")
+        awaitDone()
+        responses += success("""{"action":"draw","reply":"改做新任务","prompt":"dog","should_draw":true}""")
+        vm.sendAgentMessage("画一只狗")
+        awaitDone()
+        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last().asJsonObject["content"]
+        assertTrue(last.isJsonPrimitive)
+        assertTrue(last.asString.contains("画一只狗"))
+        assertFalse(last.asString.contains("蓝色外套"))
+        assertTrue(uploadBodies.isEmpty())
+        assertEquals("dog", graphText())
+        assertEquals(1, promptBodies.size)
+    }
+
+    @Test fun waitingQuestionAndOriginalImageSurviveViewModelRestartThenUploadOnlyAfterAnswer() {
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
+            """{"1":{"class_type":"CLIPTextEncode","inputs":{"text":"before"}},"2":{"class_type":"LoadImage","inputs":{"image":"before.png"}}}""")
+        // Production selection stages files under the managed imports directory, not arbitrary cache.
+        val image = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "question-reference.jpg")
+        val bitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888)
+        image.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+        bitmap.recycle()
+        vm._agentPendingAttachments.value = listOf(AgentAttachment("reference", "image", Uri.fromFile(image).toString(), image.name))
+        responses += success(askThree)
+        vm.sendAgentMessage("参考这张图画星澜，保留蓝色外套")
+        awaitDone()
+        assertTrue(uploadBodies.isEmpty())
+        assertTrue(promptBodies.isEmpty())
+        store.clear()
+        kotlinx.coroutines.runBlocking { vm.agentWorkspace.awaitClosed() }
+        vm.repository.disconnect()
+        vm = MainViewModel(app)
+        store = ViewModelStore().apply { put("agent", vm) }
+        pumpUntil { vm.agentWorkspace.ready }
+        vm.repository.setCloudActive(false)
+        vm.repository.setBaseUrlOnly(server.url("/").toString())
+        vm._llmBaseUrl.value = server.url("/v1").toString()
+        vm._llmApiKey.value = "fixture-key"
+        vm._llmModel.value = "fixture-model"
+        vm._agentPromptSettings.value = AgentPromptSettings(useLocalLibrary = false)
+        val pending = vm.agentMessages.value.last()
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(3, pending.clarification!!.questions!!.size)
+        assertTrue(File(Uri.parse(pending.attachments!!.single().uri).path!!).exists())
+        responses += success("""{"action":"draw","reply":"好","prompt":"blue coat, full body, rain","should_draw":true}""")
+        assertTrue(vm.answerAgentQuestions(pending.id, threeAnswers))
+        awaitDone()
+        assertEquals(1, uploadBodies.size)
+        assertEquals(1, promptBodies.size)
+        val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        assertEquals("uploaded.png", graph["2"].asJsonObject["inputs"].asJsonObject["image"].asString)
+        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last().asJsonObject["content"].asJsonArray
+        assertTrue(last[0].asJsonObject["text"].asString.contains("参考这张图画星澜"))
+        assertEquals("image_url", last[1].asJsonObject["type"].asString)
+        println("ASK_RESTART phase=${vm.agentSessionState.value.turn!!.phase} uploads=${uploadBodies.size} submissions=${promptBodies.size}")
+    }
+
+    @Test fun falseDrawingFlagAndRespondActionNeverRecycleOrPatchLastImage() {
+        responses += success("""{"reply":"好","prompt":"cat","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        responses += success("""{"reply":"先讨论方案。","prompt":"","should_draw":false}""")
+        vm.sendAgentMessage("换成全身")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertNull(vm.agentMessages.value.last().errorMessage)
+        responses += success("""{"action":"respond","reply":"这里只说明设置。","prompt":"must_not_patch","should_draw":true}""")
+        vm.sendAgentMessage("解释一下")
+        awaitDone()
+        assertEquals("cat", graphText())
+        assertEquals(1, promptBodies.size)
+        assertNull(vm.agentMessages.value.last().expandedPrompt)
+    }
+
+    @Test fun chatCanAutonomouslyAskAndResumeWithoutAnyWorkflowSideEffect() {
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
+        responses += success(askThree)
+        vm.sendAgentMessage("帮我整理一下需求")
+        awaitDone()
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        responses += success("收到你的回答，已整理成需求清单。")
+        vm.answerAgentQuestions(vm.agentMessages.value.last().id, threeAnswers)
+        awaitDone()
+        assertEquals(2, llmBodies.size)
+        assertEquals("收到你的回答，已整理成需求清单。", vm.agentMessages.value.last().content)
+        assertNull(vm.agentWorkflow)
+        assertTrue(promptBodies.isEmpty())
+        assertTrue(uploadBodies.isEmpty())
+    }
+
     private fun withNegativeWorkflow() {
         File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
             """{"2":{"class_type":"CLIPTextEncode","inputs":{"text":"template_embedding, (blurry:1.2)"}},"1":{"class_type":"CLIPTextEncode","inputs":{"text":"before"}},"3":{"class_type":"KSampler","inputs":{"positive":["1",0],"negative":["2",0]}}}"""
@@ -224,7 +429,7 @@ class AgentRuntimeIntegrationTest {
             com.comfyui.mobile.model.CharacterLore("b", "月汐", "b_token", aliases = listOf("小蓝")))
         vm.sendAgentMessage("画小蓝")
         awaitDone()
-        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
         assertEquals(listOf("星澜", "月汐"), vm.agentMessages.value.last().clarification!!.options)
         assertTrue(llmBodies.isEmpty())
         assertTrue(promptBodies.isEmpty())
@@ -247,7 +452,7 @@ class AgentRuntimeIntegrationTest {
             )))
         vm.sendAgentMessage("画小澜，换成演出服")
         awaitDone()
-        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
         assertEquals(listOf("冬装", "便服"), vm.agentMessages.value.last().clarification!!.options)
         assertNull(vm.agentMessages.value.last().expandedPrompt)
         assertTrue(llmBodies.isEmpty())
@@ -271,7 +476,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals(listOf("保留第一套", "使用第二套"), message.clarification?.options)
         assertNull(message.expandedPrompt)
         assertNull(message.errorMessage)
-        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
     }
 
     @Test fun pinnedDisabledAndExplicitSkipLibraryAreResolvedByAppNotAssistantClaims() {
@@ -354,7 +559,7 @@ class AgentRuntimeIntegrationTest {
         responses += success("""{"reply":"好","prompt":"1girl, blue hair","negative_prompt":"","should_draw":true}""")
         vm.sendAgentMessage("画初音未来，蓝发")
         awaitDone()
-        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
         assertEquals("character_dictionary_optional_appearance", vm.agentMessages.value.last().clarification!!.purpose)
         assertTrue(llmBodies.isEmpty())
         assertTrue(promptBodies.isEmpty())

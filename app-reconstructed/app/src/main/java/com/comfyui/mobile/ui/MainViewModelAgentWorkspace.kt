@@ -259,6 +259,8 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         vm._agentAuxNodeKeys.value = workflow["auxNodeKeys"]?.takeUnless { it.isJsonNull }?.asJsonArray
             ?.map { it.asString }?.toSet().orEmpty()
         vm._agentMessages.value = loaded.messages
+        vm.agentSession.restoreWaiting("${loaded.row.scope}:${loaded.row.id}",
+            com.comfyui.mobile.agent.AgentQuestionPolicy.pending(loaded.messages)?.id)
         val prompt = vm.gson.fromJson(loaded.state.promptOutputJson, AgentPromptOutput::class.java)
         vm._agentPromptOutput.value = prompt
         vm._agentLastExpandedPrompt.value = prompt.positive

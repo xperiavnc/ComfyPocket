@@ -3086,6 +3086,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun sendAgentMessage(userText: String) =
         MainViewModelAgent.sendAgentMessage(this, userText)
 
+    fun answerAgentQuestions(messageId: String, answers: List<com.comfyui.mobile.model.AgentQuestionAnswer>) =
+        agentRuntime.answer(messageId, answers,
+            if (_agentInteractionMode.value == AGENT_MODE_CHAT) com.comfyui.mobile.agent.AgentMode.CHAT
+            else com.comfyui.mobile.agent.AgentMode.DRAW)
+
     fun stopAgentGeneration() = MainViewModelAgent.stopAgentGeneration(this)
 
     internal fun persistAgentMediaList(list: List<MediaOutput>) =

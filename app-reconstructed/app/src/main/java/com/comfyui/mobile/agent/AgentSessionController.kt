@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class AgentPhase {
-    PREPARING, GENERATING, APPLYING, SUBMITTING, COMPLETED, STOPPED, FAILED
+    PREPARING, GENERATING, APPLYING, SUBMITTING, WAITING_USER, COMPLETED, STOPPED, FAILED
 }
 
 /** Contains identities and lifecycle only, never keys, prompts or server credentials. */
@@ -65,7 +65,21 @@ class AgentSessionController(private val cancelRequest: (String) -> Unit = {}) {
     }
 
     fun complete(turn: AgentTurn) = finish(turn, AgentPhase.COMPLETED)
+    fun waitForUser(turn: AgentTurn) = finish(turn, AgentPhase.WAITING_USER)
     fun fail(turn: AgentTurn, reason: String) = finish(turn, AgentPhase.FAILED, reason)
+
+    /** Reconstructed from persisted messages when a workspace is opened, never from an old job. */
+    fun restoreWaiting(context: String, assistantId: String?) = synchronized(lock) {
+        if (!mutableState.value.busy) {
+            if (assistantId != null) {
+                mutableState.value = AgentSessionState(
+                    AgentTurn(UUID.randomUUID().toString(), assistantId, context, AgentPhase.WAITING_USER))
+            } else if (mutableState.value.turn?.phase == AgentPhase.WAITING_USER) {
+                mutableState.value = AgentSessionState()
+            }
+            mutableBusy.value = false
+        }
+    }
 
     private fun finish(turn: AgentTurn, phase: AgentPhase, reason: String? = null) =
         synchronized(lock) {

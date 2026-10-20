@@ -91,6 +91,20 @@ class AgentConversationRunnerTest {
         assertEquals(0, f.submissions)
     }
 
+    @Test fun respondActionDoesNotPrepareOrPatchEvenWithAStalePrompt() = runTest {
+        val f = Fixture()
+        assertNull(f.run(AgentReply("说明", "stale", shouldDraw = true, action = AgentAction.RESPOND)).submittedId)
+        assertEquals(listOf("llm", "progress:partial", "reply"), f.events)
+        assertEquals(0, f.submissions)
+    }
+
+    @Test fun plainConversationWithoutPromptDoesNotFailOrModifyWorkflow() = runTest {
+        val f = Fixture()
+        assertNull(f.run(AgentReply("可以，我们先讨论构图。")).submittedId)
+        assertEquals(listOf("llm", "progress:partial", "reply"), f.events)
+        assertEquals(0, f.submissions)
+    }
+
     @Test fun invalidPatchDoesNotSubmitOrRememberPrompt() = runTest {
         val f = Fixture()
         f.allowPatch = false

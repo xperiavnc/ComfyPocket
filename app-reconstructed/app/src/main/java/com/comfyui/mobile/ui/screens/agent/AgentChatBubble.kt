@@ -71,7 +71,9 @@ fun FrostedChip(
 fun AgentBubble(
     msg: AgentChatMessage,
     clarificationEnabled: Boolean = false,
-    onClarificationOption: (String) -> Unit = {}
+    onClarificationOption: (String) -> Unit = {},
+    onQuestionSubmit: (List<com.comfyui.mobile.model.AgentQuestionAnswer>) -> Boolean = { false },
+    onQuestionCancel: () -> Unit = {}
 ) {
     val scheme = MiuixTheme.colorScheme
     val isUser = msg.role == "user"
@@ -201,6 +203,12 @@ fun AgentBubble(
 
                 if (!isUser) {
                     msg.clarification?.let { clarification ->
+                        if (!clarification.questions.isNullOrEmpty()) {
+                            AgentQuestionForm(
+                                messageId = msg.id, questions = clarification.questions,
+                                enabled = clarificationEnabled, onSubmit = onQuestionSubmit, onCancel = onQuestionCancel
+                            )
+                        } else {
                         if (clarification.question.isNotBlank() && !msg.content.contains(clarification.question)) {
                             Text(clarification.question, style = MiuixTheme.textStyles.body2)
                         }
@@ -209,6 +217,7 @@ fun AgentBubble(
                             enabled = clarificationEnabled,
                             onSelect = onClarificationOption
                         )
+                        }
                     }
                     if (!msg.characterStatus.isNullOrBlank()) {
                         Text(

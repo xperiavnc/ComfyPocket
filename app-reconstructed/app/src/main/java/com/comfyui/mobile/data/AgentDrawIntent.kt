@@ -2,7 +2,7 @@ package com.comfyui.mobile.data
 
 /**
  * Draw-mode intent + prompt recovery for edit turns (换装 etc.).
- * Prefer recall unless explicit veto / pure non-visual chat.
+ * Recall only an explicit visual edit; a model pause must remain a pause.
  * Pure Kotlin — unit-testable.
  */
 object AgentDrawIntent {
@@ -130,9 +130,9 @@ object AgentDrawIntent {
         if (last.isEmpty()) {
             return PromptRecovery("", recoveredFromLast = false, reason = "no_last_prompt")
         }
-        // Recover for edit / visual / any non-pure-chat Draw turn.
-        if (!looksLikeEditRequest(userText) && looksLikePureChat(userText)) {
-            return PromptRecovery("", recoveredFromLast = false, reason = "pure_chat")
+        // Missing prompts in questions or general conversation must not resurrect an old render.
+        if (!looksLikeEditRequest(userText)) {
+            return PromptRecovery("", recoveredFromLast = false, reason = "not_visual_edit")
         }
         val merged = appendEditHints(last, userText)
         return PromptRecovery(merged, recoveredFromLast = true, reason = "recovered_last_prompt")
@@ -172,6 +172,7 @@ object AgentDrawIntent {
     ): Pair<Boolean, String> {
         if (!promptNonEmpty) return false to "no_prompt"
         if (isExplicitVeto(userText)) return false to "user_veto"
+        if (llmFlag == false) return false to "llm_false"
 
         val strong = suggestsDraw(userText)
         val visual = looksLikeVisualPrompt(userText)
@@ -186,17 +187,14 @@ object AgentDrawIntent {
             }
             return when (llmFlag) {
                 true -> true to "llm_true"
-                false -> true to "draw_mode_override_llm_false"
+                false -> false to "llm_false"
                 null -> true to "draw_mode_default_true"
             }
         }
 
         return when (llmFlag) {
             true -> true to "llm_true"
-            false -> when {
-                strong || visual -> true to "fallback_override_llm_false"
-                else -> false to "llm_false"
-            }
+            false -> false to "llm_false"
             null -> when {
                 strong -> true to "fallback_keywords"
                 visual -> true to "fallback_visual"

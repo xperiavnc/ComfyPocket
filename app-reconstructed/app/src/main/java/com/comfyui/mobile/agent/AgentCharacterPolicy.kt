@@ -529,15 +529,18 @@ object AgentCharacterPolicy {
         if (reply.clarification != null) {
             return reply.copy(
                 prompt = "",
-                negativePrompt = "",
+                negativePrompt = null,
                 shouldDraw = false,
                 characterSelections = context.characters.map { it.selection },
-                characterStatus = "等待你确认角色、服装或词库候选",
+                characterStatus = if (reply.clarification.purpose.orEmpty().startsWith("character_"))
+                    "等待你确认角色、服装或词库候选" else "等待你回答，暂不改写提示词或提交出图",
                 clarification = reply.clarification.copy(
                     options = reply.clarification.options.distinct().take(5)
                 )
             )
         }
+        if (reply.action == AgentAction.RESPOND || (reply.prompt.isBlank() && !reply.shouldDraw))
+            return reply.copy(characterSelections = emptyList())
         val blockedIdentityTerms = context.catalogue.flatMap { lore ->
             names(lore) + lore.outfits.orEmpty().map { it.name }
         } + context.dictionaryCandidateTags

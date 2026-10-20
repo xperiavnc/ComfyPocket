@@ -81,6 +81,7 @@ fun AgentChatPanel(
     onPickFiles: () -> Unit = {},
     onRemoveAttachment: (String) -> Unit = {},
     onStop: () -> Unit = {},
+    onAnswerQuestions: ((String, List<com.comfyui.mobile.model.AgentQuestionAnswer>) -> Boolean)? = null,
     onSendMessage: (String) -> Unit
     ) {
     val haptics = rememberAppHaptics()
@@ -125,13 +126,20 @@ fun AgentChatPanel(
                     Text("加载更早消息", color = scheme.primary,
                         modifier = Modifier.fillMaxWidth().clickable(onClick = onLoadEarlier).padding(10.dp))
                 }
-                val pendingClarificationId = messages.lastOrNull()
-                    ?.takeIf { it.role == "assistant" && it.clarification != null }?.id
+                val pendingClarificationId = com.comfyui.mobile.agent.AgentQuestionPolicy.pending(messages)?.id
                 items(messages, key = { it.id }) { msg ->
                     AgentBubble(
                         msg = msg,
                         clarificationEnabled = inputEnabled && !busy && msg.id == pendingClarificationId,
-                        onClarificationOption = { option -> onSendMessage("我选择：$option") }
+                        onClarificationOption = { option -> onSendMessage("我选择：$option") },
+                        onQuestionSubmit = { answers ->
+                            onAnswerQuestions?.invoke(msg.id, answers) ?: run {
+                                onSendMessage(com.comfyui.mobile.agent.AgentQuestionPolicy.answerText(
+                                    msg.clarification?.questions.orEmpty(), answers))
+                                true
+                            }
+                        },
+                        onQuestionCancel = { onSendMessage("取消本次提问") }
                     )
                 }
             }
@@ -195,7 +203,8 @@ fun AgentChatPanel(
                         Box(contentAlignment = Alignment.CenterStart) {
                             if (input.text.isEmpty()) {
                                 Text(
-                                    text = "Ciallo～(∠・ω< )⌒☆",
+                                    text = if (com.comfyui.mobile.agent.AgentQuestionPolicy.pending(messages) != null)
+                                        "也可以直接回复，或说“取消本次提问”" else "Ciallo～(∠・ω< )⌒☆",
                                     style = MiuixTheme.textStyles.body2,
                                     color = scheme.onSurfaceVariantSummary,
                                     maxLines = 1

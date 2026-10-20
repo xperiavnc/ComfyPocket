@@ -399,6 +399,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 },
                 onRemoveAttachment = { viewModel.removeAgentAttachment(it) },
                 onStop = { viewModel.stopAgentGeneration() },
+                onAnswerQuestions = { messageId, answers ->
+                    viewModel.answerAgentQuestions(messageId, answers)
+                },
                 onSendMessage = { text ->
                     viewModel.sendAgentMessage(text)
                     if (storageStatus.writable && viewModel.agentReferenceWarning() == null)

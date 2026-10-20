@@ -1266,6 +1266,7 @@ object MainViewModelAgent {
         requestId: String = UUID.randomUUID().toString(),
         currentNegativePrompt: String? = null,
         workflowModelFacts: List<Map<String, String>> = emptyList(),
+        answerLookupText: String? = null,
         onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null,
         checkCurrent: suspend () -> Unit = {},
         onLocalTagReport: suspend (com.comfyui.mobile.taglib.LocalTagReport) -> Unit = {}
@@ -1275,7 +1276,7 @@ object MainViewModelAgent {
 
         val validHistory = priorHistory.filter { hist ->
             if (hist.role == "user") {
-                hist.content.isNotBlank()
+                hist.content.isNotBlank() || !hist.attachments.isNullOrEmpty()
             } else if (hist.role == "assistant") {
                 !hist.isThinking &&
                 !hist.content.startsWith("扩写失败") &&
@@ -1287,8 +1288,9 @@ object MainViewModelAgent {
             }
         }
 
+        val taskText = com.comfyui.mobile.agent.AgentQuestionPolicy.lookupText(answerLookupText ?: userText, priorHistory)
         var characterContext = com.comfyui.mobile.agent.AgentCharacterPolicy.resolve(
-            settings.lores, userText, priorHistory)
+            settings.lores, taskText, priorHistory)
         characterContext.clarification?.let { clarification ->
             return Result.success(AgentLlmResult(
                 tip = clarification.question,
@@ -1308,7 +1310,7 @@ object MainViewModelAgent {
         val lastAssistantIdx = recentHistory.indexOfLast { it.role == "assistant" }
         for ((idx, hist) in recentHistory.withIndex()) {
             if (hist.role == "user") {
-                messages.add(com.comfyui.mobile.network.ChatMessageDto("user", hist.content))
+                messages.add(com.comfyui.mobile.network.ChatMessageDto("user", chatText(hist)))
             } else if (hist.role == "assistant") {
                 val promptForHistory = if (idx == lastAssistantIdx) hist.expandedPrompt.orEmpty() else ""
                 val assistantJson = buildString {
@@ -1321,9 +1323,13 @@ object MainViewModelAgent {
                         append(""", "negative_prompt": ${vm.gson.toJson(hist.expandedNegativePrompt)}""")
                     }
                     hist.clarification?.let { clarification ->
+                        append(""", "action": "ask_user", "should_draw": false""")
                         append(""", "needs_clarification": true""")
                         append(""", "clarification_question": ${vm.gson.toJson(clarification.question)}""")
                         append(""", "clarification_options": ${vm.gson.toJson(clarification.options)}""")
+                        clarification.questions?.let { questions ->
+                            append(""", "questions": ${vm.gson.toJson(questions)}""")
+                        }
                     }
                     append("}")
                 }
@@ -1345,7 +1351,9 @@ object MainViewModelAgent {
         }
         val originalDictionaryRequest = com.comfyui.mobile.agent.AgentCharacterPolicy
             .dictionaryLookupText(userText, priorHistory)
-        val confirmedUserRequest = if (originalDictionaryRequest != userText) {
+        val questionRequest = com.comfyui.mobile.agent.AgentQuestionPolicy.requestText(userText, priorHistory)
+        val confirmedUserRequest = if (questionRequest != userText) questionRequest
+        else if (originalDictionaryRequest != userText) {
             "原始画面要求：\n$originalDictionaryRequest\n\n本次确认：\n${userText.trim()}"
         } else userText.trim()
         messages.add(com.comfyui.mobile.network.ChatMessageDto("user", confirmedUserRequest))
@@ -1359,7 +1367,7 @@ object MainViewModelAgent {
         return try {
             if (settings.tagSettings.useLocalLibrary) {
                 val dictionaryLookupText = com.comfyui.mobile.agent.AgentCharacterPolicy
-                    .dictionaryLookupText(userText, priorHistory)
+                    .dictionaryLookupText(taskText, priorHistory)
                 val rawReport = try {
                     vm.localTagLibrary.forRequest(
                         com.comfyui.mobile.agent.AgentCharacterPolicy.lookupText(characterContext, dictionaryLookupText))
@@ -1371,7 +1379,7 @@ object MainViewModelAgent {
                 val profileCandidates = if (rawReport.available) {
                     try {
                         vm.localTagLibrary.characterCandidates(
-                            com.comfyui.mobile.agent.AgentCharacterPolicy.dictionaryCandidateProfiles(characterContext, userText))
+                            com.comfyui.mobile.agent.AgentCharacterPolicy.dictionaryCandidateProfiles(characterContext, taskText))
                     } catch (e: CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -1437,7 +1445,7 @@ object MainViewModelAgent {
                     characterContext.reusePreviousPrompt &&
                         priorHistory.lastOrNull { message -> message.role == "assistant" }?.clarification == null
                 }.orEmpty())
-            Result.success(com.comfyui.mobile.agent.AgentCharacterPolicy.complete(parsed, characterContext, userText))
+            Result.success(com.comfyui.mobile.agent.AgentCharacterPolicy.complete(parsed, characterContext, taskText))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1575,9 +1583,13 @@ object MainViewModelAgent {
                 tip = parsed.reply.ifBlank { clarification.question },
                 thinking = thinking,
                 shouldDraw = false,
-                negativePrompt = "",
-                clarification = clarification
+                clarification = clarification,
+                action = com.comfyui.mobile.agent.AgentAction.ASK_USER
             )
+        }
+        if (parsed.action == com.comfyui.mobile.agent.AgentAction.RESPOND) {
+            return AgentLlmResult(parsed.reply, thinking = thinking,
+                action = com.comfyui.mobile.agent.AgentAction.RESPOND)
         }
         val lastPrompt = previousPrompt ?: vm._agentLastExpandedPrompt.value.trim().ifBlank {
             vm._agentMessages.value.asReversed().firstOrNull {
@@ -1587,14 +1599,11 @@ object MainViewModelAgent {
         val recovery = com.comfyui.mobile.data.AgentDrawIntent.recoverPromptIfNeeded(
             parsedPrompt = parsed.prompt,
             userText = userText,
-            lastPrompt = lastPrompt
+            lastPrompt = if (parsed.shouldDraw == false) "" else lastPrompt
         )
         val prompt = recovery.prompt
-        // Recovered edit turns must draw; otherwise use normal Draw-mode bias.
-        val llmFlagForDraw = when {
-            recovery.recoveredFromLast -> true
-            else -> parsed.shouldDraw
-        }
+        val llmFlagForDraw = if (parsed.action == com.comfyui.mobile.agent.AgentAction.APPLY_PROMPT) false
+            else parsed.shouldDraw
         val (draw, reason) = resolveShouldDraw(
             llmFlagForDraw,
             userText,
@@ -1616,7 +1625,11 @@ object MainViewModelAgent {
             thinking = thinking,
             shouldDraw = draw,
             negativePrompt = parsed.negativePrompt,
-            parseError = if (prompt.isNotEmpty()) null else parsed.error
+            parseError = if (prompt.isNotEmpty() || parsed.shouldDraw == false ||
+                (parsed.shouldDraw != true && parsed.reply.isNotBlank() &&
+                    !com.comfyui.mobile.data.AgentDrawIntent.looksLikeEditRequest(userText))) null
+                else parsed.error,
+            action = parsed.action
     )
     }
 

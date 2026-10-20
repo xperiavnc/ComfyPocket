@@ -9,6 +9,8 @@ import com.comfyui.mobile.data.LlmErrorMapper
 import com.comfyui.mobile.data.LlmException
 import com.comfyui.mobile.model.AgentAttachment
 import com.comfyui.mobile.model.AgentChatMessage
+import com.comfyui.mobile.model.AgentClarificationAnswer
+import com.comfyui.mobile.model.AgentQuestionAnswer
 import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.LogType
@@ -74,19 +76,42 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         }
     }
 
-    fun send(userText: String, mode: AgentMode) {
-        if (!vm.agentWorkspace.requireWritable()) return
-        vm.agentWorkspace.referenceWarning()?.let { vm.showToast(it); return }
+    fun answer(messageId: String, answers: List<AgentQuestionAnswer>, mode: AgentMode): Boolean {
+        val pending = AgentQuestionPolicy.pending(vm._agentMessages.value) ?: return false
+        if (pending.id != messageId || session.busy.value) return false
+        val questions = pending.clarification?.questions.orEmpty()
+        val normalized = AgentQuestionPolicy.validate(questions, answers) ?: return false
+        return send(AgentQuestionPolicy.answerText(questions, normalized), mode,
+            AgentClarificationAnswer(messageId, normalized))
+    }
+
+    fun send(userText: String, mode: AgentMode, answer: AgentClarificationAnswer? = null): Boolean {
+        if (!vm.agentWorkspace.requireWritable()) return false
+        vm.agentWorkspace.referenceWarning()?.let { vm.showToast(it); return false }
         val text = userText.trim()
-        val attachments = vm._agentPendingAttachments.value.toList()
-        if (text.isEmpty() && attachments.isEmpty()) return
-        val version = session.contextVersion()
-        val turn = session.begin("${MainViewModelAgent.scope(vm)}:${vm.agentWorkspace.conversationId}:$version") ?: return
-        val settings = AgentLlmSettings.capture(vm)
+        val pickedAttachments = vm._agentPendingAttachments.value.toList()
+        if (text.isEmpty() && pickedAttachments.isEmpty()) return false
         val prior = vm._agentMessages.value.toList()
+        val pending = AgentQuestionPolicy.pending(prior)
+        val continuing = AgentQuestionPolicy.continuation(text, prior)
+        val answerLookupText = answer?.let {
+            AgentQuestionPolicy.answerValues(pending?.clarification?.questions.orEmpty(), it.answers)
+        }
+        val inherited = continuing?.attachments.orEmpty().ifEmpty {
+            if (continuing != null) prior.dropLast(1).lastOrNull { it.role == "user" }?.attachments.orEmpty()
+            else emptyList()
+        }
+        val attachments = (pickedAttachments + inherited).distinctBy { it.id }.let { all ->
+            var imageCount = 0
+            all.filter { !it.isImage || ++imageCount <= 4 }
+        }
+        val cancelled = pending != null && AgentQuestionPolicy.isCancellation(text)
+        val version = session.contextVersion()
+        val turn = session.begin("${MainViewModelAgent.scope(vm)}:${vm.agentWorkspace.conversationId}:$version") ?: return false
+        val settings = AgentLlmSettings.capture(vm)
         val user = AgentChatMessage(
             id = "u-${UUID.randomUUID()}", role = "user", content = text,
-            attachments = attachments.ifEmpty { null }
+            attachments = pickedAttachments.ifEmpty { null }, clarificationAnswer = answer
         )
         MainViewModelAgent.appendAgentMessage(vm, user)
         MainViewModelAgent.appendAgentMessage(vm, AgentChatMessage(
@@ -97,7 +122,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         val job = vm.viewModelScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             try {
                 val source = AgentGenerationSource { progress ->
-                    if (mode == AgentMode.CHAT) {
+                    if (cancelled) {
+                        AgentReply("已取消本次提问，未修改提示词或提交出图。", action = AgentAction.RESPOND)
+                    } else if (mode == AgentMode.CHAT) {
                         generateChat(turn, settings, prior + user, progress)
                     } else {
                         val workflowContext = AgentWorkflowPromptContext.capture(vm, version)
@@ -105,6 +132,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                         MainViewModelAgent.expandPromptWithLlm(
                             vm, text, prior,
                             attachments.filter { it.isImage }.mapNotNull(MainViewModelAgent::imageDataUrl),
+                             answerLookupText = answerLookupText,
                             settings = settings, requestId = turn.id,
                             currentNegativePrompt = workflowContext.negativePrompt,
                             workflowModelFacts = workflowContext.modelFacts,
@@ -145,6 +173,12 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     override suspend fun reply(reply: AgentReply) {
                         withContext(Dispatchers.Main) {
                             session.requireCurrent(turn)
+                            val clarification = reply.clarification?.let {
+                                AgentQuestionPolicy.bind(it, text, prior, answerLookupText).let { bound ->
+                                    if (continuing == null && bound.sourceRequest == text)
+                                        bound.copy(sourceRequest = MainViewModelAgent.chatText(user)) else bound
+                                }
+                            }
                             MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = true) {
                                 it.copy(
                                     content = if (mode == AgentMode.CHAT) reply.tip else MainViewModelAgent.sanitizeAgentReply(reply.tip),
@@ -153,17 +187,19 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     thinkingContent = reply.thinking.takeIf(String::isNotBlank),
                                     characterSelections = reply.characterSelections,
                                     characterStatus = reply.characterStatus,
-                                    clarification = reply.clarification,
+                                    clarification = clarification,
+                                    // Also use the ordinary attachment store, so Room/export can relocate these URIs.
+                                    attachments = if (clarification != null) attachments.ifEmpty { null } else null,
                                     isThinking = false, errorMessage = null
                                 )
                             }
                         }
                     }
                 }
-                AgentConversationRunner(session).run(turn, mode, source, observer, WorkflowPort(turn, version, attachments))
+                val result = AgentConversationRunner(session).run(turn, mode, source, observer, WorkflowPort(turn, version, attachments))
                 withContext(Dispatchers.Main) {
                     session.requireCurrent(turn)
-                    session.complete(turn)
+                    if (result.reply.clarification != null) session.waitForUser(turn) else session.complete(turn)
                 }
             } catch (e: CancellationException) {
                 withContext(NonCancellable + Dispatchers.Main) {
@@ -197,6 +233,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             if (cause is CancellationException && session.isCurrent(turn)) session.stop("会话已关闭")
         }
         job.start()
+        return true
     }
 
     private suspend fun generateChat(
@@ -212,15 +249,33 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         var budget = 8
         for (i in history.indices.reversed()) {
             if (budget <= 0) break
+            if (history[i].role != "user") continue
             val urls = history[i].attachments.orEmpty().filter { it.isImage }.take(budget)
                 .mapNotNull(MainViewModelAgent::imageDataUrl)
             if (urls.isNotEmpty()) { imagesById[history[i].id] = urls; budget -= urls.size }
         }
-        fun context(message: AgentChatMessage) = AgentContextMessage(
-            ChatMessageDto(message.role, if (message.role == "user") MainViewModelAgent.chatText(message) else message.content),
-            imagesById[message.id].orEmpty())
+        fun context(message: AgentChatMessage): AgentContextMessage {
+            val content = when {
+                message.role == "user" && message.id == history.last().id ->
+                    AgentQuestionPolicy.requestText(MainViewModelAgent.chatText(message), history.dropLast(1))
+                message.role == "user" -> MainViewModelAgent.chatText(message)
+                message.clarification != null -> vm.gson.toJson(mapOf(
+                    "action" to "ask_user", "reply" to message.content,
+                    "questions" to message.clarification.questions,
+                    "clarification_question" to message.clarification.question,
+                    "clarification_options" to message.clarification.options))
+                else -> message.content
+            }
+            return AgentContextMessage(ChatMessageDto(message.role, content), imagesById[message.id].orEmpty())
+        }
+        // A resumed chat still receives the original reference images after a restart/history trim.
+        AgentQuestionPolicy.continuation(history.last().content, history.dropLast(1))?.attachments.orEmpty()
+            .filter { it.isImage }.take(4).mapNotNull(MainViewModelAgent::imageDataUrl).takeIf { it.isNotEmpty() }
+            ?.let { original ->
+                imagesById[history.last().id] = (imagesById[history.last().id].orEmpty() + original).distinct().take(4)
+            }
         val selected = AgentContextBudget.fit(
-            AgentContextMessage(ChatMessageDto("system", settings.persona.trim())),
+            AgentContextMessage(ChatMessageDto("system", AgentPromptPolicy.chat(settings.persona))),
             history.dropLast(1).map(::context), listOf(context(history.last())),
             settings.generationLimits, defaultHistoryMessages = 19)
         vm.addLog("Agent 上下文：保守估算 ${selected.estimatedInputTokens} tokens，裁剪 ${selected.removedMessages} 条历史", LogType.INFO)
@@ -234,7 +289,13 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             generationLimits = settings.generationLimits,
             onProgress = { _, _, reasoning, content -> progress(AgentProgress(reasoning, content)) }
         ).getOrThrow()
-        return AgentReply(output.content, thinking = output.reasoning.orEmpty())
+        val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(output.content, preserveNaturalLanguage = true)
+        return if (parsed.clarification != null) {
+            AgentReply(parsed.reply.ifBlank { parsed.clarification.question }, thinking = output.reasoning.orEmpty(),
+                clarification = parsed.clarification, action = AgentAction.ASK_USER)
+        } else AgentReply(
+            if (parsed.action == AgentAction.RESPOND) parsed.reply else output.content,
+            thinking = output.reasoning.orEmpty(), action = AgentAction.RESPOND)
     }
 
     private inner class WorkflowPort(

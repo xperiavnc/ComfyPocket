@@ -13,9 +13,11 @@ data class AgentReply(
     val negativePrompt: String? = null,
     val characterSelections: List<com.comfyui.mobile.model.AgentCharacterSelection>? = null,
     val characterStatus: String? = null,
-    val clarification: com.comfyui.mobile.model.AgentClarification? = null
+    val clarification: com.comfyui.mobile.model.AgentClarification? = null,
+    val action: AgentAction? = null
 )
 
+enum class AgentAction { ASK_USER, RESPOND, APPLY_PROMPT, DRAW }
 data class AgentProgress(val reasoning: String, val content: String)
 enum class AgentMode { CHAT, DRAW }
 data class AgentRunResult(val reply: AgentReply, val submittedId: String? = null)
@@ -86,7 +88,9 @@ class AgentConversationRunner(private val session: AgentSessionController) {
         }
         check()
         observer.reply(reply)
-        val submitted = if (mode == AgentMode.DRAW && reply.clarification == null) {
+        val submitted = if (mode == AgentMode.DRAW && reply.clarification == null &&
+            reply.action != AgentAction.ASK_USER && reply.action != AgentAction.RESPOND &&
+            (reply.prompt.isNotBlank() || reply.shouldDraw || reply.parseError != null)) {
             AgentDrawExecutor(workflow).execute(reply, ::check) { session.advance(turn, it) }
         } else null
         check()
