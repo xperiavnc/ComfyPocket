@@ -166,6 +166,63 @@ class AgentPromptControlsTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test
+    @Config(sdk = [34], qualifiers = "w320dp-h720dp-mdpi")
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun chineseAliasesAreDisplayedAndCopiedWithoutChangingEnglishCopyButtons() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val copied = mutableListOf<Pair<String, String>>()
+        val output = AgentPromptOutput("cat", "blurry",
+            positiveAliases = listOf(com.comfyui.mobile.agent.AgentPromptAlias("cat", "猫")),
+            negativeAliases = listOf(com.comfyui.mobile.agent.AgentPromptAlias("blurry", "模糊")))
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { CompositionLocalProvider(LocalSquircleEnabled provides false) { MiuixTheme {
+                    AgentOutputPromptPanel(output) { label, text -> copied += label to text }
+                } } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("正向中文别名 · 仅供查看").assertExists()
+            compose.onNodeWithText("cat → 猫").assertExists()
+            compose.onNodeWithText("blurry → 模糊").assertExists()
+            compose.runOnIdle {
+                val view = controller.get().window.decorView
+                val bitmap = android.graphics.Bitmap.createBitmap(view.width, view.height, android.graphics.Bitmap.Config.ARGB_8888)
+                view.draw(android.graphics.Canvas(bitmap))
+                val file = java.io.File("build/agent-clarification-preview/prompt-aliases-320.png").apply { parentFile!!.mkdirs() }
+                file.outputStream().use { assertTrue(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)) }
+                bitmap.recycle()
+                assertTrue(file.length() > 8000)
+            }
+            compose.onNodeWithText("复制正向").performClick()
+            compose.onNodeWithText("复制反向").performClick()
+            compose.onNodeWithText("复制正向中文").performScrollTo().assertIsDisplayed().performClick()
+            compose.onNodeWithText("复制反向中文").performScrollTo().assertIsDisplayed().performClick()
+            assertEquals("cat", copied[0].second)
+            assertEquals("blurry", copied[1].second)
+            assertEquals("cat → 猫", copied[2].second)
+            assertEquals("blurry → 模糊", copied[3].second)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun chatDetailsKeepBothChineseDirectionsUnderThePromptExpander() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    AgentPromptDetails("cat", "blurry", null,
+                        listOf(com.comfyui.mobile.agent.AgentPromptAlias("cat", "猫")),
+                        listOf(com.comfyui.mobile.agent.AgentPromptAlias("blurry", "模糊")))
+                } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("cat → 猫").assertDoesNotExist()
+            compose.onNodeWithText("正向 / 反向提示词").performClick()
+            compose.onNodeWithText("cat → 猫").assertExists()
+            compose.onNodeWithText("blurry → 模糊").assertExists()
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test fun outputDialogShowsBothPromptsAndCopiesSeparatelyOrTogether() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val copied = mutableListOf<Pair<String, String>>()

@@ -132,7 +132,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                         MainViewModelAgent.expandPromptWithLlm(
                             vm, text, prior,
                             attachments.filter { it.isImage }.mapNotNull(MainViewModelAgent::imageDataUrl),
-                             answerLookupText = answerLookupText,
+                            answerLookupText = answerLookupText, structuredAnswer = answer,
                             settings = settings, requestId = turn.id,
                             currentNegativePrompt = workflowContext.negativePrompt,
                             workflowModelFacts = workflowContext.modelFacts,
@@ -174,7 +174,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                         withContext(Dispatchers.Main) {
                             session.requireCurrent(turn)
                             val clarification = reply.clarification?.let {
-                                AgentQuestionPolicy.bind(it, text, prior, answerLookupText).let { bound ->
+                                AgentQuestionPolicy.bind(it, text, prior, answerLookupText, answer).let { bound ->
                                     if (continuing == null && bound.sourceRequest == text)
                                         bound.copy(sourceRequest = MainViewModelAgent.chatText(user)) else bound
                                 }
@@ -187,6 +187,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     thinkingContent = reply.thinking.takeIf(String::isNotBlank),
                                     characterSelections = reply.characterSelections,
                                     characterStatus = reply.characterStatus,
+                                    positiveAliases = reply.positiveAliases,
+                                    negativeAliases = reply.negativeAliases,
                                     clarification = clarification,
                                     // Also use the ordinary attachment store, so Room/export can relocate these URIs.
                                     attachments = if (clarification != null) attachments.ifEmpty { null } else null,
@@ -257,7 +259,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         fun context(message: AgentChatMessage): AgentContextMessage {
             val content = when {
                 message.role == "user" && message.id == history.last().id ->
-                    AgentQuestionPolicy.requestText(MainViewModelAgent.chatText(message), history.dropLast(1))
+                    AgentQuestionPolicy.requestText(MainViewModelAgent.chatText(message), history.dropLast(1),
+                        message.clarificationAnswer)
                 message.role == "user" -> MainViewModelAgent.chatText(message)
                 message.clarification != null -> vm.gson.toJson(mapOf(
                     "action" to "ask_user", "reply" to message.content,
@@ -374,7 +377,10 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 AgentPromptTargets.negative(patch.workflow, target)
             } else configuredNegative
             MainViewModelAgent.savePromptOutput(vm, AgentPromptOutput(
-                prompt, negativePrompt ?: AgentPromptBindings.text(patch.workflow, effectiveTargets), negativeStatus))
+                prompt, negativePrompt ?: AgentPromptBindings.text(patch.workflow, effectiveTargets), negativeStatus,
+                vm._agentMessages.value.firstOrNull { it.id == turn.assistantId }?.positiveAliases,
+                if (negativePrompt == null) null else
+                    vm._agentMessages.value.firstOrNull { it.id == turn.assistantId }?.negativeAliases))
             vm.addLog("Agent 反向提示词：$negativeStatus", LogType.INFO)
             vm.addLog("Agent patch_workflow 已校验并修改 ${patch.diff.size} 个字段", LogType.INFO)
         }

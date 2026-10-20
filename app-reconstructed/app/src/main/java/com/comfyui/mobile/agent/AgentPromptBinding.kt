@@ -62,7 +62,9 @@ class AgentPromptBindingStore(private val prefs: SharedPreferences, private val 
 data class AgentPromptOutput(
     val positive: String = "",
     val negative: String? = null,
-    val negativeStatus: String? = null
+    val negativeStatus: String? = null,
+    val positiveAliases: List<AgentPromptAlias>? = null,
+    val negativeAliases: List<AgentPromptAlias>? = null
 )
 
 /** Resolve both directions against the same snapshot; explicit invalid bindings fail visibly. */

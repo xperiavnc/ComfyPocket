@@ -45,6 +45,30 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 class AgentClarificationUiTest {
     @get:Rule val compose = createEmptyComposeRule()
 
+    @Test fun wardrobeDescriptionsShowDifferencesWithoutAutoSelectingTheRecommendation() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val submitted = mutableListOf<List<AgentQuestionAnswer>>()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    AgentQuestionForm("wardrobe", listOf(AgentUserQuestion("suzuran", "铃兰本轮用哪套？",
+                        "multiple_choice", listOf(
+                            AgentQuestionOption("casual", "常服（推荐）", "日常衬衫，延续熟悉的外观"),
+                            AgentQuestionOption("formal", "礼服", "正式连衣裙，改变画面风格")))),
+                        true, { submitted += it; true }, {})
+                } }
+            })
+            compose.waitForIdle()
+            compose.onNodeWithText("日常衬衫，延续熟悉的外观", useUnmergedTree = true).assertExists()
+            render(controller.get(), "outfit-descriptions-360")
+            compose.onNodeWithTag("agent-question-submit").assertIsNotEnabled()
+            assertTrue(submitted.isEmpty())
+            compose.onNodeWithTag("agent-question-suzuran-option-formal").performClick()
+            compose.onNodeWithTag("agent-question-submit").assertIsEnabled().performClick()
+            assertEquals(listOf("formal"), submitted.single().single().optionIds)
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test fun questionFormBatchesSingleMultiAndCustomTextWithoutAutoSendingOnSelection() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val busy = mutableStateOf(false)

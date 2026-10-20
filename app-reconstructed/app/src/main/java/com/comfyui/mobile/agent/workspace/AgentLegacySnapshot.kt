@@ -88,7 +88,9 @@ object AgentLegacyReader {
                     require(v.isJsonPrimitive && v.asJsonPrimitive.isString) { "Invalid legacy prompt field" }
                     v.asString
                 }
-                AgentPromptOutput(text("positive").orEmpty(), text("negative"), text("negativeStatus"))
+                AgentPromptOutput(text("positive").orEmpty(), text("negative"), text("negativeStatus"),
+                    com.comfyui.mobile.agent.AgentPromptAliases.parse(p["positiveAliases"]),
+                    com.comfyui.mobile.agent.AgentPromptAliases.parse(p["negativeAliases"]))
             } ?: AgentPromptOutput(scoped("agent_last_prompt").orEmpty())
             val idsValue = value("agent_run_prompt_ids__$scope")
                 ?: if (scope == "local") value("agent_run_prompt_ids") else null

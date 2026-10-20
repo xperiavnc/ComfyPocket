@@ -42,6 +42,29 @@ class AgentQuestionPolicyTest {
         AgentChatMessage("u1", "user", "画星澜，保留蓝色外套"),
         AgentChatMessage("a1", "assistant", "先确认", clarification = clarification))
 
+    @Test fun machineAnswersKeepQuestionAndOptionIdsInRequiredContextAcrossFurtherQuestions() {
+        val first = AgentClarification("确认", emptyList(), questions = questions,
+            sourceRequest = "画星澜，保留蓝色外套")
+        val h = history(first)
+        val answers = AgentClarificationAnswer("a1", listOf(AgentQuestionAnswer("framing", listOf("full")),
+            AgentQuestionAnswer("details", listOf("hat")), AgentQuestionAnswer("background", text = "雨夜")))
+        val text = AgentQuestionPolicy.answerText(questions, answers.answers)
+        val context = AgentQuestionPolicy.requestText(text, h, answers)
+        assertTrue(context.contains("\"id\":\"framing\""))
+        assertTrue(context.contains("\"option_ids\":[\"full\"]"))
+        assertTrue(context.contains("\"selected\":[\"全身\"]"))
+        assertTrue(context.contains("\"custom\":\"雨夜\""))
+        assertFalse(context.contains("半身"))
+        val bound = AgentQuestionPolicy.bind(AgentClarification("光照？", emptyList()),
+            text, h, AgentQuestionPolicy.answerValues(questions, answers.answers), answers)
+        val restored = Gson().fromJson(Gson().toJson(bound), AgentClarification::class.java)
+        val next = AgentQuestionPolicy.requestText("霓虹光", history(restored).takeLast(1))
+        assertTrue(next.contains("\"option_ids\":[\"full\"]"))
+        assertTrue(next.contains("雨夜"))
+        assertFalse(AgentQuestionPolicy.lookupText("霓虹光", history(restored)).contains("option_ids"))
+        assertFalse(AgentQuestionPolicy.requestText(text, h, answers.copy(messageId = "stale")).contains("option_ids"))
+    }
+
     @Test fun repeatedQuestionsPreserveOriginalTaskAndAllAnswersOutsideHistoryBudget() {
         val first = AgentClarification("构图？", emptyList(), purpose = "agent_question", questions = questions)
         val bound = AgentQuestionPolicy.bind(first, "画星澜，保留蓝色外套", emptyList())

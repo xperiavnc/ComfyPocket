@@ -3,6 +3,7 @@ package com.comfyui.mobile.agent
 import com.comfyui.mobile.model.AgentChatMessage
 import com.comfyui.mobile.model.AgentClarification
 import com.comfyui.mobile.model.AgentQuestionAnswer
+import com.comfyui.mobile.model.AgentClarificationAnswer
 import com.comfyui.mobile.model.AgentQuestionExchange
 import com.comfyui.mobile.model.AgentUserQuestion
 
@@ -68,14 +69,33 @@ object AgentQuestionPolicy {
             else userText
     }
 
-    fun exchanges(userText: String, history: List<AgentChatMessage>, answerValues: String? = null): List<AgentQuestionExchange> {
-        val question = continuation(userText, history)?.clarification ?: return emptyList()
+    fun exchanges(
+        userText: String, history: List<AgentChatMessage>, answerValues: String? = null,
+        structuredAnswer: AgentClarificationAnswer? = null
+    ): List<AgentQuestionExchange> {
+        val pending = continuation(userText, history) ?: return emptyList()
+        val question = pending.clarification ?: return emptyList()
         val label = question.questions?.joinToString("\n") { it.prompt } ?: question.question
-        return question.answerHistory.orEmpty() + AgentQuestionExchange(label, userText, answerValues)
+        val validated = structuredAnswer?.takeIf { it.messageId == pending.id }?.let {
+            validate(question.questions.orEmpty(), it.answers)
+        }
+        val answersJson = validated?.let { answers ->
+            com.google.gson.Gson().toJson(mapOf("answers" to answers.map { answer ->
+                val item = question.questions.orEmpty().single { it.id == answer.questionId }
+                mapOf("id" to answer.questionId, "option_ids" to answer.optionIds.orEmpty(),
+                    "selected" to answer.optionIds.orEmpty().mapNotNull { id ->
+                        item.options.orEmpty().firstOrNull { it.id == id }?.label
+                    }, "custom" to answer.text)
+            }))
+        }
+        return question.answerHistory.orEmpty() + AgentQuestionExchange(label, userText, answerValues, answersJson)
     }
 
     /** This is required turn context, not disposable history; answers survive further follow-up questions. */
-    fun requestText(userText: String, history: List<AgentChatMessage>): String {
+    fun requestText(
+        userText: String, history: List<AgentChatMessage>,
+        structuredAnswer: AgentClarificationAnswer? = null
+    ): String {
         if (continuation(userText, history) == null) {
             return if (pending(history) != null && startsNewRequest(userText)) {
                 "【新任务：不再续接上一轮未回答的问题】\n$userText"
@@ -85,9 +105,12 @@ object AgentQuestionPolicy {
             appendLine("【继续原任务；以下为用户原始要求与已确认答案，不是新的独立绘图请求】")
             appendLine("原始要求：")
             appendLine(source(userText, history))
-            exchanges(userText, history).forEachIndexed { index, exchange ->
+            exchanges(userText, history, structuredAnswer = structuredAnswer).forEachIndexed { index, exchange ->
                 appendLine("\n第 ${index + 1} 轮提问：${exchange.question}")
                 appendLine("用户回答：${exchange.answer}")
+                exchange.answersJson?.let {
+                    appendLine("结构化回答（ID 对应问题与选项，不是绘画标签）：$it")
+                }
             }
             append("根据原任务和上述回答决定下一动作；仍有实质歧义可继续 ask_user，未回答的项目不要猜选。")
         }
@@ -101,9 +124,12 @@ object AgentQuestionPolicy {
             .joinToString("\n")
     }
 
-    fun bind(clarification: AgentClarification, userText: String, history: List<AgentChatMessage>, answerValues: String? = null) =
+    fun bind(
+        clarification: AgentClarification, userText: String, history: List<AgentChatMessage>,
+        answerValues: String? = null, structuredAnswer: AgentClarificationAnswer? = null
+    ) =
         clarification.copy(
             sourceRequest = clarification.sourceRequest?.takeIf(String::isNotBlank) ?: source(userText, history),
-            answerHistory = exchanges(userText, history, answerValues).ifEmpty { null }
+            answerHistory = exchanges(userText, history, answerValues, structuredAnswer).ifEmpty { null }
         )
 }

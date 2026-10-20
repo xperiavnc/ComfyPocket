@@ -390,7 +390,9 @@ object MainViewModelAgent {
             fun string(key: String): String? = json[key]?.takeIf {
                 it.isJsonPrimitive && it.asJsonPrimitive.isString
             }?.asString
-            string("positive")?.let { AgentPromptOutput(it, string("negative"), string("negativeStatus")) }
+            string("positive")?.let { AgentPromptOutput(it, string("negative"), string("negativeStatus"),
+                com.comfyui.mobile.agent.AgentPromptAliases.parse(json["positiveAliases"]),
+                com.comfyui.mobile.agent.AgentPromptAliases.parse(json["negativeAliases"])) }
         }.getOrNull() }
         if (parsed != null) return parsed
         return AgentPromptOutput(sanitizeThinkingContent(
@@ -1267,6 +1269,7 @@ object MainViewModelAgent {
         currentNegativePrompt: String? = null,
         workflowModelFacts: List<Map<String, String>> = emptyList(),
         answerLookupText: String? = null,
+        structuredAnswer: com.comfyui.mobile.model.AgentClarificationAnswer? = null,
         onProgress: (suspend (reasoningChunk: String, contentChunk: String, fullReasoning: String, fullContent: String) -> Unit)? = null,
         checkCurrent: suspend () -> Unit = {},
         onLocalTagReport: suspend (com.comfyui.mobile.taglib.LocalTagReport) -> Unit = {}
@@ -1340,7 +1343,8 @@ object MainViewModelAgent {
                     vm.gson.toJson(currentNegativePrompt) +
                     "\n以此为基线核对本轮反向，保留仍适用的已有词与权重；按用户要求删改冲突项。原值为空不代表缺项，不为填满字段凑词。"))
         }
-        val confirmedUserRequest = com.comfyui.mobile.agent.AgentQuestionPolicy.requestText(userText, priorHistory)
+        val confirmedUserRequest = com.comfyui.mobile.agent.AgentQuestionPolicy.requestText(
+            userText, priorHistory, structuredAnswer)
         messages.add(com.comfyui.mobile.network.ChatMessageDto("user", confirmedUserRequest))
 
         val totalChars = messages.sumOf { (it.content ?: "").length }
@@ -1349,6 +1353,7 @@ object MainViewModelAgent {
             LogType.INFO
         )
 
+        var aliasDictionary = emptyList<com.comfyui.mobile.taglib.LocalTagEntry>()
         return try {
             if (settings.tagSettings.useLocalLibrary) {
                 val rawReport = try {
@@ -1375,6 +1380,7 @@ object MainViewModelAgent {
                 )
                 val report = com.comfyui.mobile.agent.AgentCharacterPolicy
                     .constrainCandidates(characterContext, combinedReport)
+                aliasDictionary = report.entries
                 characterContext = com.comfyui.mobile.agent.AgentCharacterPolicy
                     .withDictionaryCandidates(characterContext, report)
                 checkCurrent()
@@ -1416,7 +1422,13 @@ object MainViewModelAgent {
                     characterContext.reusePreviousPrompt &&
                         priorHistory.lastOrNull { message -> message.role == "assistant" }?.clarification == null
                 }.orEmpty())
-            Result.success(com.comfyui.mobile.agent.AgentCharacterPolicy.complete(parsed, characterContext, taskText))
+            val completed = com.comfyui.mobile.agent.AgentCharacterPolicy.complete(parsed, characterContext, taskText)
+            Result.success(completed.copy(
+                positiveAliases = com.comfyui.mobile.agent.AgentPromptAliases.align(
+                    completed.prompt, completed.positiveAliases, aliasDictionary),
+                negativeAliases = com.comfyui.mobile.agent.AgentPromptAliases.align(
+                    completed.negativePrompt, completed.negativeAliases, aliasDictionary)
+            ))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -1604,7 +1616,10 @@ object MainViewModelAgent {
                 (parsed.shouldDraw != true && parsed.reply.isNotBlank() &&
                     !com.comfyui.mobile.data.AgentDrawIntent.looksLikeEditRequest(userText))) null
                 else parsed.error,
-            action = parsed.action
+            action = parsed.action,
+            outfitSelections = parsed.outfitSelections,
+            positiveAliases = if (recovery.recoveredFromLast) null else parsed.positiveAliases,
+            negativeAliases = parsed.negativeAliases
     )
     }
 

@@ -14,7 +14,11 @@ data class AgentReply(
     val characterSelections: List<com.comfyui.mobile.model.AgentCharacterSelection>? = null,
     val characterStatus: String? = null,
     val clarification: com.comfyui.mobile.model.AgentClarification? = null,
-    val action: AgentAction? = null
+    val action: AgentAction? = null,
+    /** Model-proposed IDs are validated against this turn's registered candidates. */
+    val outfitSelections: List<com.comfyui.mobile.model.AgentCharacterSelection>? = null,
+    val positiveAliases: List<AgentPromptAlias>? = null,
+    val negativeAliases: List<AgentPromptAlias>? = null
 )
 
 enum class AgentAction { ASK_USER, RESPOND, APPLY_PROMPT, DRAW }

@@ -4,6 +4,9 @@ import com.comfyui.mobile.model.AgentClarification
 import com.comfyui.mobile.model.AgentQuestionOption
 import com.comfyui.mobile.model.AgentUserQuestion
 import com.comfyui.mobile.agent.AgentAction
+import com.comfyui.mobile.agent.AgentPromptAlias
+import com.comfyui.mobile.agent.AgentPromptAliases
+import com.comfyui.mobile.model.AgentCharacterSelection
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -29,7 +32,10 @@ object AgentReplyParser {
         /** Missing / invalid = preserve existing; explicit "" = clear existing. */
         val negativePrompt: String? = null,
         val clarification: AgentClarification? = null,
-        val action: AgentAction? = null
+        val action: AgentAction? = null,
+        val outfitSelections: List<AgentCharacterSelection>? = null,
+        val positiveAliases: List<AgentPromptAlias>? = null,
+        val negativeAliases: List<AgentPromptAlias>? = null
     )
 
     private val PROMPT_KEYS = listOf("prompt", "tags", "positive")
@@ -64,12 +70,16 @@ object AgentReplyParser {
             if (prompt.isNotEmpty() || reply.isNotEmpty() || negative != null || action != null) {
                 return Result(reply, prompt, draw,
                     if (prompt.isEmpty() && draw != false) "JSON 中没有有效的 prompt" else null,
-                    negative, action = action)
+                    negative, action = action, outfitSelections = outfitSelectionsField(obj),
+                    positiveAliases = AgentPromptAliases.parse(obj["prompt_aliases"]),
+                    negativeAliases = AgentPromptAliases.parse(obj["negative_prompt_aliases"]))
             }
         }
 
         // 2. Truncated / malformed JSON: salvage complete string fields only.
-        if (text.contains('{') || text.contains("\"prompt\"")) {
+        val hasLabelledPrompt = Regex(
+            """(?im)^\s*(?:prompt|tags|positive|正向提示词|正面提示词|提示词)\s*[:：]""").containsMatchIn(text)
+        if ((text.contains('{') || text.contains("\"prompt\"")) && !hasLabelledPrompt) {
             val reply = cleanReply(salvageString(text, REPLY_KEYS))
             val prompt = sanitizePrompt(salvageString(text, PROMPT_KEYS), preserveNaturalLanguage)
             val negative = salvageOptionalString(text, NEGATIVE_KEYS)?.let { sanitizeOptionalPrompt(it, preserveNaturalLanguage) }
@@ -194,6 +204,19 @@ object AgentReplyParser {
         return emptyList()
     }
 
+    private fun outfitSelectionsField(obj: JsonObject): List<AgentCharacterSelection>? {
+        val array = obj["outfit_selections"]?.takeIf { it.isJsonArray }?.asJsonArray ?: return null
+        return array.take(20).mapNotNull { value ->
+            if (!value.isJsonObject) return@mapNotNull null
+            val item = value.asJsonObject
+            val character = stringField(item, listOf("character_id")).trim()
+            val outfit = stringField(item, listOf("outfit_id")).trim().ifBlank { null }
+            val custom = boolField(item, listOf("custom_outfit")) == true
+            if (character.isBlank() || (outfit == null && !custom) || (outfit != null && custom)) null
+            else AgentCharacterSelection(character, outfit, custom)
+        }.ifEmpty { null }
+    }
+
     private fun actionField(value: String): AgentAction? = when (value.trim().lowercase()) {
         "ask_user", "ask_user_question" -> AgentAction.ASK_USER
         "respond", "reply" -> AgentAction.RESPOND
@@ -235,7 +258,10 @@ object AgentReplyParser {
                     val optionId = if (option.isJsonObject) stringField(option.asJsonObject, listOf("id")).trim().take(80)
                         .ifBlank { "o${optionIndex + 1}" } else "o${optionIndex + 1}"
                     if (!optionIds.add(optionId)) return@option null
-                    AgentQuestionOption(optionId, label)
+                    val description = if (option.isJsonObject)
+                        stringField(option.asJsonObject, listOf("description")).trim().take(2000).ifBlank { null }
+                    else null
+                    AgentQuestionOption(optionId, label, description)
                 }
             val free = stringField(item, listOf("kind", "type")) == "free_text" || options.isEmpty()
             AgentUserQuestion(
@@ -293,7 +319,7 @@ object AgentReplyParser {
     }
 
     private fun parseLabelled(text: String, preserveNaturalLanguage: Boolean): Result {
-        val labels = Regex("""(?im)^[ \t]*[\*#\-\[\(]*(negative_prompt|negativePrompt|negative prompt|negative|反向提示词|负向提示词|负面提示词|prompt|tags|positive|正向提示词|正面提示词|提示词|tip|reply|回复|should_draw)[\*\]\)]*[ \t]*[:：][ \t]*""")
+        val labels = Regex("""(?im)^[ \t]*[\*#\-\[\(]*(negative_prompt_aliases|prompt_aliases|outfit_selections|正向中文别名|反向中文别名|negative_prompt|negativePrompt|negative prompt|negative|反向提示词|负向提示词|负面提示词|prompt|tags|positive|正向提示词|正面提示词|提示词|tip|reply|回复|should_draw)[\*\]\)]*[ \t]*[:：][ \t]*""")
         val matches = labels.findAll(text).toList()
         val sections = matches.mapIndexed { index, match ->
             match.groupValues[1].lowercase() to text.substring(
@@ -310,8 +336,13 @@ object AgentReplyParser {
         val reply = cleanReply(before.replace(
             Regex("""(?im)^\s*[\*#\-_\[\(]*(?:tip|reply|回复|提示)[\*\]\)]*\s*[:：]\s*"""), ""))
         val draw = sections.firstOrNull { it.first == "should_draw" }?.second?.let(::parseBoolString)
+        fun aliases(vararg keys: String) = sections.firstOrNull { it.first in keys }?.second?.let {
+            runCatching { AgentPromptAliases.parse(JsonParser.parseString(it)) }.getOrNull()
+        }
         return Result(reply, prompt, draw,
-            if (prompt.isEmpty() && reply.isEmpty()) "未找到 prompt 字段" else null, negative)
+            if (prompt.isEmpty() && reply.isEmpty()) "未找到 prompt 字段" else null, negative,
+            positiveAliases = aliases("prompt_aliases", "正向中文别名"),
+            negativeAliases = aliases("negative_prompt_aliases", "反向中文别名"))
     }
 
     // ---- sanitizers ----

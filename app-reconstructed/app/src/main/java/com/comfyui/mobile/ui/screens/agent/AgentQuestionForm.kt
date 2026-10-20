@@ -105,9 +105,14 @@ internal fun AgentQuestionForm(
                                 contentAlignment = Alignment.Center) {
                                 if (checked) Box(Modifier.size(10.dp).clip(shape).background(scheme.primary))
                             }
-                            Text(option.label, modifier = Modifier.weight(1f),
-                                style = MiuixTheme.textStyles.footnote1,
-                                color = if (active) scheme.onSurface else scheme.onSurfaceVariantSummary)
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                                Text(option.label, style = MiuixTheme.textStyles.footnote1,
+                                    color = if (active) scheme.onSurface else scheme.onSurfaceVariantSummary)
+                                if (!option.description.isNullOrBlank()) {
+                                    Text(option.description, style = MiuixTheme.textStyles.footnote1,
+                                        color = scheme.onSurfaceVariantSummary)
+                                }
+                            }
                         }
                     }
                 }

@@ -6,6 +6,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AgentPromptPolicyTest {
+    @Test fun wardrobeQuestionsStayModelLedWithConfirmedAndDelegatedChoicesRespected() {
+        val system = AgentPromptPolicy.system("", "", emptyList())
+        assertTrue(system.contains("档案默认款只是参考"))
+        assertTrue(system.contains("服装你来选"))
+        assertTrue(system.contains("prompt_aliases"))
+        assertTrue(system.contains("negative_prompt_aliases"))
+        assertTrue(system.contains("推荐不代表用户已选"))
+        assertTrue(system.contains("description"))
+    }
+
     @Test fun defaultsFollowCurrentUserRequirementsWithoutOverridingOutputContract() {
         val system = AgentPromptPolicy.system("", "", emptyList())
         assertTrue(AgentPromptPolicy.defaultPersona.contains("不以个人偏好无故拒绝"))

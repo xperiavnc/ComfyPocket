@@ -8,6 +8,78 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AgentCharacterPolicyTest {
+    @Test fun defaultOutfitDoesNotHideOtherRealOptionsOrPretendToBeUserConfirmed() {
+        val context = resolve("画小澜")
+        assertEquals(AgentOutfitSource.DEFAULT, context.characters.single().outfitSource)
+        val block = context.promptData()
+        for (term in listOf("winter_token", "casual_token", "\"character_id\":\"star\"",
+            "\"outfit_id\":\"winter\"", "\"outfit_id\":\"casual\"", "尚非本轮确认"))
+            assertTrue(term, block.contains(term))
+        assertEquals(AgentOutfitSource.USER, resolve("画小澜，穿便服").characters.single().outfitSource)
+        assertEquals(AgentOutfitSource.PREVIOUS, resolve("保持人物，改背景",
+            history(AgentCharacterSelection(star.id, casual.id))).characters.single().outfitSource)
+    }
+
+    @Test fun omittedOutfitChoiceAndUnrelatedQuestionDoNotCommitTheDefaultBehindTheModel() {
+        val context = resolve("画小澜")
+        val result = AgentCharacterPolicy.complete(AgentReply("先写角色", "portrait"), context)
+        assertEquals("portrait, xl_token", result.prompt)
+        assertNull(result.characterSelections!!.single().outfitId)
+        assertNull(result.clarification)
+        val question = AgentCharacterPolicy.complete(AgentReply("什么背景？",
+            clarification = com.comfyui.mobile.model.AgentClarification("背景？", emptyList())), context)
+        assertNull(question.characterSelections!!.single().outfitId)
+        assertEquals("", question.prompt)
+        assertFalse(question.shouldDraw)
+    }
+
+    @Test fun modelSelectionCanReplaceFallbackWithoutBeingOverwrittenByDefaultCompletion() {
+        val result = AgentCharacterPolicy.complete(AgentReply("好", "portrait, winter_token",
+            outfitSelections = listOf(AgentCharacterSelection(star.id, casual.id))),
+            resolve("画小澜，服装你来选"), "画小澜，服装你来选")
+        assertEquals("portrait, xl_token, casual_token, shirt", result.prompt)
+        assertEquals(casual.id, result.characterSelections!!.single().outfitId)
+        assertNull(result.clarification)
+    }
+
+    @Test fun unknownDuplicateAndUnrelatedModelSelectionsDoNotChangeTheActiveProfile() {
+        for (selections in listOf(
+            listOf(AgentCharacterSelection("unrelated", casual.id)),
+            listOf(AgentCharacterSelection(star.id, "missing")),
+            listOf(AgentCharacterSelection(star.id, casual.id), AgentCharacterSelection(star.id, winter.id))
+        )) {
+            val result = AgentCharacterPolicy.complete(AgentReply("好", "portrait", outfitSelections = selections),
+                resolve("画小澜"))
+            assertNull(result.characterSelections!!.single().outfitId)
+            assertEquals("portrait, xl_token", result.prompt)
+        }
+    }
+
+    @Test fun modelCannotOverrideExplicitCustomOrPreviouslyAdoptedOutfit() {
+        for ((text, h) in listOf("小澜穿冬装" to emptyList(), "保持服装，改背景" to
+            history(AgentCharacterSelection(star.id, winter.id)))) {
+            val result = AgentCharacterPolicy.complete(AgentReply("好", "portrait",
+                outfitSelections = listOf(AgentCharacterSelection(star.id, casual.id))), resolve(text, h), text)
+            assertEquals(winter.id, result.characterSelections!!.single().outfitId)
+        }
+        val custom = AgentCharacterPolicy.complete(AgentReply("好", "portrait, red dress",
+            outfitSelections = listOf(AgentCharacterSelection(star.id, casual.id))),
+            resolve("小澜穿红色连衣裙"), "小澜穿红色连衣裙")
+        assertTrue(custom.characterSelections!!.single().customOutfit == true)
+        assertNull(custom.characterSelections!!.single().outfitId)
+    }
+
+    @Test fun aliasesAreRealignedAfterCompletingFixedAndRemovingStaleOutfitTags() {
+        val result = AgentCharacterPolicy.complete(AgentReply("好", "portrait, winter_token",
+            negativePrompt = "",
+            positiveAliases = listOf(AgentPromptAlias("portrait", "肖像"), AgentPromptAlias("winter_token", "冬装"),
+                AgentPromptAlias("xl_token", "身份词"), AgentPromptAlias("casual_token", "便服")),
+            negativeAliases = listOf(AgentPromptAlias("blurry", "模糊"))),
+            resolve("小澜穿便服"), "小澜穿便服")
+        assertEquals(listOf("portrait", "xl_token", "casual_token"), result.positiveAliases!!.map { it.tag })
+        assertNull(result.negativeAliases)
+    }
+
     private val winter = CharacterOutfit("winter", "冬装", "winter_token, coat, scarf",
         dialogueTriggers = listOf("穿暖和的冬天衣服"))
     private val casual = CharacterOutfit("casual", "便服", "casual_token, shirt",
@@ -273,7 +345,7 @@ class AgentCharacterPolicyTest {
     }
 
     @Test fun completesOnlyFixedKeysAndSelectedOutfitNotWholeAppearanceOrNegative() {
-        val result = complete("画小澜", "1girl, white hair")
+        val result = complete("画小澜，使用默认服装", "1girl, white hair")
         assertEquals("1girl, white hair, xl_token, winter_token, coat, scarf", result.prompt)
         assertFalse(result.prompt.contains("blue hair"))
         assertEquals("blurry", result.negativePrompt)
@@ -340,7 +412,7 @@ class AgentCharacterPolicyTest {
     }
 
     @Test fun weightedExistingKeysAreNotDuplicatedAndModelSyntaxIsPreserved() {
-        val result = complete("画星澜", """1girl, (xl_token:1.2), WINTER_TOKEN, coat, scarf, <lora:test:0.7>, sign reading "a,b".""")
+        val result = complete("画星澜，使用默认服装", """1girl, (xl_token:1.2), WINTER_TOKEN, coat, scarf, <lora:test:0.7>, sign reading "a,b".""")
         assertFalse(result.characterStatus!!.contains("补齐"))
         assertTrue(result.prompt.contains("(xl_token:1.2)"))
         assertTrue(result.prompt.contains("<lora:test:0.7>"))

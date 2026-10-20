@@ -14,8 +14,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 47
-        versionName = "0.0.45-agent-led-questions"
+        versionCode = 48
+        versionName = "0.0.46-outfit-questions"
     }
 
     buildFeatures {

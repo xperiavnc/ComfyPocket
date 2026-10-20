@@ -7,6 +7,44 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AgentReplyParserTest {
+    @Test fun labelledMetadataEndsPromptSectionsInsteadOfBeingAppliedAsDrawingText() {
+        val result = AgentReplyParser.parse("""
+            reply: 好
+            prompt: cat, rain
+            prompt_aliases: [{"tag":"cat","zh":"猫"},{"tag":"rain","zh":"雨"}]
+            negative_prompt: blurry
+            negative_prompt_aliases: [{"tag":"blurry","zh":"模糊"}]
+            should_draw: true
+        """.trimIndent(), preserveNaturalLanguage = true)
+        assertEquals("cat, rain", result.prompt)
+        assertEquals("blurry", result.negativePrompt)
+        assertEquals(listOf("猫", "雨"), result.positiveAliases!!.map { it.zh })
+        assertEquals("模糊", result.negativeAliases!!.single().zh)
+    }
+
+    @Test fun outputAliasesAndOutfitIdsAreMetadataNotPromptContent() {
+        val result = AgentReplyParser.parse(
+            """{"action":"draw","reply":"好","prompt":"cat","negative_prompt":"blurry","prompt_aliases":[{"tag":"cat","zh":"猫"}],"negative_prompt_aliases":[{"tag":"blurry","zh":"模糊"}],"outfit_selections":[{"character_id":"cat-profile","outfit_id":"casual"}],"should_draw":true}""")
+        assertEquals("cat", result.prompt)
+        assertEquals("blurry", result.negativePrompt)
+        assertEquals("猫", result.positiveAliases!!.single().zh)
+        assertEquals("模糊", result.negativeAliases!!.single().zh)
+        assertEquals("cat-profile", result.outfitSelections!!.single().loreId)
+        assertEquals("casual", result.outfitSelections!!.single().outfitId)
+    }
+
+    @Test fun harnessStyleQuestionsKeepDescriptionsAndNeverPreselectOrDraw() {
+        val result = AgentReplyParser.parse(
+            """{"action":"ask_user_question","prompt":"must_not_apply","prompt_aliases":[{"tag":"x","zh":"无"}],"questions":[{"id":"suzuran-outfit","question":"铃兰这次用哪套？","options":[{"label":"常服","description":"沿用日常外观（推荐）"},{"label":"礼服","description":"换成正式款式"}],"multi_select":false}]}""")
+        val question = result.clarification!!.questions!!.single()
+        assertEquals("suzuran-outfit", question.id)
+        assertEquals("沿用日常外观（推荐）", question.options!!.first().description)
+        assertFalse(question.allowMultiple)
+        assertEquals(false, result.shouldDraw)
+        assertEquals("", result.prompt)
+        assertNull(result.positiveAliases)
+    }
+
 
     @Test fun askUserActionWinsOverMisleadingPromptAndFalseClarificationFlag() {
         val result = AgentReplyParser.parse(

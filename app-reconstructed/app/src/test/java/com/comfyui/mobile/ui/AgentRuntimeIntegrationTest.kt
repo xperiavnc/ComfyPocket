@@ -146,6 +146,100 @@ class AgentRuntimeIntegrationTest {
         AgentQuestionAnswer("details", listOf("hat", "gloves")),
         AgentQuestionAnswer("background", text = "雨夜街道"))
 
+    private fun saveSuzuran() = vm.saveCharacterLore(com.comfyui.mobile.model.CharacterLore(
+        "suzuran", "铃兰", "suzuran_token", fixedTriggerWords = "suzuran_token",
+        outfits = listOf(
+            com.comfyui.mobile.model.CharacterOutfit("casual", "常服", "casual_token, shirt"),
+            com.comfyui.mobile.model.CharacterOutfit("formal", "礼服", "formal_token, dress"),
+            com.comfyui.mobile.model.CharacterOutfit("winter", "冬装", "winter_token, coat")),
+        defaultOutfitId = "casual"))
+
+    @Test fun suzuranDefaultStillSuppliesAllOutfitsAndModelQuestionResumesWithAliasesAndRoomRecovery() {
+        withNegativeWorkflow()
+        saveSuzuran()
+        responses += success("""{"action":"ask_user_question","reply":"铃兰有三套已登记服装，这次想用哪套？","questions":[{"id":"suzuran-outfit","question":"铃兰本轮服装","options":[{"id":"casual","label":"常服","description":"日常衬衫"},{"id":"formal","label":"礼服","description":"正式连衣裙"},{"id":"winter","label":"冬装","description":"保暖外套"}],"multi_select":false}]}""")
+        vm.sendAgentMessage("画铃兰")
+        awaitDone()
+        val initialSystem = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
+            .first().asJsonObject["content"].asString
+        for (word in listOf("casual_token", "formal_token", "winter_token", "档案默认回退"))
+            assertTrue(word, initialSystem.contains(word))
+        val pending = vm.agentMessages.value.last()
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(promptBodies.isEmpty())
+        assertEquals("正式连衣裙", pending.clarification!!.questions!!.single().options!![1].description)
+        responses += success("""{"action":"draw","reply":"按礼服绘制。","prompt":"portrait, formal_token, dress","negative_prompt":"blurry","prompt_aliases":[{"tag":"portrait","zh":"肖像"},{"tag":"formal_token","zh":"礼服触发词"},{"tag":"dress","zh":"连衣裙"},{"tag":"suzuran_token","zh":"角色触发词"},{"tag":"casual_token","zh":"未选常服"}],"negative_prompt_aliases":[{"tag":"blurry","zh":"模糊"}],"should_draw":true}""")
+        assertTrue(vm.answerAgentQuestions(pending.id, listOf(AgentQuestionAnswer("suzuran-outfit", listOf("formal")))))
+        awaitDone()
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("portrait, formal_token, dress, suzuran_token", graphText())
+        val answerContext = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last()
+            .asJsonObject["content"].asString
+        assertTrue(answerContext.contains("\"id\":\"suzuran-outfit\""))
+        assertTrue(answerContext.contains("\"option_ids\":[\"formal\"]"))
+        assertTrue(answerContext.contains("\"selected\":[\"礼服\"]"))
+        assertEquals("blurry", submittedNegative())
+        val result = vm.agentMessages.value.last()
+        assertNull(result.clarification)
+        assertEquals("formal", result.characterSelections!!.single().outfitId)
+        assertEquals(listOf("portrait", "formal_token", "dress", "suzuran_token"), result.positiveAliases!!.map { it.tag })
+        assertEquals("模糊", result.negativeAliases!!.single().zh)
+        assertEquals(result.positiveAliases, vm.agentPromptOutput.value.positiveAliases)
+        assertFalse((graphText() as String).contains("肖像"))
+        assertFalse((graphText() as String).contains("casual_token"))
+        val savedOutput = vm.agentPromptOutput.value
+        store.clear()
+        kotlinx.coroutines.runBlocking { vm.agentWorkspace.awaitClosed() }
+        vm.repository.disconnect()
+        vm = MainViewModel(app)
+        store = ViewModelStore().apply { put("agent", vm) }
+        pumpUntil { vm.agentWorkspace.ready }
+        assertEquals(savedOutput, vm.agentPromptOutput.value)
+        assertEquals(result.positiveAliases, vm.agentMessages.value.last().positiveAliases)
+        assertEquals(result.negativeAliases, vm.agentMessages.value.last().negativeAliases)
+        println("SUZURAN_MODEL_ASK candidates=3 calls=${llmBodies.size} submissions=${promptBodies.size} outfit=formal aliases=${savedOutput.positiveAliases!!.size}/1 roomRestored=true")
+    }
+
+    @Test fun delegatedModelOutfitReplacesDefaultAndIsRetainedOnTheNextBackgroundEdit() {
+        saveSuzuran()
+        responses += success("""{"action":"draw","reply":"选择冬装。","prompt":"portrait, winter_token","negative_prompt":"","outfit_selections":[{"character_id":"suzuran","outfit_id":"winter"}],"should_draw":true}""")
+        vm.sendAgentMessage("画铃兰，服装你来选")
+        awaitDone()
+        assertEquals("portrait, winter_token, suzuran_token, coat", graphText())
+        assertEquals("winter", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
+        assertNull(vm.agentMessages.value.last().clarification)
+        responses += success("""{"action":"draw","reply":"保持冬装，换背景。","prompt":"portrait, rain","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("保持人物服装，背景改为雨夜")
+        awaitDone()
+        assertEquals("winter", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
+        assertEquals("portrait, rain, suzuran_token, winter_token, coat", graphText())
+        assertEquals(2, llmBodies.size)
+        assertEquals(2, promptBodies.size)
+        println("MODEL_OUTFIT_DEFAULT_OVERRIDE outfit=winter persisted=true localQuestion=false")
+    }
+
+    @Test fun omittedAndEmptyNegativeNeverReuseStaleChineseAliases() {
+        withNegativeWorkflow()
+        responses += success("""{"action":"draw","reply":"好","prompt":"cat","negative_prompt":"blurry","prompt_aliases":[{"tag":"cat","zh":"猫"}],"negative_prompt_aliases":[{"tag":"blurry","zh":"模糊"}],"should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals("模糊", vm.agentPromptOutput.value.negativeAliases!!.single().zh)
+        responses += success("""{"action":"draw","reply":"好","prompt":"cat, rain","should_draw":true}""")
+        vm.sendAgentMessage("加上雨景")
+        awaitDone()
+        assertEquals("blurry", vm.agentPromptOutput.value.negative)
+        assertNull(vm.agentPromptOutput.value.negativeAliases)
+        assertNull(vm.agentPromptOutput.value.positiveAliases)
+        responses += success("""{"action":"draw","reply":"清空反向","prompt":"cat, rain","negative_prompt":"","negative_prompt_aliases":[{"tag":"blurry","zh":"模糊"}],"should_draw":true}""")
+        vm.sendAgentMessage("清空反向，再画")
+        awaitDone()
+        assertEquals("", submittedNegative())
+        assertEquals("", vm.agentPromptOutput.value.negative)
+        assertNull(vm.agentPromptOutput.value.negativeAliases)
+        assertEquals(3, llmBodies.size)
+    }
+
     @Test fun savedOutfitsNeverPreemptTheModelsQuestionOrResponse() {
         vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
             "star", "星澜", "xl_token", aliases = listOf("小黑"),
@@ -476,7 +570,7 @@ class AgentRuntimeIntegrationTest {
             aliases = listOf("deepseek"), fixedTriggerWords = "ds_whalemaid",
             outfits = listOf(winter, casual), defaultOutfitId = winter.id))
         responses += success("""{"reply":"好","prompt":"1girl, 大肥鱼, deepseek, rain","negative_prompt":"deepseek","should_draw":true}""")
-        vm.sendAgentMessage("画deepseek")
+        vm.sendAgentMessage("画deepseek，使用默认服装")
         awaitDone()
         assertEquals("1girl, rain, ds_whalemaid, winter_token, coat", graphText())
         assertTrue(vm.agentMessages.value.last().characterStatus!!.contains("补齐 3 项"))
@@ -494,7 +588,8 @@ class AgentRuntimeIntegrationTest {
         assertFalse(system.contains("winter_token"))
         assertTrue(system.contains("App 仅提供已匹配资料与待定候选"))
         assertFalse(system.contains("换成日常穿搭"))
-        assertTrue(system.contains("App已按用户对话选定的服装预设绘画标签"))
+        assertTrue(system.contains("当前服装参考"))
+        assertTrue(system.contains("用户本轮明确指定"))
         assertTrue(system.contains("不是绘画标签"))
         assertFalse((graphText() as String).contains("大肥鱼"))
         assertFalse((graphText() as String).contains("deepseek"))

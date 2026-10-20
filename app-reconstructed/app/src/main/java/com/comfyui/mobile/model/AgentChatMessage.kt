@@ -15,7 +15,7 @@ data class AgentClarification(
 )
 
 @Immutable
-data class AgentQuestionOption(val id: String, val label: String)
+data class AgentQuestionOption(val id: String, val label: String, val description: String? = null)
 
 @Immutable
 data class AgentUserQuestion(
@@ -39,7 +39,10 @@ data class AgentQuestionAnswer(
 data class AgentClarificationAnswer(val messageId: String, val answers: List<AgentQuestionAnswer>)
 
 @Immutable
-data class AgentQuestionExchange(val question: String, val answer: String, val lookupText: String? = null)
+data class AgentQuestionExchange(
+    val question: String, val answer: String, val lookupText: String? = null,
+    val answersJson: String? = null
+)
 
 @Immutable
 data class AgentChatMessage(
@@ -61,7 +64,9 @@ data class AgentChatMessage(
     val characterStatus: String? = null,
     /** Persisted pending interaction, not a suspended HTTP request. */
     val clarification: AgentClarification? = null,
-    val clarificationAnswer: AgentClarificationAnswer? = null
+    val clarificationAnswer: AgentClarificationAnswer? = null,
+    val positiveAliases: List<com.comfyui.mobile.agent.AgentPromptAlias>? = null,
+    val negativeAliases: List<com.comfyui.mobile.agent.AgentPromptAlias>? = null
     )
 
 @Immutable

@@ -70,9 +70,13 @@ class AgentWorkspaceRepositoryTest {
         val file = attachment()
         val assistant = AgentChatMessage("a", "assistant", "选哪个服装", timestamp = 2345,
             expandedPrompt = "star_token", expandedNegativePrompt = "blurry",
+            positiveAliases = listOf(com.comfyui.mobile.agent.AgentPromptAlias("star_token", "身份触发词")),
+            negativeAliases = listOf(com.comfyui.mobile.agent.AgentPromptAlias("blurry", "模糊")),
             clarification = AgentClarification("选哪个", listOf("冬装", "便服"), sourceRequest = "画星澜"))
+        val promptOutput = AgentPromptOutput("star_token", "blurry", "written",
+            assistant.positiveAliases, assistant.negativeAliases)
         val source = mapOf("agent_messages__local" to gson.toJson(listOf(message(attachment = file), assistant)),
-            "agent_prompt_output__local" to gson.toJson(AgentPromptOutput("star_token", "blurry", "written")))
+            "agent_prompt_output__local" to gson.toJson(promptOutput))
         val result = repo.migrate(snapshot(source))
         val restored = repo.messages(result.conversationId!!)
         assertEquals(listOf("m", "a"), restored.map { it.id })
@@ -82,6 +86,7 @@ class AgentWorkspaceRepositoryTest {
         assertEquals("reference content", repo.resolveAttachment(restored.first().attachments!!.single().uri)!!.readText())
         assertTrue(File(legacy, file.name).isFile)
         assertTrue(repo.state(result.conversationId)!!.promptOutputJson.contains("blurry"))
+        assertEquals(promptOutput, gson.fromJson(repo.state(result.conversationId)!!.promptOutputJson, AgentPromptOutput::class.java))
     }
 
     @Test fun emptyChatStillMigratesGeneratedMedia() = check {
@@ -341,8 +346,11 @@ class AgentWorkspaceRepositoryTest {
 
     @Test fun portableBackupRestoresAssetsStateAndKeepsPreviousSnapshot() = check {
         val a = repo.createConversation("local")
-        repo.replaceMessages(a.id, listOf(message(attachment = attachment())))
-        repo.updateState(AgentConversationState(a.id, """{"model":"A"}""", """{"negative":"blurry"}"""))
+        val aliases = listOf(com.comfyui.mobile.agent.AgentPromptAlias("blurry", "模糊"))
+        val original = message(attachment = attachment()).copy(expandedNegativePrompt = "blurry", negativeAliases = aliases)
+        repo.replaceMessages(a.id, listOf(original))
+        val output = AgentPromptOutput("portrait", "blurry", negativeAliases = aliases)
+        repo.updateState(AgentConversationState(a.id, """{"model":"A"}""", gson.toJson(output)))
         val link = repo.reserveExecution(a.id, "turn", AgentExecutionTarget("LOCAL_COMFY", "server"))
         repo.confirmExecution(link, "remote")
         repo.recordOutput(link, media(localUri = File(root, "not-packaged.png").toURI().toString()))
@@ -358,6 +366,8 @@ class AgentWorkspaceRepositoryTest {
         assertEquals("reference content", repo.resolveAttachment(before)!!.readText())
         assertNotEquals(originalPath, repo.resolveAttachment(before)!!.canonicalPath)
         assertTrue(repo.state(a.id)!!.promptOutputJson.contains("blurry"))
+        assertEquals(aliases, repo.messages(a.id).single().negativeAliases)
+        assertEquals(output, gson.fromJson(repo.state(a.id)!!.promptOutputJson, AgentPromptOutput::class.java))
         assertEquals(1, repo.media(a.id).size)
     }
 

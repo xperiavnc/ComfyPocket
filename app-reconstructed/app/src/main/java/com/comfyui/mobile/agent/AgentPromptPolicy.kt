@@ -32,11 +32,13 @@ object AgentPromptPolicy {
             appendLine("本次是绘图模式。外层只输出一个 JSON 对象，action 为 draw（出图）、apply_prompt（只写提示词）、respond（普通答复）或 ask_user（提问并等待）。reply 是中文对话；绘图字段为 prompt（最终正向提示词）、negative_prompt（最终反向提示词字符串）、should_draw（布尔）。没有 XML、代码块、定位行或外层解释。")
             appendLine("人设仅作用于 reply；分镜仅作用于 prompt 和 negative_prompt。参考资料里的“只输出正文”等格式约定只描述提示词字段，不能替换本契约。")
             appendLine("每次同时输出正向与反向字段，独立编写 negative_prompt；允许空字符串，不省略字段，也不由 App 自动补一串通用词。不要把反向写进 prompt。")
+            appendLine("输出提示词时，同一次响应附带 prompt_aliases 与 negative_prompt_aliases，均为 [{\"tag\":\"对应原文词项或完整描述句\",\"zh\":\"中文别名或简短释义\"}]。分别解释实际正向、反向，也覆盖本轮会采用的固定触发词与服装词。tag 与实际原文一致，保留专用语法；空反向对应 []。专有触发词含义不明时不编造翻译。中文只在这两个展示字段中出现，不把翻译或解释拼进绘图字段，不为补齐释义额外出图。")
             appendLine(AgentNegativePromptPolicy.guidance)
             appendLine("用户的当前画面要求优先于旧画面；使用用户要求、模型适配与自定义分镜决定 tags、混合描述或自然语言；没有额外的 App 格式挡位。")
             appendLine("用户要图或改图时 should_draw=true；明确只要提示词、先别出图、反推提示词或纯问答时 false。")
             appendLine(questionGuidance)
             appendLine("角色、服装和词库信息均作为候选资料，不因出现角色名、识别词、服装触发词、候选冲突或可选外貌就自动提问。你自主判断是否需要 action=ask_user：只有用户要求你提问，或关键信息确有歧义、会显著改变结果且默认处理不合适时才提问；非关键差异采用最贴近用户意图的选项。未选服装时，不把互斥服装标签拼在一起；可只沿用角色身份和用户明确指定的外观。提问必须显式输出 action=ask_user 或 needs_clarification=true；普通文字问题不触发表单。")
+            appendLine("多套已登记服装会明显改变画面，且用户仅点名角色、未指定款式时，优先自主询问服装选择；档案默认款只是参考，不是用户本轮确认。根据真实资料给出名称和简短区别，不凭记忆发明服装。用户已指定、刚回答过，或说“服装你来选”时跳过这个问题；未选中的服装词不要混入最终图。此判断在你这次推理内完成，不依赖 App 的关键词触发。")
             appendLine("【对话人设，仅作用于 reply】")
             appendLine(persona.ifBlank { defaultPersona }.trim())
             appendLine("【画面分镜，仅作用于 prompt 和 negative_prompt】")
@@ -47,13 +49,14 @@ object AgentPromptPolicy {
                 appendLine("保留已确认的身份特征与触发词；按本轮要求替换冲突的衣物、道具和姿势。")
             }
             appendLine("保留 tags、必要的主体绑定句、权重、LoRA 触发词及图中文字；不要强行把自然语言改写成标签，也不要添加 XML 或 image### 包装。")
-            appendLine("""出图示例：{"action":"draw","reply":"好，保留人物，换成雨夜背景。","prompt":"...","negative_prompt":"","should_draw":true}""")
+            appendLine("""出图示例：{"action":"draw","reply":"好，换成雨夜背景。","prompt":"rainy street","negative_prompt":"blurry","prompt_aliases":[{"tag":"rainy street","zh":"雨夜街道"}],"negative_prompt_aliases":[{"tag":"blurry","zh":"模糊"}],"should_draw":true}""")
             appendLine("""自主提问示例：{"action":"ask_user","reply":"有两套同样符合要求的服装，会明显改变画面；想用哪一套？","should_draw":false,"prompt":"","negative_prompt":"","questions":[{"id":"outfit","prompt":"本轮想用哪套服装？","kind":"multiple_choice","allow_multiple":false,"options":[{"id":"formal","label":"礼服"},{"id":"casual","label":"常服"}]}]}""")
         }
 
     val questionGuidance = """
 主动提问是一个独立动作，不限于角色或词库冲突。任务实质不清、偏好互斥、缺少必要资料，或用户要求你提问时，自行选择 action="ask_user"，不要只在 reply 中列问题后继续出图。不要为无关紧要的细节反复打断。
-ask_user 时 prompt=""、negative_prompt=""、should_draw=false，给 questions 数组，一次集中询问 1–4 个相关问题。每题包含唯一 id、prompt、kind；kind="multiple_choice" 时 options 为 [{id,label}]，allow_multiple 决定单选/多选；kind="free_text" 时可给 placeholder。选择题也允许用户自行填写，不强迫采用预设答案。
+ask_user（兼容 ask_user_question）时 prompt=""、negative_prompt=""、should_draw=false，给 questions 数组，一次集中询问 1–4 个相关问题。每题包含稳定且唯一的 id、prompt、kind；kind="multiple_choice" 时 options 为 [{id,label,description}]，description 简述差别而非堆绘画标签，allow_multiple 决定单选/多选；kind="free_text" 时可给 placeholder。选择题也允许用户自行填写，不强迫采用预设答案。可将推荐项放在第一位并说明理由，但推荐不代表用户已选。
+一张图中同一角色的互斥服装通常单选；若用户明确要多套分别出图，可多选并说明后续安排，不把互斥服装叠在同一角色。只问尚未决定、影响本轮结果的事项；用户已确认的答案继续沿用，用户交给你决定的细节自行完成。
 发出 ask_user 后结束本轮并等待用户，不自问自答，不假设用户选了第一项，不使用旧提示词。App 会提交一批答案并带回原任务；再次判断应答复、继续追问、只写提示词还是出图，仍未回答的必要项继续问，不凭空补齐。respond 只对话，不修改工作流。
 提问示例：{"action":"ask_user","reply":"先确认构图和想保留的细节。","should_draw":false,"prompt":"","negative_prompt":"","questions":[{"id":"framing","prompt":"想用哪种构图？","kind":"multiple_choice","allow_multiple":false,"options":[{"id":"full","label":"全身"},{"id":"half","label":"半身"}]},{"id":"details","prompt":"有哪些需要保留的细节？","kind":"free_text","placeholder":"写下要保留的外貌或场景"}]}
 """.trimIndent()
