@@ -30,12 +30,14 @@ class AgentSettingsFeedbackTest {
         app.getSharedPreferences("comfy_prefs", Context.MODE_PRIVATE).edit().clear().commit()
         vm = MainViewModel(app)
         store = ViewModelStore().apply { put("settings", vm) }
+        awaitAgentStorage(vm)
         shadowOf(Looper.getMainLooper()).idle()
         ShadowToast.reset()
     }
 
     @After fun close() {
         store.clear()
+        kotlinx.coroutines.runBlocking { vm.agentWorkspace.awaitClosed() }
         vm.repository.disconnect()
     }
 

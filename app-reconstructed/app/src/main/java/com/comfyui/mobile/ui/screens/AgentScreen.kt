@@ -51,7 +51,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.text.TextRange
+import com.comfyui.mobile.ui.AgentAttachmentOwner
+import com.comfyui.mobile.ui.AgentStorageMode
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -129,16 +135,23 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val context = LocalContext.current
     val scrollBehavior = MiuixScrollBehavior()
 
-    var input by rememberSaveable(stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(""))
-    }
+    val storageStatus by viewModel.agentStorageStatus.collectAsState()
+    val draft by viewModel.agentInputDraft.collectAsState()
+    val hasEarlier by viewModel.agentHasEarlierMessages.collectAsState()
+    val input = TextFieldValue(draft.text, TextRange(
+        draft.selectionStart.coerceIn(0, draft.text.length), draft.selectionEnd.coerceIn(0, draft.text.length)))
+    var pickerOwner by rememberSaveable(stateSaver = Saver<AgentAttachmentOwner?, List<Any>>(
+        save = { owner -> owner?.let { listOf(it.conversationId.orEmpty(), it.scope, it.epoch, it.ticket, it.mayCreate) } },
+        restore = { AgentAttachmentOwner((it[0] as String).ifEmpty { null }, it[1] as String,
+            it[2] as Long, it[3] as Long, it[4] as Boolean) }
+    )) { mutableStateOf<AgentAttachmentOwner?>(null) }
 
     val agentImagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(4)
-    ) { uris -> viewModel.addAgentImageAttachments(uris) }
+    ) { uris -> viewModel.addAgentImageAttachments(uris, pickerOwner); pickerOwner = null }
     val agentFilePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
-    ) { uris -> viewModel.addAgentFileAttachments(uris) }
+    ) { uris -> viewModel.addAgentFileAttachments(uris, pickerOwner); pickerOwner = null }
 
     var showModelSwitchDialog by remember { mutableStateOf(false) }
     var showWorkflowSheet by remember { mutableStateOf(false) }
@@ -158,6 +171,30 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     var cloudModelTargetKey by remember { mutableStateOf<String?>(null) }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
     var observedLastMessageId by rememberSaveable { mutableStateOf(messages.lastOrNull()?.id) }
+    var restoredChat by remember(storageStatus.conversationId) { mutableStateOf(false) }
+    LaunchedEffect(storageStatus.conversationId) {
+        if (storageStatus.conversationId == null) return@LaunchedEffect
+        observedLastMessageId = messages.lastOrNull()?.id
+        val index = messages.indexOfFirst { it.id == draft.scrollMessageId }
+        listState.scrollToItem(if (index >= 0) index + if (hasEarlier) 1 else 0
+            else messages.lastIndex.coerceAtLeast(0) + if (hasEarlier) 1 else 0,
+            if (index >= 0) draft.scrollOffset else 0)
+        restoredChat = true
+    }
+    LaunchedEffect(storageStatus.conversationId, restoredChat) {
+        if (!restoredChat) return@LaunchedEffect
+        snapshotFlow { listState.isScrollInProgress to
+            (listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset) }
+            .collectLatest { (scrolling, anchor) ->
+                if (!scrolling) {
+                    delay(250)
+                    val id = (listState.layoutInfo.visibleItemsInfo.firstOrNull()?.key as? String)
+                        ?.takeUnless { it == "earlier" }
+                    viewModel.updateAgentDraft(viewModel.agentInputDraft.value.copy(
+                        scrollMessageId = id, scrollOffset = anchor.second))
+                }
+            }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.refreshAiApps()
@@ -172,16 +209,16 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val lastMsg = messages.lastOrNull()
     LaunchedEffect(messages.size, lastMsg?.id, lastMsg?.isThinking, lastMsg?.errorMessage) {
         // Re-entering a saved Tab is not a new message. Do not reset a user's reading position.
-        if (messages.isNotEmpty() && observedLastMessageId != lastMsg?.id) {
+        if (restoredChat && messages.isNotEmpty() && observedLastMessageId != lastMsg?.id) {
             observedLastMessageId = lastMsg?.id
-            listState.animateScrollToItem(messages.lastIndex)
+            listState.animateScrollToItem(messages.lastIndex + if (hasEarlier) 1 else 0)
         }
     }
     LaunchedEffect(lastMsg?.content) {
-        if (messages.isNotEmpty() && lastMsg?.role == "assistant") {
+        if (restoredChat && messages.isNotEmpty() && lastMsg?.role == "assistant") {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             if (lastVisible >= messages.size - 2) {
-                listState.scrollToItem(messages.lastIndex)
+                listState.scrollToItem(messages.lastIndex + if (hasEarlier) 1 else 0)
             }
         }
     }
@@ -332,19 +369,30 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             AgentChatPanel(
                 messages = messages,
                 input = input,
-                onInputChange = { input = it },
+                onInputChange = { value -> viewModel.updateAgentDraft(draft.copy(
+                    text = value.text, selectionStart = value.selection.start, selectionEnd = value.selection.end)) },
                 busy = busy,
+                inputEnabled = storageStatus.writable,
+                statusMessage = storageStatus.message.ifBlank { viewModel.agentReferenceWarning().orEmpty() },
+                onStatusClick = {
+                    if (storageStatus.mode == AgentStorageMode.ROOM) viewModel.useCurrentAgentConfiguration()
+                    else viewModel.retryAgentStorage()
+                },
+                hasEarlier = hasEarlier,
+                onLoadEarlier = { viewModel.loadEarlierAgentMessages() },
                 cardColors = cardColors,
                 sidePad = sidePad,
                 listState = listState,
                 modifier = Modifier.weight(0.46f),
                 attachments = agentAttachments,
                 onPickImages = {
+                    pickerOwner = viewModel.captureAgentAttachmentOwner()
                     agentImagePickerLauncher.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                     )
                 },
                 onPickFiles = {
+                    pickerOwner = viewModel.captureAgentAttachmentOwner()
                     agentFilePickerLauncher.launch(
                         arrayOf("text/*", "application/json", "application/xml", "application/x-yaml")
                     )
@@ -353,7 +401,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 onStop = { viewModel.stopAgentGeneration() },
                 onSendMessage = { text ->
                     viewModel.sendAgentMessage(text)
-                    input = TextFieldValue("")
+                    if (storageStatus.writable && viewModel.agentReferenceWarning() == null)
+                        viewModel.updateAgentDraft(draft.copy(text = "", selectionStart = 0, selectionEnd = 0))
                 }
     )
         }

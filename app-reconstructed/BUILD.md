@@ -28,7 +28,7 @@
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.42-agent-workspace-storage`，版本号为 `44`。显示名 **ComfyPocket**；
+当前构建版本名为 `0.0.43-agent-workspace-integration`，版本号为 `45`。显示名 **ComfyPocket**；
 模型中心的手机直连资料 / 代理预览与详情说明见 `MODEL_CENTER.md`，Agent 见 `AGENT.md`，
 在线画廊见 `DANBOORU_GALLERY_PLAN.md`，底栏与动画说明见 `MATERIAL.md`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
@@ -64,9 +64,12 @@ gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plai
 - 构建和 JVM 单元测试不等于真机端到端验证。本轮不连接实际生成服务、不自动安装 APK。
 - Python 桥接插件不打入 APK；需作为服务端插件单独部署。
 - `local.properties`、构建缓存、测试产物和 Python 缓存不纳入源码分发包。
-- `0.0.42` 只引入 Agent 工作区存储基础，尚未在启动时打开新数据库或迁移旧记录；
-  现有 Agent 仍使用原存储。生产读写、任务回调和 `.cui.bak` 接入属于下一批 P1.2，
-  本版不代表多会话 / 项目管理页面已上线。详见 `AGENT_WORKSPACE_PLAN.md`。
+- `0.0.43` 启用 Agent 单主会话的 Room 存储与按作用域迁移，保留迁移前旧键和原附件。
+  成功后新记录只写 Room；旧 APK 只看到迁移前快照，降级安装不等于完整数据回退。
+  `.cui.bak` 支持工作区和引用附件，导入替换需勾选确认并保留原快照；
+  不打包生成媒体本体。项目 / 多会话页面留待 P2 / P3，详见 `AGENT_WORKSPACE_PLAN.md`。
+- 本版 debug APK 构建及 116 套 / 816 项 JVM、Compose、真实 ViewModel / Room 集成测试通过；
+  APK 版本与签名检查见本地验证记录。未进行手机安装、真机升级或真实服务出图验证。
 
 默认 APK 不携带离线词库。运行 `python tools/pack_local_tag_library.py` 可生成独立 ZIP，
 在 Agent 设置中导入；完整资源、中文对照与旧版已初始化数据保留。来源与操作见 `TAG_LIBRARY.md`。Agent 不依赖 Danbooru 联网查词；新增在线画廊为完全独立、用户主动访问的模块。

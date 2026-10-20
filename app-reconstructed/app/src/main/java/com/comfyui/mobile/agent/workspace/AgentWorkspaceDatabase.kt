@@ -23,6 +23,12 @@ abstract class AgentWorkspaceDao {
     abstract suspend fun state(id: String): AgentConversationState?
     @Query("SELECT * FROM agent_messages WHERE conversationId = :id ORDER BY sequence")
     abstract suspend fun messages(id: String): List<AgentMessage>
+    @Query("SELECT * FROM agent_messages WHERE conversationId = :id AND sequence < :before ORDER BY sequence DESC LIMIT :limit")
+    abstract suspend fun messagePage(id: String, before: Long, limit: Int): List<AgentMessage>
+    @Query("SELECT * FROM agent_messages WHERE conversationId = :conversationId AND id = :id")
+    abstract suspend fun message(conversationId: String, id: String): AgentMessage?
+    @Query("SELECT COALESCE(MAX(sequence), -1) + 1 FROM agent_messages WHERE conversationId = :id")
+    abstract suspend fun nextSequence(id: String): Long
     @Query("SELECT * FROM agent_conversation_media WHERE conversationId = :id ORDER BY createdAt DESC, mediaKey")
     abstract suspend fun media(id: String): List<AgentConversationMedia>
     @Query("SELECT * FROM agent_execution_links WHERE id = :id")
@@ -35,6 +41,8 @@ abstract class AgentWorkspaceDao {
     abstract suspend fun meta(key: String): String?
     @Query("SELECT * FROM agent_assets WHERE id = :id")
     abstract suspend fun asset(id: String): AgentAsset?
+    @Query("SELECT * FROM agent_assets WHERE relativePath = :path")
+    abstract suspend fun assetByPath(path: String): AgentAsset?
     @Query("SELECT * FROM agent_asset_refs WHERE assetId = :id")
     abstract suspend fun refs(id: String): List<AgentAssetRef>
     @Query("SELECT * FROM agent_assets WHERE id NOT IN (SELECT assetId FROM agent_asset_refs)")
@@ -44,6 +52,7 @@ abstract class AgentWorkspaceDao {
     @Upsert abstract suspend fun putConversation(value: AgentConversation)
     @Upsert abstract suspend fun putState(value: AgentConversationState)
     @Insert abstract suspend fun insertMessages(values: List<AgentMessage>)
+    @Upsert abstract suspend fun putMessage(value: AgentMessage)
     @Insert abstract suspend fun putExecution(value: AgentExecutionLink)
     @Update abstract suspend fun updateExecution(value: AgentExecutionLink)
     @Upsert abstract suspend fun putMedia(value: AgentConversationMedia)
@@ -54,6 +63,12 @@ abstract class AgentWorkspaceDao {
 
     @Query("DELETE FROM agent_messages WHERE conversationId = :id")
     abstract suspend fun deleteMessages(id: String)
+    @Query("DELETE FROM agent_asset_refs WHERE conversationId = :conversationId AND messageId = :messageId")
+    abstract suspend fun deleteMessageRefs(conversationId: String, messageId: String)
+    @Query("DELETE FROM agent_asset_refs WHERE conversationId = :id AND ownerType = 'draft'")
+    abstract suspend fun deleteDraftRefs(id: String)
+    @Query("DELETE FROM agent_conversation_media WHERE conversationId = :id")
+    abstract suspend fun deleteMedia(id: String)
     @Query("DELETE FROM agent_conversations WHERE id = :id")
     abstract suspend fun deleteConversation(id: String)
     @Query("UPDATE agent_execution_links SET conversationId = NULL, detachedAt = :now, updatedAt = :now WHERE conversationId = :id")
@@ -94,7 +109,7 @@ abstract class AgentWorkspaceDatabase : RoomDatabase() {
     abstract fun workspace(): AgentWorkspaceDao
 
     companion object {
-        /** Deliberately not opened at app startup until the P1 production adapter is complete. */
+        /** Opened on the production adapter's serial IO worker, never on the UI thread. */
         fun open(context: Context): AgentWorkspaceDatabase = Room.databaseBuilder(
             context.applicationContext, AgentWorkspaceDatabase::class.java, "agent_workspace.db"
         ).build()

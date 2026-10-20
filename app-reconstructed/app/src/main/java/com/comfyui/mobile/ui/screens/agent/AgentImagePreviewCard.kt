@@ -132,8 +132,21 @@ fun AgentImagePreviewCard(
     ) { page ->
                     val media = mediaList.getOrNull(page)
                     if (media != null) {
+                        val url = previewUrl(media)
+                        if (media.sourceUnresolved && url.isBlank()) {
+                            Column(modifier = Modifier.fillMaxSize().padding(20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center) {
+                                Icon(MiuixIcons.Image, contentDescription = null,
+                                    tint = scheme.onSurfaceVariantSummary)
+                                Spacer(Modifier.height(8.dp))
+                                Text("历史媒体来源待确认", color = scheme.onSurfaceVariantSummary)
+                                Text(media.filename, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+                            }
+                        } else {
                         AsyncImage(
-                            model = previewUrl(media),
+                            model = url,
                             contentDescription = if (page == 0) "最新生成" else "历史生成",
                             modifier = Modifier
                                 .fillMaxSize()
@@ -143,6 +156,7 @@ fun AgentImagePreviewCard(
                                 ),
                             contentScale = ContentScale.Crop
     )
+                        }
                     }
                 }
             } else if (!overlayOn) {

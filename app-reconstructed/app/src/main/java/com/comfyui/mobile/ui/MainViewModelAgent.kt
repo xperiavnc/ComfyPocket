@@ -44,14 +44,23 @@ object MainViewModelAgent {
         }
     }
 
+    internal fun launchWorkspaceWorkflowLoad(vm: MainViewModel) {
+        if (vm._agentWorkflowSource.value.isNotBlank() && vm._agentWorkflowId.value.isNotBlank()) launchWorkflowLoad(vm)
+    }
+
+    private fun room(vm: MainViewModel) = vm.agentWorkspaceData.isInitialized() && vm.agentWorkspace.usesRoom
+    private fun writable(vm: MainViewModel) = !vm.agentWorkspaceData.isInitialized() || vm.agentWorkspace.requireWritable()
+
     fun setAgentInteractionMode(vm: MainViewModel, mode: String) {
+        if (!writable(vm)) return
         val next = when (mode) {
             MainViewModel.AGENT_MODE_CHAT -> MainViewModel.AGENT_MODE_CHAT
             else -> MainViewModel.AGENT_MODE_DRAW
         }
         if (vm._agentInteractionMode.value != next) invalidateContext(vm)
         vm._agentInteractionMode.value = next
-        vm.prefs.edit().putString("agent_interaction_mode", next).apply()
+        if (room(vm)) vm.agentWorkspace.saveConfiguration()
+        else vm.prefs.edit().putString("agent_interaction_mode", next).apply()
     }
 
     /** local | cloud@cn | cloud@ai — Agent session isolation (LLM / 人设 / 分镜共用). */
@@ -266,6 +275,7 @@ object MainViewModelAgent {
     }
 
     fun loadAgentMediaList(vm: MainViewModel): List<MediaOutput> {
+        if (room(vm)) return vm._agentLatestGenerationList.value
         val raw = readScopedString(vm, "agent_latest_media_list") ?: return emptyList()
         return try {
             val type = object : TypeToken<List<MediaOutput>>() {}.type
@@ -276,6 +286,7 @@ object MainViewModelAgent {
     }
 
     fun persistAgentMediaList(vm: MainViewModel, list: List<MediaOutput>) {
+        if (room(vm)) return // New output writers must pass the captured execution/source instead.
         vm.prefs.edit().putString(scopedPref("agent_latest_media_list", vm), vm.gson.toJson(list)).apply()
     }
 
@@ -337,7 +348,10 @@ object MainViewModelAgent {
 
     fun loadPromptBinding(vm: MainViewModel, negative: Boolean,
         source: String = vm._agentWorkflowSource.value, id: String = vm._agentWorkflowId.value
-    ): AgentPromptBinding = AgentPromptBindingStore(vm.prefs).load(scope(vm), source, id, negative)
+    ): AgentPromptBinding = vm.agentWorkspaceData.takeIf { it.isInitialized() }?.value
+        ?.workflowField(if (negative) "negativeBinding" else "positiveBinding", source, id)
+        ?.let { vm.gson.fromJson(it, AgentPromptBinding::class.java) }
+        ?: AgentPromptBindingStore(vm.prefs).load(scope(vm), source, id, negative)
 
     private fun reloadPromptBindings(vm: MainViewModel, source: String, id: String) {
         vm._agentPositiveBinding.value = loadPromptBinding(vm, false, source, id)
@@ -346,6 +360,7 @@ object MainViewModelAgent {
     }
 
     fun setPromptBinding(vm: MainViewModel, negative: Boolean, value: AgentPromptBinding) {
+        if (!writable(vm)) return
         try {
             val graph = vm.agentWorkflow.orEmpty()
             val target = value.explicitTarget(graph)
@@ -353,13 +368,14 @@ object MainViewModelAgent {
             val otherTarget = runCatching { other.explicitTarget(graph) }.getOrNull()
             require(target == null || target != otherTarget) { "正反向提示词不可绑定同一字段" }
             require(vm._agentWorkflowId.value.isNotBlank()) { "请先选择工作流" }
-            AgentPromptBindingStore(vm.prefs).save(scope(vm), vm._agentWorkflowSource.value,
+            if (!room(vm)) AgentPromptBindingStore(vm.prefs).save(scope(vm), vm._agentWorkflowSource.value,
                 vm._agentWorkflowId.value, negative, value)
             invalidateContext(vm)
             if (negative) vm._agentNegativeBinding.value = value else {
                 vm._agentPositiveBinding.value = value
                 vm._agentTargetNodeId.value = if (value.mode == PromptBindingMode.EXPLICIT) value.nodeId else ""
             }
+            if (room(vm)) vm.agentWorkspace.saveConfiguration()
             vm.showUserMessage("已保存${if (negative) "反向" else "正向"}节点：${value.label}")
         } catch (e: IllegalArgumentException) {
             vm.showUserMessage(e.message ?: "请重新选择文本字段")
@@ -367,6 +383,7 @@ object MainViewModelAgent {
     }
 
     fun loadPromptOutput(vm: MainViewModel): AgentPromptOutput {
+        if (room(vm)) return vm._agentPromptOutput.value
         val raw = readScopedString(vm, "agent_prompt_output")
         val parsed = raw?.let { runCatching {
             val json = com.google.gson.JsonParser.parseString(it).asJsonObject
@@ -383,6 +400,7 @@ object MainViewModelAgent {
     internal fun savePromptOutput(vm: MainViewModel, output: AgentPromptOutput) {
         vm._agentPromptOutput.value = output
         vm._agentLastExpandedPrompt.value = output.positive
+        if (room(vm)) { vm.agentWorkspace.saveConfiguration(); return }
         vm.prefs.edit().putString(scopedPref("agent_prompt_output", vm), vm.gson.toJson(output))
             .putString(scopedPref("agent_last_prompt", vm), output.positive).apply()
     }
@@ -392,9 +410,11 @@ object MainViewModelAgent {
     }
 
     fun setAgentArtistNodeId(vm: MainViewModel, nodeId: String) {
+        if (!writable(vm)) return
         invalidateContext(vm)
         val trimmed = nodeId.trim()
         vm._agentArtistNodeId.value = trimmed
+        if (room(vm)) { vm.agentWorkspace.saveConfiguration(); return }
         val key = getAgentArtistNodePrefKey(vm)
         if (key.isNotBlank()) {
             if (trimmed.isBlank()) {
@@ -407,6 +427,7 @@ object MainViewModelAgent {
     }
 
     fun readArtistNodeId(vm: MainViewModel, source: String, id: String): String {
+        if (room(vm)) vm.agentWorkspace.workflowField("artistNodeId", source, id)?.let { return it.asString }
         val scoped = getAgentArtistNodePrefKey(vm, source, id)
         return vm.prefs.getString(scoped, null)
             ?: vm.prefs.getString("agent_artist_node_${source}_${id}", "")
@@ -418,6 +439,9 @@ object MainViewModelAgent {
     }
 
     fun loadAgentAuxNodes(vm: MainViewModel, source: String, id: String): Set<String> {
+        if (room(vm)) vm.agentWorkspace.workflowField("auxNodeKeys", source, id)?.let {
+            return it.asJsonArray.map { v -> v.asString }.toSet()
+        }
         val raw = vm.prefs.getString(getAgentAuxNodesPrefKey(vm, source, id), null)
             ?: vm.prefs.getString("agent_aux_nodes_${source}_${id}", null)
             ?: return emptySet()
@@ -430,10 +454,12 @@ object MainViewModelAgent {
     }
 
     fun toggleAgentAuxNode(vm: MainViewModel, compoundKey: String, isChecked: Boolean) {
+        if (!writable(vm)) return
         invalidateContext(vm)
         val current = vm._agentAuxNodeKeys.value.toMutableSet()
         if (isChecked) current.add(compoundKey) else current.remove(compoundKey)
         vm._agentAuxNodeKeys.value = current
+        if (room(vm)) { vm.agentWorkspace.saveConfiguration(); return }
         val key = getAgentAuxNodesPrefKey(vm, vm._agentWorkflowSource.value, vm._agentWorkflowId.value)
         if (key.isNotBlank()) {
             vm.prefs.edit().putString(key, vm.gson.toJson(current)).apply()
@@ -457,6 +483,7 @@ object MainViewModelAgent {
     }
 
     fun updateAgentNodeValue(vm: MainViewModel, nodeId: String, key: String, value: Any) {
+        if (!writable(vm)) return
         invalidateContext(vm)
         val current = vm.agentWorkflow?.toMutableMap() ?: return
         val node = (current[nodeId] as? Map<String, Any>)?.toMutableMap() ?: return
@@ -489,12 +516,17 @@ object MainViewModelAgent {
 
     fun persistAgentWorkflowParams(vm: MainViewModel, source: String = vm._agentWorkflowSource.value, id: String = vm._agentWorkflowId.value) {
         if (source.isBlank() || id.isBlank()) return
+        if (room(vm)) { vm.agentWorkspace.saveConfiguration(); return }
         val key = getAgentWorkflowParamStorageKey(vm, source, id)
         vm.prefs.edit().putString(key, vm.gson.toJson(vm.agentWorkflowParamValues)).apply()
     }
 
         fun loadAgentWorkflowParams(vm: MainViewModel, source: String, id: String, fallbackWorkflowKey: String? = null): MutableMap<String, Any> {
         if (source.isBlank() || id.isBlank()) return mutableMapOf()
+        if (room(vm)) vm.agentWorkspace.workflowField("parameters", source, id)?.let {
+            val type = object : TypeToken<Map<String, Any>>() {}.type
+            return (vm.sanitizeNumbers(vm.gson.fromJson<Map<String, Any>>(it, type)) as Map<String, Any>).toMutableMap()
+        }
         val raw = vm.prefs.getString(getAgentWorkflowParamStorageKey(vm, source, id), null)
             ?: vm.prefs.getString("agent_wf_params_${source}_${id}", null)
         if (raw != null) {
@@ -515,6 +547,11 @@ object MainViewModelAgent {
 
     private fun clearAgentWorkflowParams(vm: MainViewModel, source: String, id: String) {
         if (source.isBlank() || id.isBlank()) return
+        if (room(vm)) {
+            vm.agentWorkflowParamValues.clear()
+            vm.agentWorkspace.saveConfiguration()
+            return
+        }
         vm.prefs.edit()
             .remove(getAgentWorkflowParamStorageKey(vm, source, id))
             .remove("agent_wf_params_${source}_${id}")
@@ -532,6 +569,7 @@ object MainViewModelAgent {
      * re-read that file so the aux UI matches what was just saved — not the old file.
      */
     fun resetAgentSavedWorkflow(vm: MainViewModel) {
+        if (!writable(vm)) return
         invalidateContext(vm)
         val source = vm._agentWorkflowSource.value
         val id = vm._agentWorkflowId.value
@@ -618,6 +656,7 @@ object MainViewModelAgent {
     }
 
     fun loadAgentMessages(vm: MainViewModel): List<AgentChatMessage> {
+        if (room(vm)) return vm.agentWorkspace.cachedMessages()
         val raw = readScopedString(vm, "agent_messages") ?: return emptyList()
         return try {
             val type = object : TypeToken<List<AgentChatMessage>>() {}.type
@@ -630,6 +669,7 @@ object MainViewModelAgent {
     }
 
     fun persistAgentMessages(vm: MainViewModel) {
+        if (room(vm)) return
         val toSave = vm._agentMessages.value.mapNotNull { msg ->
             if (msg.role == "user") {
                 msg.takeIf { it.content.isNotBlank() || !it.attachments.isNullOrEmpty() }
@@ -651,6 +691,7 @@ object MainViewModelAgent {
     }
 
     fun persistRunPromptIds(vm: MainViewModel, ids: Set<String>) {
+        if (room(vm)) return
         vm.prefs.edit().putStringSet(scopedPref("agent_run_prompt_ids", vm), ids).apply()
     }
 
@@ -773,6 +814,10 @@ object MainViewModelAgent {
     }
 
     fun preloadAgentWorkflow(vm: MainViewModel) {
+        if (vm.agentWorkspaceData.isInitialized()) {
+            if (vm.agentWorkspace.ready && vm.agentWorkflow == null) launchWorkspaceWorkflowLoad(vm)
+            return
+        }
         // Re-entering Agent must not reload session from disk; that used to wipe assistant
         // replies (thinking ticks persisted a user-only list).
         if (vm.agentWorkflow != null || vm._agentMessages.value.isNotEmpty()) {
@@ -788,7 +833,15 @@ object MainViewModelAgent {
     }
 
     fun reloadAgentWorkflowForMode(vm: MainViewModel) {
+        if (vm.agentWorkspaceData.isInitialized() &&
+            vm.agentWorkspace.status.value.mode == AgentStorageMode.RESTORING) return
         invalidateContext(vm)
+        vm._favoriteArtists.value = loadFavoriteArtists(vm)
+        vm._characterLores.value = loadCharacterLores(vm)
+        vm.agentWorkspace.reload()
+    }
+
+    internal fun reloadLegacyAgentWorkflow(vm: MainViewModel) {
         try {
             val s = scope(vm)
             val isLocal = s == "local"
@@ -850,11 +903,12 @@ object MainViewModelAgent {
     }
 
     fun selectLlmProfile(vm: MainViewModel, id: String) {
+        if (!writable(vm)) return
         val target = vm._llmProfiles.value.firstOrNull { it.id == id } ?: return
         invalidateContext(vm)
         vm._llmReasoningEffort.value = AgentReasoningEffort.fromStored(target.reasoningEffort)
         vm._currentLlmProfileId.value = id
-        vm.prefs.edit().putString("current_llm_profile_id", id).apply()
+        if (!room(vm)) vm.prefs.edit().putString("current_llm_profile_id", id).apply()
         vm._llmBaseUrl.value = target.baseUrl
         vm._llmApiKey.value = target.apiKey
         vm._llmModel.value = target.model
@@ -863,6 +917,7 @@ object MainViewModelAgent {
             .remove("llm_api_key")
             .putString("llm_model", target.model)
             .apply()
+        if (room(vm)) vm.agentWorkspace.saveConfiguration()
     }
 
     fun addOrUpdateLlmProfile(vm: MainViewModel, profile: LlmProfile, selectAfterSave: Boolean = true) {
@@ -962,6 +1017,7 @@ object MainViewModelAgent {
     }
 
     fun setAgentDefaultWorkflow(vm: MainViewModel, source: String, id: String, label: String) {
+        if (!writable(vm)) return
         invalidateContext(vm)
         val cleanLabel = label.removeSuffix(".json").removeSuffix(".JSON").ifBlank { label }
         vm._agentWorkflowSource.value = source
@@ -970,7 +1026,10 @@ object MainViewModelAgent {
         reloadPromptBindings(vm, source, id)
         vm._agentArtistNodeId.value = readArtistNodeId(vm, source, id)
         vm._agentAuxNodeKeys.value = loadAgentAuxNodes(vm, source, id)
-        vm.prefs.edit()
+        vm.agentWorkflowParamValues.clear()
+        vm.agentWorkflowParamValues.putAll(loadAgentWorkflowParams(vm, source, id))
+        if (room(vm)) vm.agentWorkspace.saveConfiguration()
+        else vm.prefs.edit()
             .putString(scopedPref("agent_wf_source", vm), source)
             .putString(scopedPref("agent_wf_id", vm), id)
             .putString(scopedPref("agent_wf_label", vm), cleanLabel)
@@ -986,24 +1045,24 @@ object MainViewModelAgent {
     }
 
     fun clearAgentChat(vm: MainViewModel) {
+        if (!writable(vm)) return
         invalidateContext(vm)
         vm._agentMessages.value = emptyList()
         vm._agentLastExpandedPrompt.value = ""
         vm._agentPromptOutput.value = AgentPromptOutput()
         vm.clearAgentAttachments()
+        if (room(vm)) { vm.agentWorkspace.clearChat(); return }
         vm.prefs.edit()
             .remove(scopedPref("agent_last_prompt", vm))
             .putString(scopedPref("agent_prompt_output", vm), vm.gson.toJson(AgentPromptOutput()))
             .remove(scopedPref("agent_messages", vm))
             .apply()
-        runCatching {
-            File(vm.getApplication<Application>().filesDir, "agent_attachments").listFiles()?.forEach { it.delete() }
-        }
+        // Legacy mode preserves source files too; a shared directory is never a conversation owner.
     }
 
     fun appendAgentMessage(vm: MainViewModel, msg: AgentChatMessage) {
         vm._agentMessages.update { it + msg }
-        persistAgentMessages(vm)
+        if (room(vm)) vm.agentWorkspace.saveMessage(msg) else persistAgentMessages(vm)
     }
 
     fun updateAgentMessage(
@@ -1023,7 +1082,10 @@ object MainViewModelAgent {
                 }
             }
         }
-        if (shouldPersist) persistAgentMessages(vm)
+        val message = vm._agentMessages.value.firstOrNull { it.id == id }
+        if (room(vm)) {
+            if (message != null) vm.agentWorkspace.persistMessage(message, checkpointOnly = !shouldPersist)
+        } else if (shouldPersist) persistAgentMessages(vm)
     }
 
 
@@ -1604,10 +1666,11 @@ object MainViewModelAgent {
         "data:image/jpeg;base64," + android.util.Base64.encodeToString(File(path).readBytes(), android.util.Base64.NO_WRAP)
     }.getOrNull()
 
-    fun addAgentImageAttachments(vm: MainViewModel, uris: List<android.net.Uri>) {
-        if (uris.isEmpty()) return
+    fun addAgentImageAttachments(vm: MainViewModel, uris: List<android.net.Uri>, owner: AgentAttachmentOwner?) {
+        if (uris.isEmpty() || owner == null) return
         vm.viewModelScope.launch(Dispatchers.IO) {
-            val dir = File(vm.getApplication<Application>().filesDir, "agent_attachments").apply { mkdirs() }
+            val dir = (if (room(vm)) vm.agentWorkspace.importsDirectory
+                else File(vm.getApplication<Application>().filesDir, "agent_attachments")).apply { mkdirs() }
             for (uri in uris) {
                 if (vm._agentPendingAttachments.value.count { it.isImage } >= MAX_IMAGES) {
                     vm.showToast("最多附 $MAX_IMAGES 张图片")
@@ -1622,17 +1685,18 @@ object MainViewModelAgent {
                     name = runCatching { vm.getFileName(uri) }.getOrNull() ?: file.name,
                     sizeBytes = bytes.size.toLong()
     )
-                vm._agentPendingAttachments.value = vm._agentPendingAttachments.value + att
+                vm.agentWorkspace.addAttachments(owner, listOf(att))
             }
         }
     }
 
-    fun addAgentFileAttachments(vm: MainViewModel, uris: List<android.net.Uri>) {
-        if (uris.isEmpty()) return
+    fun addAgentFileAttachments(vm: MainViewModel, uris: List<android.net.Uri>, owner: AgentAttachmentOwner?) {
+        if (uris.isEmpty() || owner == null) return
         vm.viewModelScope.launch(Dispatchers.IO) {
             val context = vm.getApplication<Application>()
             val resolver = context.contentResolver
-            val dir = File(context.filesDir, "agent_attachments").apply { mkdirs() }
+            val dir = (if (room(vm)) vm.agentWorkspace.importsDirectory
+                else File(context.filesDir, "agent_attachments")).apply { mkdirs() }
             for (uri in uris) {
                 val name = runCatching { vm.getFileName(uri) }.getOrNull() ?: "file.txt"
                 val bytes = runCatching {
@@ -1652,7 +1716,7 @@ object MainViewModelAgent {
                     sizeBytes = bytes.size.toLong(),
                     textContent = text
     )
-                vm._agentPendingAttachments.value = vm._agentPendingAttachments.value + att
+                vm.agentWorkspace.addAttachments(owner, listOf(att))
             }
         }
     }

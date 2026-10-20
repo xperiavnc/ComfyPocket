@@ -63,6 +63,7 @@ class AgentSettingsUiTest {
         app.getSharedPreferences("comfy_prefs", Context.MODE_PRIVATE).edit().clear().commit()
         val vm = MainViewModel(app)
         val store = ViewModelStore().apply { put("settings", vm) }
+        com.comfyui.mobile.ui.awaitAgentStorage(vm)
         vm.addOrUpdateLlmProfile(LlmProfile(id = "ui-test", name = "日常绘图", baseUrl = "https://example.test/v1",
             apiKey = "", model = "example-model"))
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()

@@ -409,6 +409,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         if (effectiveUrl != null) {
             repository.setBaseUrlOnly(effectiveUrl)
         }
+        if (currentServerProfile()?.isRunningHub != true) {
+            repository.webSocketManager.mediaSourceKey =
+                com.comfyui.mobile.agent.workspace.AgentExecutionTarget("LOCAL_COMFY",
+                    currentServerProfile()?.effectiveId ?: "endpoint-" +
+                        com.comfyui.mobile.agent.workspace.workspaceId(repository.baseUrl.value.trimEnd('/'))).key
+        }
         refreshSavedWorkflows()
         refreshAiApps()
         refreshLocalCategoryFiles()
@@ -534,8 +540,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     }
                 }
                 // Launch finalizing in concurrent coroutine with brief delay so collector is immediately free for next event
+                val target = agentWorkspace.currentTarget().key
+                val epoch = agentWorkspace.callbackEpoch
                 launch {
                     kotlinx.coroutines.delay(200)
+                    if (target != agentWorkspace.currentTarget().key || epoch != agentWorkspace.callbackEpoch) return@launch
                     finalizeActiveRun(promptId)
                 }
             }
@@ -561,8 +570,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
                 val pidForMedia = data.promptId
                 if (!pidForMedia.isNullOrBlank()) {
-                    if (isAgentTask(pidForMedia)) {
-                        recordAgentRunPromptId(pidForMedia)
+                    val source = data.sourceKey ?: agentWorkspace.currentTarget().key
+                    val workspaceOutput = agentWorkspace.record(data.copy(
+                        sourceUrl = data.sourceUrl ?: repository.getImageUrl(data.filename, data.subfolder, data.type)), source)
+                    if (workspaceOutput) {
+                        // Repository publishes only to the owning conversation after the write commits.
+                    } else if (agentWorkspace.status.value.mode == AgentStorageMode.LEGACY && isAgentTask(pidForMedia)) {
                         // Agent 专属图片流更新：仅放入 Agent 专属列表，不混入控制页工作流列表
                         val existing = _agentLatestGenerationList.value.toMutableList()
                         if (existing.none { it.filename == data.filename && it.subfolder == data.subfolder && it.type == data.type }) {
@@ -842,9 +855,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     override val rhAppStatus = _rhAppStatus.asStateFlow()
 
     /** Prepends downloaded RH outputs to the workflow's result list (shown in the app detail). */
-    internal fun publishRhAppOutputs(workflowKey: String?, media: List<MediaOutput>, siteId: String? = null) {
+    internal fun publishRhAppOutputs(workflowKey: String?, media: List<MediaOutput>, siteId: String? = null,
+        serverId: String? = null) {
         if (!workflowKey.isNullOrBlank() && detachedWorkflowKeys.contains(workflowKey)) return
+        if (!serverId.isNullOrBlank() && !siteId.isNullOrBlank()) {
+            val source = com.comfyui.mobile.agent.workspace.AgentExecutionTarget("RUNNINGHUB", serverId, siteId).key
+            media.forEach { agentWorkspace.record(it, source) }
+        }
         if (workflowKey != null && workflowKey.startsWith(MainViewModelRhWorkflows.AGENT_KEY_PREFIX)) {
+            if (agentWorkspace.status.value.mode != AgentStorageMode.LEGACY) return
             // Agent-triggered official cloud run: results belong to the agent list (not the Control screen).
             val next = (media + _agentLatestGenerationList.value).distinctBy { mediaKey(it) }
             _agentLatestGenerationList.value = next
@@ -1758,6 +1777,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         MainViewModelAgent.invalidateContext(this, "会话已关闭")
         llmClient.cancelActive()
         if (modelPickerData.isInitialized()) modelPickerData.value.close()
+        if (agentWorkspaceData.isInitialized()) agentWorkspace.close()
         super.onCleared()
         networkMonitor.stop()
         stopForegroundHeartbeat()
@@ -1836,10 +1856,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
     override fun checkLatestHistory() {
         if (repository.cloudActive) return
+        val source = agentWorkspace.currentTarget().key
+        val sourceBase = repository.baseUrl.value
+        val epoch = agentWorkspace.callbackEpoch
         viewModelScope.launch {
             try {
                 addLog("正在同步历史记录...", LogType.INFO)
                 val history = repository.getHistoryOrNull()
+                if (source != agentWorkspace.currentTarget().key || sourceBase != repository.baseUrl.value ||
+                    epoch != agentWorkspace.callbackEpoch) return@launch
                 if (history == null) {
                     addLog("同步历史记录失败（网络或服务器错误），保留现有数据", LogType.WARNING)
                     return@launch
@@ -1895,7 +1920,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
                 val extId = lastExternalPromptId
                 if (!extId.isNullOrBlank()) {
-                    val isAgentRun = isAgentTask(extId) || _agentBusy.value || isAgentDispatching
+                    val isAgentRun = isAgentTask(extId)
                     if (isAgentRun) {
                         recordAgentRunPromptId(extId)
                     } else if (currentWorkflow == null) {
@@ -1910,6 +1935,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 // We'll collect all, then verify order.
                 
                 for (historyItem in history) {
+                    agentWorkspace.completeLocal(source, historyItem.promptId,
+                        if (historyItem.interrupted) "CANCELLED" else if (historyItem.statusStr == "error") "FAILED" else "SUCCESS",
+                        historyItem.errorMessage)
                     val outputs = historyItem.outputs
                     if (outputs != null) {
                         for ((_, nodeOutput) in outputs) {
@@ -1939,7 +1967,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                                                             type = type,
                                                             mediaType = mediaType,
                                                             timestamp = 0L, // Will assign later
-                                                            promptId = historyItem.promptId
+                                                            promptId = historyItem.promptId,
+                                                            sourceKey = source, workspaceEpoch = epoch,
+                                                            sourceUrl = repository.getImageUrl(filename, subfolder, type, sourceBase)
                                                         )
                                                     )
                                                 }
@@ -1969,7 +1999,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 if (distinctMedia.isNotEmpty()) {
                     _sessionMediaList.value = distinctMedia
 
-                    val agentMedia = distinctMedia.filter { it.promptId != null && agentRunPromptIds.contains(it.promptId) }
+                    distinctMedia.forEach { media ->
+                        agentWorkspace.record(media, source)
+                    }
+                    val agentMedia = if (agentWorkspace.status.value.mode == AgentStorageMode.LEGACY)
+                        distinctMedia.filter { it.promptId != null && agentRunPromptIds.contains(it.promptId) } else emptyList()
                     if (agentMedia.isNotEmpty()) {
                         val mergedAgent = (agentMedia + _agentLatestGenerationList.value)
                             .distinctBy { "${it.subfolder}|${it.filename}|${it.type}" }
@@ -2406,6 +2440,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     }
 
     private suspend fun finalizeActiveRun(promptIdFromEvent: String?) {
+        val source = agentWorkspace.currentTarget().key
+        val epoch = agentWorkspace.callbackEpoch
         val promptId = promptIdFromEvent?.ifBlank { null }
         val now = System.currentTimeMillis()
 
@@ -2436,6 +2472,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     historyHit?.errorMessage ?: "执行失败"
                 else -> null
             }
+            if (source == agentWorkspace.currentTarget().key && epoch == agentWorkspace.callbackEpoch &&
+                (historyHit != null || wsFailure != null)) {
+                agentWorkspace.completeLocal(source, promptId,
+                    if (interrupted) "CANCELLED" else if (failureMessage != null) "FAILED" else "SUCCESS", failureMessage)
+            }
             if (failureMessage != null) {
                 addLog("任务执行失败 (ID: $promptId): $failureMessage", LogType.ERROR)
                 showToast("任务失败：${failureMessage.take(120)}")
@@ -2465,18 +2506,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
     /** Syncs outputs of [promptId] from history; returns the history item (for status) or null if not found. */
     private suspend fun syncRunOutputsFromHistory(promptId: String): HistoryItem? {
+        val source = agentWorkspace.currentTarget().key
+        val sourceBase = repository.baseUrl.value
+        val epoch = agentWorkspace.callbackEpoch
+        fun current() = source == agentWorkspace.currentTarget().key &&
+            sourceBase == repository.baseUrl.value && epoch == agentWorkspace.callbackEpoch
         try {
             var hit = repository.getHistoryItem(promptId)
+            if (!current()) return null
             if (hit == null) {
                 kotlinx.coroutines.delay(350)
+                if (!current()) return null
                 hit = repository.getHistoryItem(promptId)
             }
+            if (!current()) return null
             if (hit == null) {
                 hit = repository.getHistoryOrNull()?.firstOrNull { it.promptId == promptId }
             }
+            if (!current()) return null
             if (hit == null) return null
 
-            val isAgentRun = isAgentTask(promptId) || _agentBusy.value || isAgentDispatching
+            val isAgentRun = isAgentTask(promptId)
             if (isAgentRun) {
                 recordAgentRunPromptId(promptId)
             } else {
@@ -2517,7 +2567,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                                                 type = type,
                                                 mediaType = mediaType,
                                                 timestamp = 0L,
-                                                promptId = promptId
+                                                promptId = promptId,
+                                                sourceKey = source, workspaceEpoch = epoch,
+                                                sourceUrl = repository.getImageUrl(filename, subfolder, type, sourceBase)
                                             )
                                         )
                                     }
@@ -2547,13 +2599,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                         setLatestGenerationForWorkflow(workflowKey, latestOnly)
                     }
                 }
-            } else {
+            } else if (agentWorkspace.status.value.mode == AgentStorageMode.LEGACY) {
                 // Agent 专属历史同步隔离：仅更新 Agent 列表
                 val next = (latestOnly + _agentLatestGenerationList.value)
                     .distinctBy { "${it.subfolder}|${it.filename}|${it.type}" }
                     .filterNot { isDeletedKey(mediaKey(it)) }
                 _agentLatestGenerationList.value = next
                 persistAgentMediaList(next)
+            }
+            latestOnly.forEach { media ->
+                agentWorkspace.record(media, source)
             }
 
             val existing = _sessionMediaList.value
@@ -2607,10 +2662,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     override fun getViewUrl(media: MediaOutput): String {
         // Downloaded cloud results (and other local copies) are shown from their local Uri.
         media.localUri?.takeIf { it.isNotBlank() }?.let { return it }
-        return repository.getImageUrl(media.filename, media.subfolder, media.type)
+        return getImageUrl(media)
     }
     fun getImageUrl(media: MediaOutput): String {
-        return repository.getImageUrl(media.filename, media.subfolder, media.type)
+        if (media.sourceUnresolved) return ""
+        return media.sourceUrl ?: if (media.sourceKey != null) ""
+            else repository.getImageUrl(media.filename, media.subfolder, media.type)
     }
 
     fun getImageUrl(filename: String, subfolder: String, type: String): String {
@@ -2628,7 +2685,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     
     override suspend fun fetchTextContent(media: MediaOutput): String {
         return withContext(Dispatchers.IO) {
-            repository.getTextContent(media.filename, media.subfolder, media.type) ?: "无法获取文本内容"
+            if (media.sourceUnresolved) return@withContext "历史媒体来源待确认"
+            val url = media.sourceUrl
+            if (url != null) runCatching {
+                repository.hostAwareCallFactory.newCall(okhttp3.Request.Builder().url(url).build()).execute().use {
+                    if (it.isSuccessful) it.body?.string() else null
+                }
+            }.getOrNull() ?: "读取文本失败"
+            else if (media.sourceKey != null) "媒体来源地址缺失"
+            else repository.getTextContent(media.filename, media.subfolder, media.type) ?: "读取文本失败"
         }
     }
 
@@ -2710,6 +2775,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     internal val agentSession = com.comfyui.mobile.agent.AgentSessionController(llmClient::cancelRequest)
     internal val agentWorkflowLoadVersion = java.util.concurrent.atomic.AtomicLong()
     internal val agentRuntime by lazy { MainViewModelAgentRuntime(this) }
+    internal val agentWorkspaceData = lazy { MainViewModelAgentWorkspace(this) }
+    internal val agentWorkspace get() = agentWorkspaceData.value
+    val agentStorageStatus get() = agentWorkspace.status
+    val agentInputDraft get() = agentWorkspace.draft
+    val agentHasEarlierMessages get() = agentWorkspace.hasEarlier
+    fun retryAgentStorage() = agentWorkspace.retry()
+    fun agentReferenceWarning() = agentWorkspace.referenceWarning()
+    fun useCurrentAgentConfiguration() = agentWorkspace.useCurrentConfiguration()
+    fun loadEarlierAgentMessages() = agentWorkspace.loadEarlier()
+    fun updateAgentDraft(draft: AgentInputDraft) = agentWorkspace.saveDraft(draft)
     val agentSessionState = agentSession.state
 
     internal fun loadLlmProfiles(): List<LlmProfile> =
@@ -2802,13 +2877,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     internal val _agentPendingAttachments = MutableStateFlow<List<com.comfyui.mobile.model.AgentAttachment>>(emptyList())
     val agentPendingAttachments = _agentPendingAttachments.asStateFlow()
 
-    fun addAgentImageAttachments(uris: List<android.net.Uri>) = MainViewModelAgent.addAgentImageAttachments(this, uris)
-    fun addAgentFileAttachments(uris: List<android.net.Uri>) = MainViewModelAgent.addAgentFileAttachments(this, uris)
+    fun captureAgentAttachmentOwner() = agentWorkspace.captureAttachmentOwner()
+    fun addAgentImageAttachments(uris: List<android.net.Uri>, owner: AgentAttachmentOwner? = captureAgentAttachmentOwner()) =
+        MainViewModelAgent.addAgentImageAttachments(this, uris, owner)
+    fun addAgentFileAttachments(uris: List<android.net.Uri>, owner: AgentAttachmentOwner? = captureAgentAttachmentOwner()) =
+        MainViewModelAgent.addAgentFileAttachments(this, uris, owner)
     fun removeAgentAttachment(id: String) {
+        if (!agentWorkspace.requireWritable()) return
         _agentPendingAttachments.value = _agentPendingAttachments.value.filterNot { it.id == id }
+        agentWorkspace.saveDraft()
     }
     fun clearAgentAttachments() {
         _agentPendingAttachments.value = emptyList()
+        if (agentWorkspaceData.isInitialized()) agentWorkspace.saveDraft()
     }
 
     /** True while the Agent LLM call (chat or draw expand) is in flight. */
@@ -2837,13 +2918,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
     internal fun isAgentTask(promptId: String?): Boolean {
         if (promptId.isNullOrBlank()) return false
-        return agentRunPromptIds.contains(promptId) ||
-            (isAgentDispatching && !activeRunPromptIds.contains(promptId)) ||
-            (_agentBusy.value && !activeRunPromptIds.contains(promptId))
+        if (agentWorkspaceData.isInitialized() && agentWorkspace.usesRoom) {
+            return agentWorkspace.isKnown(agentWorkspace.currentTarget().key, promptId)
+        }
+        return agentRunPromptIds.contains(promptId)
     }
 
     internal fun recordAgentRunPromptId(pid: String) {
         agentRunPromptIds.add(pid)
+        if (agentWorkspaceData.isInitialized() && agentWorkspace.usesRoom) return
         val trimmed = if (agentRunPromptIds.size > 200) {
             agentRunPromptIds.toList().takeLast(200).toSet()
         } else {
@@ -2860,7 +2943,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     val agentLatestGenerationList = _agentLatestGenerationList.asStateFlow()
 
     fun clearAgentLatestGenerationList() {
+        if (!agentWorkspace.requireWritable()) return
         _agentLatestGenerationList.value = emptyList()
+        if (agentWorkspace.usesRoom) {
+            agentWorkspace.clearMedia()
+            showToast("已清空 Agent 生图记录")
+            return
+        }
         val inFlight = agentRunPromptIds.filter { activeRunPromptIds.contains(it) }.toSet()
         agentRunPromptIds.clear()
         agentRunPromptIds.addAll(inFlight)
@@ -3006,7 +3095,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
      * Submit current workflow once and wait for queue result.
      * Used by Agent so chat can show real success/failure.
      */
-    suspend fun enqueueCurrentWorkflowAwait(batchCount: Int = 1): Result<String> {
+    suspend fun enqueueCurrentWorkflowAwait(batchCount: Int = 1, turnId: String = java.util.UUID.randomUUID().toString()): Result<String> {
         if (isSending) {
             return Result.failure(IllegalStateException("正在发送中，请稍候再试"))
         }
@@ -3046,7 +3135,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 val sourceKey = _agentWorkflowId.value.let { id ->
                     if (id.contains("/saved_workflows/cloud/")) java.io.File(id).name else id
                 }.ifBlank { null }
-                val official = MainViewModelRhWorkflows.submitForAgent(this, baseWorkflow, workflowKeyForRun, sourceKey, batchCount)
+                val official = MainViewModelRhWorkflows.submitForAgent(this, baseWorkflow, workflowKeyForRun, sourceKey, batchCount, turnId)
                 official.onSuccess { id -> addLog("Agent 云端任务已提交 taskId=$id", LogType.SUCCESS) }
                 return official
             }
@@ -3066,9 +3155,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
             repeat(batchCount) { i ->
                 val workflow = randomizeSeedsForSend(baseWorkflow)
+                val target = agentWorkspace.currentTarget()
+                val link = agentWorkspace.reserve(turnId, target, gson.toJson(mapOf(
+                    "workflowSource" to _agentWorkflowSource.value, "workflowId" to _agentWorkflowId.value,
+                    "prompt" to _agentPromptOutput.value, "parameters" to agentWorkflowParamValues.toMap())))
+                val localId = link?.id?.let { "agent_$it" }
+                if (localId != null) taskStore.upsert(com.comfyui.mobile.data.TaskRecord(
+                    localId, serverId = target.serverId, backend = target.backend,
+                    state = com.comfyui.mobile.backend.TaskState.SUBMITTING.name, origin = "agent_local",
+                    agentExecutionId = link.id, agentConversationId = link.conversationId))
+                currentCoroutineContext().ensureActive()
+                check(target.key == agentWorkspace.currentTarget().key) { "执行服务器已切换" }
                 val pid = try {
                     repository.queuePrompt(workflow)
                 } catch (e: CancellationException) {
+                    agentWorkspace.unknown(link)
+                    if (localId != null) withContext(kotlinx.coroutines.NonCancellable) {
+                        taskStore.update(localId) { it.copy(state = "LOST",
+                            error = com.comfyui.mobile.backend.TaskError(message = "提交状态待确认；未自动重发")) }
+                    }
                     throw e
                 } catch (e: Exception) {
                     lastFailDetail = e.message ?: e.toString()
@@ -3079,6 +3184,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     lastFailDetail = repository.lastQueuePromptError ?: "null pid（无错误详情）"
                 }
                 if (!pid.isNullOrBlank()) {
+                    agentWorkspace.confirm(link, pid, localId)
+                    withContext(kotlinx.coroutines.NonCancellable) {
+                        if (localId != null) taskStore.update(localId) { it.copy(remoteId = pid,
+                            state = com.comfyui.mobile.backend.TaskState.QUEUED.name) }
+                    }
                     recordAgentRunPromptId(pid)
                     batchPids.add(pid)
                     activeRunPromptIds.add(pid)
@@ -3087,6 +3197,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     lastPid = pid
                     addLog("Agent 任务已发送 ($i/$batchCount) id=$pid", LogType.SUCCESS)
                 } else {
+                    agentWorkspace.unknown(link)
+                    if (localId != null) withContext(kotlinx.coroutines.NonCancellable) {
+                        taskStore.update(localId) { it.copy(state = com.comfyui.mobile.backend.TaskState.LOST.name,
+                            error = com.comfyui.mobile.backend.TaskError(message = "提交状态待确认；未自动重发")) }
+                    }
                     addLog("Agent 任务发送失败 ($i/$batchCount) detail=${lastFailDetail ?: "null pid"}", LogType.ERROR)
                     logQueuePromptRawBody()
                 }
@@ -3132,10 +3247,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     }
 
     // ===== 配置与数据导入导出 (Delegated to MainViewModelBackup) =====
-    fun exportBackupToFile(options: com.comfyui.mobile.model.BackupExportOptions): File =
+    suspend fun exportBackupToFile(options: com.comfyui.mobile.model.BackupExportOptions): File =
         MainViewModelBackup.exportBackupToFile(this, options)
 
-    fun writeBackupToUri(context: android.content.Context, uri: Uri, options: com.comfyui.mobile.model.BackupExportOptions): Result<Unit> =
+    suspend fun writeBackupToUri(context: android.content.Context, uri: Uri, options: com.comfyui.mobile.model.BackupExportOptions): Result<Unit> =
         MainViewModelBackup.writeBackupToUri(this, context, uri, options)
 
     fun parseBackupFromUri(context: android.content.Context, uri: Uri): Result<com.comfyui.mobile.model.ParsedBackup> =
@@ -3144,7 +3259,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun discardParsedBackup(parsed: com.comfyui.mobile.model.ParsedBackup?) =
         MainViewModelBackup.discardParsedBackup(parsed)
 
-    fun restoreParsedBackup(
+    suspend fun restoreParsedBackup(
         parsed: com.comfyui.mobile.model.ParsedBackup,
         options: com.comfyui.mobile.model.BackupRestoreOptions = com.comfyui.mobile.model.BackupRestoreOptions()
     ): Result<String> = MainViewModelBackup.restoreParsedBackup(this, parsed, options)

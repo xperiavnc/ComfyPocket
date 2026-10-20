@@ -51,14 +51,14 @@ class LlmClient(
 ) {
     private class ActiveCall(val call: Call, val cancelled: AtomicBoolean = AtomicBoolean(false))
     private val activeCalls = ConcurrentHashMap<String, ActiveCall>()
-    val activeRequestIds: Set<String> get() = activeCalls.keys.toSet()
+    val activeRequestIds: Set<String> get() = buildSet { activeCalls.forEach { (id, _) -> add(id) } }
 
     fun cancelRequest(requestId: String) {
         activeCalls[requestId]?.let { it.cancelled.set(true); it.call.cancel() }
     }
 
     /** Owner teardown only. The stop button uses cancelRequest(turn.id), never this broad operation. */
-    fun cancelActive() = activeCalls.keys.toList().forEach(::cancelRequest)
+    fun cancelActive() { activeCalls.forEach { (_, active) -> active.cancelled.set(true); active.call.cancel() } }
 
     companion object {
         fun resolveEndpoint(baseUrl: String): String {

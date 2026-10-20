@@ -227,7 +227,7 @@ object MainViewModelGallery {
 
         val tempFile = if (media.localUri == null) {
             val tmp = File(context.cacheDir, "save_tmp_${System.currentTimeMillis()}_$name")
-            val ok = repository.downloadViewToFile(media.filename, media.subfolder, media.type, tmp)
+            val ok = repository.downloadViewToFile(media, tmp)
             if (!ok || !tmp.exists() || tmp.length() <= 0L) {
                 tmp.delete()
                 return@withContext null

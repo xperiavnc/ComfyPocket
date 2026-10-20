@@ -262,6 +262,8 @@ class ComfyRepository private constructor() {
                 Log.e("Repository", "Queue prompt failed: HTTP $code ${lastQueuePromptError} | body=$safeRaw")
                 null
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             lastQueuePromptError = com.comfyui.mobile.network.SecretRedactor.redact(e.message ?: e.toString())
             Log.e("Repository", "Queue prompt exception: $lastQueuePromptError")
@@ -655,11 +657,11 @@ class ComfyRepository private constructor() {
         }
     }
 
-    fun getImageUrl(filename: String, subfolder: String, type: String): String {
+    fun getImageUrl(filename: String, subfolder: String, type: String, baseUrl: String = _baseUrl.value): String {
         if (filename.startsWith("http://", ignoreCase = true) || filename.startsWith("https://", ignoreCase = true)) {
             return filename
         }
-        val base = _baseUrl.value.trimEnd('/')
+        val base = baseUrl.trimEnd('/')
         val built = (base + "/").toHttpUrlOrNull()
             ?.newBuilder()
             ?.addPathSegment("view")
@@ -695,6 +697,25 @@ class ComfyRepository private constructor() {
         } catch (e: Exception) {
             Log.e("Repository", "Get Text Content Failed", e)
             null
+        }
+    }
+
+    suspend fun downloadViewToFile(media: com.comfyui.mobile.model.MediaOutput, dest: java.io.File): Boolean {
+        if (media.sourceUnresolved) return false
+        if (media.sourceKey != null && media.sourceUrl.isNullOrBlank()) return false
+        val url = media.sourceUrl ?: return downloadViewToFile(media.filename, media.subfolder, media.type, dest)
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val request = okhttp3.Request.Builder().url(url).build()
+                hostAwareCallFactory.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) return@withContext false
+                    val body = response.body ?: return@withContext false
+                    dest.parentFile?.mkdirs()
+                    body.byteStream().use { input -> dest.outputStream().use { input.copyTo(it) } }
+                    true
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e
+            } catch (e: Exception) { false }
         }
     }
 

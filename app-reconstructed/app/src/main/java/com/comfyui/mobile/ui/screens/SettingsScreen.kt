@@ -148,6 +148,10 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     val llmProfiles by viewModel.llmProfiles.collectAsState()
     val characterLores by viewModel.characterLores.collectAsState()
 
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var backupBusy by remember { mutableStateOf(false) }
+    var exportIncludeWorkspace by remember { mutableStateOf(true) }
+    var importRestoreWorkspace by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var exportIncludeWorkflows by remember { mutableStateOf(true) }
     var exportIncludeKeys by remember { mutableStateOf(true) }
@@ -162,28 +166,33 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
         includeKeys = exportIncludeKeys,
         includeWorkflows = exportIncludeWorkflows,
         includeAiApps = exportIncludeAiApps,
-        includeTaskHistory = exportIncludeTaskHistory
+        includeTaskHistory = exportIncludeTaskHistory,
+        includeAgentWorkspace = exportIncludeWorkspace
     )
 
     val exportFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument(MainViewModelBackup.BACKUP_MIME)
     ) { uri ->
-        if (uri != null) {
-            viewModel.writeBackupToUri(context, uri, currentExportOptions()).fold(
+        if (uri != null && !backupBusy) scope.launch {
+            backupBusy = true
+            withContext(Dispatchers.IO) { viewModel.writeBackupToUri(context, uri, currentExportOptions()) }.fold(
                 onSuccess = { viewModel.showUserMessage("已保存") },
                 onFailure = { viewModel.showUserMessage("保存失败：${it.message}") }
             )
             showExportDialog = false
+            backupBusy = false
         }
     }
 
     val importFileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
-        if (uri != null) {
-            viewModel.parseBackupFromUri(context, uri).fold(
+        if (uri != null && !backupBusy) scope.launch {
+            backupBusy = true
+            withContext(Dispatchers.IO) { viewModel.parseBackupFromUri(context, uri) }.fold(
                 onSuccess = { parsed ->
                     pendingImportBackup = parsed
+                    importRestoreWorkspace = false
                     val dto = parsed.dto
                     importRestoreWorkflows = dto.includeWorkflows || parsed.hasPackage
                     importRestoreAiApps = dto.includeAiApps || parsed.hasPackage
@@ -193,10 +202,9 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     viewModel.showUserMessage("解析备份失败：${err.message}")
                 }
             )
+            backupBusy = false
         }
     }
-
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var exportingDiagnostics by remember { mutableStateOf(false) }
     val diagnosticExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("text/plain")
@@ -216,8 +224,11 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     }
 
     fun shareBackup() {
+        if (backupBusy) return
+        scope.launch {
+        backupBusy = true
         try {
-            val file = viewModel.exportBackupToFile(currentExportOptions())
+            val file = withContext(Dispatchers.IO) { viewModel.exportBackupToFile(currentExportOptions()) }
             val uri = FileProvider.getUriForFile(
                 context,
                 context.packageName + ".fileprovider",
@@ -233,6 +244,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             showExportDialog = false
         } catch (e: Exception) {
             viewModel.showUserMessage("分享失败：${e.message}")
+        } finally { backupBusy = false }
         }
     }
 
@@ -542,6 +554,11 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
     )
 
             BackupToggleRow(
+                title = "Agent 会话与附件",
+                checked = exportIncludeWorkspace,
+                onCheckedChange = { haptics.toggle(); exportIncludeWorkspace = it }
+            )
+            BackupToggleRow(
                 title = "包含密钥",
                 checked = exportIncludeKeys,
                 onCheckedChange = { haptics.toggle(); exportIncludeKeys = it }
@@ -777,6 +794,15 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     }
                 }
 
+                if (parsed.workspaceConversationCount != null) {
+                    BackupToggleRow(
+                        title = "替换 Agent 工作区（${parsed.workspaceConversationCount} 个会话）",
+                        checked = importRestoreWorkspace,
+                        onCheckedChange = { haptics.toggle(); importRestoreWorkspace = it }
+                    )
+                    Text("开启后替换现有会话及附件；恢复前会保留原工作区快照。",
+                        style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+                }
                 Text(
                     text = "将覆盖同名数据",
                     style = MiuixTheme.textStyles.footnote1,
@@ -804,16 +830,19 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                             haptics.confirm()
                             val toRestore = pendingImportBackup
                             pendingImportBackup = null
-                            if (toRestore != null) {
-                                viewModel.restoreParsedBackup(
-                                    toRestore,
-                                    BackupRestoreOptions(
+                            if (toRestore != null && !backupBusy) scope.launch {
+                                backupBusy = true
+                                val result = withContext(Dispatchers.IO) {
+                                    viewModel.restoreParsedBackup(toRestore, BackupRestoreOptions(
                                         restoreWorkflows = importRestoreWorkflows,
                                         restoreAiApps = importRestoreAiApps,
                                         restoreTaskHistory = importRestoreTaskHistory,
-                                        restoreAgentBindings = true
-    )
-    )
+                                        restoreAgentBindings = true,
+                                        restoreAgentWorkspace = importRestoreWorkspace))
+                                }
+                                backupBusy = false
+                                result.fold(onSuccess = { viewModel.showUserMessage(it) },
+                                    onFailure = { viewModel.showUserMessage("恢复失败：" + it.message) })
                             }
                         }
     ) {

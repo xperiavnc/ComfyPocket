@@ -56,7 +56,10 @@ data class TaskRecord(
      */
     val rhSite: String? = null,
     /** First 16 hex chars of SHA-256(API key) used at submit; polling is skipped when the profile's key no longer matches. */
-    val rhKeySig: String? = null
+    val rhKeySig: String? = null,
+    /** Durable Room ownership; nullable for pre-workspace tasks. */
+    val agentExecutionId: String? = null,
+    val agentConversationId: String? = null
     ) {
     val backendKind: BackendKind? get() = BackendKind.fromName(backend)
     val taskState: TaskState get() = TaskState.fromName(state) ?: TaskState.LOST

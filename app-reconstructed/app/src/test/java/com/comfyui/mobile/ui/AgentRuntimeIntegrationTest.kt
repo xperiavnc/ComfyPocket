@@ -82,7 +82,7 @@ class AgentRuntimeIntegrationTest {
                 }
                 "/prompt" -> {
                     promptBodies += request.body.readUtf8()
-                    MockResponse().setBody("""{"prompt_id":"fixture-pid"}""")
+                    MockResponse().setBody("""{"prompt_id":"fixture-pid-${promptBodies.size}"}""")
                 }
                 "/upload/image" -> {
                     uploadBodies += request.body.readUtf8()
@@ -94,6 +94,7 @@ class AgentRuntimeIntegrationTest {
         }
         server.start()
         vm = MainViewModel(app)
+        pumpUntil { vm.agentWorkspace.ready }
         vm._agentPromptSettings.value = AgentPromptSettings(useLocalLibrary = false)
         store = ViewModelStore().apply { put("agent", vm) }
         vm._servers.value = emptyList()
@@ -108,11 +109,13 @@ class AgentRuntimeIntegrationTest {
         vm._agentWorkflowSource.value = MainViewModel.AGENT_WF_SAVED
         vm._agentWorkflowId.value = file.name
         vm._agentWorkflowLabel.value = "fixture"
-        pumpUntil { true }
+        vm.agentWorkspace.saveConfiguration()
+        flushWorkspace()
     }
 
     @After fun close() {
         if (::store.isInitialized) store.clear()
+        if (::vm.isInitialized) kotlinx.coroutines.runBlocking { vm.agentWorkspace.awaitClosed() }
         if (::vm.isInitialized) {
             pumpUntil { vm.llmClient.activeRequestIds.isEmpty() }
             vm.repository.disconnect()
@@ -129,7 +132,11 @@ class AgentRuntimeIntegrationTest {
         } while (System.nanoTime() < deadline)
         fail("Agent fixture timed out: ${vm.agentSessionState.value}, ${vm.agentMessages.value}")
     }
-    private fun awaitDone() = pumpUntil { !vm.agentBusy.value }
+    private fun flushWorkspace() = kotlinx.coroutines.runBlocking { vm.agentWorkspace.flush() }
+    private fun awaitDone() {
+        pumpUntil { !vm.agentBusy.value }
+        flushWorkspace()
+    }
     private fun graphText() = ((vm.agentWorkflow!!["1"] as Map<*, *>)["inputs"] as Map<*, *>)["text"]
 
     private fun withNegativeWorkflow() {
@@ -382,8 +389,8 @@ class AgentRuntimeIntegrationTest {
         val message = vm.agentMessages.value.last()
         assertEquals(submittedNegative(), message.expandedNegativePrompt)
         assertTrue(message.negativePromptStatus!!.startsWith("已写入"))
-        val saved = JsonParser.parseString(vm.prefs.getString(MainViewModelAgent.scopedPref("agent_messages", vm), "")!!)
-            .asJsonArray.last().asJsonObject
+        val saved = gson.toJsonTree(MainViewModelAgent.loadAgentMessages(vm).last()).asJsonObject
+        assertFalse(vm.prefs.contains(MainViewModelAgent.scopedPref("agent_messages", vm)))
         assertEquals(message.expandedNegativePrompt, saved["expandedNegativePrompt"].asString)
         val requestMessages = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
         assertTrue(requestMessages.first().asJsonObject["content"].asString.contains("negative_prompt"))
@@ -453,9 +460,9 @@ class AgentRuntimeIntegrationTest {
 
     @Test fun negativeReferenceUsesSavedOverridesWithoutLoadingOrMutatingTheActiveGraph() {
         withNegativeWorkflow()
-        vm.prefs.edit().putString(MainViewModelAgent.getAgentWorkflowParamStorageKey(
-            vm, MainViewModel.AGENT_WF_SAVED, "agent-fixture.json"),
-            """{"2:text":"saved_embedding, blurry"}""").commit()
+        vm.agentWorkflowParamValues["2:text"] = "saved_embedding, blurry"
+        vm.agentWorkspace.saveConfiguration()
+        vm.agentWorkflowParamValues.clear()
         assertEquals("saved_embedding, blurry",
             AgentWorkflowPromptContext.negative(vm, vm.agentSession.contextVersion()))
         assertNull(vm.agentWorkflow)
@@ -537,7 +544,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals("cat, rain", vm.agentLastExpandedPrompt.value)
         val prompt = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
         assertEquals("cat, rain", prompt["1"].asJsonObject["inputs"].asJsonObject["text"].asString)
-        assertTrue("fixture-pid" in vm.agentRunPromptIds)
+        assertTrue("fixture-pid-1" in vm.agentRunPromptIds)
         assertEquals("cat, rain", vm.agentMessages.value.last().expandedPrompt)
         assertNull(vm.agentMessages.value.last().errorMessage)
     }
@@ -549,7 +556,8 @@ class AgentRuntimeIntegrationTest {
         assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
         assertEquals("cat, rain", graphText())
         assertTrue(promptBodies.isEmpty())
-        assertTrue(vm.prefs.getString(MainViewModelAgent.scopedPref("agent_messages", vm), "")!!.contains("cat, rain"))
+        assertTrue(gson.toJson(MainViewModelAgent.loadAgentMessages(vm)).contains("cat, rain"))
+        assertFalse(vm.prefs.contains(MainViewModelAgent.scopedPref("agent_messages", vm)))
     }
 
     @Test fun stopKeepsPartialAndNewTurnIsNotClearedByOldFinally() {
@@ -762,9 +770,8 @@ class AgentRuntimeIntegrationTest {
     }
 
     private fun installBinding(negative: Boolean, binding: AgentPromptBinding) {
-        AgentPromptBindingStore(vm.prefs).save(MainViewModelAgent.scope(vm), vm._agentWorkflowSource.value,
-            vm._agentWorkflowId.value, negative, binding)
         if (negative) vm._agentNegativeBinding.value = binding else vm._agentPositiveBinding.value = binding
+        vm.agentWorkspace.saveConfiguration()
     }
 
     @Test fun explicitNegativeFieldIsUsedByReferenceAndRealSubmission() {

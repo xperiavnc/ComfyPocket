@@ -381,9 +381,18 @@ object MainViewModelRhWorkflows {
         graph: Map<String, Any>,
         workflowId: String,
         workflowKey: String?,
-        title: String
+        title: String,
+        agentTurnId: String? = null
     ): SubmitOutcome {
         val localId = "rhwf_" + UUID.randomUUID().toString()
+        val ownership = agentTurnId?.let {
+            vm.agentWorkspace.reserve(it,
+                com.comfyui.mobile.agent.workspace.AgentExecutionTarget("RUNNINGHUB", backend.serverId, backend.site.id),
+                vm.gson.toJson(mapOf("workflowId" to workflowId, "workflowKey" to workflowKey,
+                    "prompt" to vm._agentPromptOutput.value,
+                    "parameters" to vm.agentWorkflowParamValues.toMap(),
+                    "accountKeySig" to com.comfyui.mobile.data.SecretStore.keySig(vm.currentServerProfile()?.effectiveRhApiKey))), localId)
+        }
         vm.taskStore.upsert(
             TaskRecord(
                 localId = localId,
@@ -397,7 +406,9 @@ object MainViewModelRhWorkflows {
                 createdAt = System.currentTimeMillis(),
                 origin = ORIGIN,
                 rhSite = backend.site.id,
-                rhKeySig = com.comfyui.mobile.data.SecretStore.keySig(vm.currentServerProfile()?.effectiveRhApiKey)
+                rhKeySig = com.comfyui.mobile.data.SecretStore.keySig(vm.currentServerProfile()?.effectiveRhApiKey),
+                agentExecutionId = ownership?.id,
+                agentConversationId = ownership?.conversationId
     )
         )
         val seeds = seedFields(graph)
@@ -411,7 +422,7 @@ object MainViewModelRhWorkflows {
         while (true) {
             currentCoroutineContext().ensureActive()
             vm._rhAppStatus.value = "提交中…"
-            val res = backend.submit(
+            val res = try { backend.submit(
                 GenerationRequest.RhWorkflow(
                     workflowId = workflowId,
                     workflowJson = json,
@@ -420,11 +431,21 @@ object MainViewModelRhWorkflows {
                     title = title,
                     workflowKey = workflowKey
     )
-            )
+            ) } catch (e: CancellationException) {
+                vm.agentWorkspace.unknown(ownership)
+                withContext(NonCancellable) {
+                    vm.taskStore.update(localId) { it.copy(state = TaskState.LOST.name,
+                        error = TaskError(message = "提交状态待确认；未自动重发")) }
+                }
+                throw e
+            }
             val err = res.exceptionOrNull()
             if (err == null) {
                 val snap = res.getOrThrow()
-                vm.taskStore.update(localId) { it.copy(remoteId = snap.remoteId, state = snap.state.name) }
+                withContext(NonCancellable) {
+                    vm.agentWorkspace.confirm(ownership, snap.remoteId, localId)
+                    vm.taskStore.update(localId) { it.copy(remoteId = snap.remoteId, state = snap.state.name) }
+                }
                 vm.addLog("已提交 RunningHub 云端工作流「$title」(taskId: ${snap.remoteId}，${backend.gpuTierLabel})", LogType.SUCCESS)
                 snap.message?.let { tips -> vm.addLog("RunningHub 提示: ${tips.take(300)}", LogType.INFO) }
                 vm._rhAppStatus.value = snap.state.label
@@ -432,13 +453,21 @@ object MainViewModelRhWorkflows {
             }
             if (err is CancellationException) {
                 withContext(NonCancellable) {
-                    vm.taskStore.update(localId) { it.copy(state = TaskState.CANCELLED.name, finishedAt = System.currentTimeMillis()) }
+                    vm.agentWorkspace.unknown(ownership)
+                    vm.taskStore.update(localId) { it.copy(state = TaskState.LOST.name,
+                        error = TaskError(message = "提交状态待确认；未自动重发")) }
                 }
                 throw err
             }
             val rh = err as? RhApiException
             val code = rh?.code
             val msg = SecretRedactor.redact(err.message ?: "提交失败")
+            if (ownership != null && rh?.code == null) {
+                vm.agentWorkspace.unknown(ownership)
+                vm.taskStore.update(localId) { it.copy(state = TaskState.LOST.name,
+                    error = TaskError(message = "提交状态待确认；未自动重发")) }
+                return SubmitOutcome.Failed("提交状态待确认，请先核对服务端任务；未自动重发", null)
+            }
             if ((code == 421 || code == 415) && busyRetries < MAX_BUSY_RETRIES) {
                 busyRetries++
                 val waitS = if (code == 421) 15 else 30
@@ -472,6 +501,7 @@ object MainViewModelRhWorkflows {
                     finishedAt = System.currentTimeMillis()
     )
             }
+            vm.agentWorkspace.rejected(ownership)
             vm.addLog("RunningHub 云端工作流提交失败: $display", LogType.ERROR)
             return SubmitOutcome.Failed(display, code)
         }
@@ -673,7 +703,8 @@ object MainViewModelRhWorkflows {
         baseWorkflow: Map<String, Any>,
         label: String,
         sourceKey: String?,
-        batchCount: Int
+        batchCount: Int,
+        turnId: String = UUID.randomUUID().toString()
     ): Result<String> {
         val server = vm.currentServerProfile() ?: return Result.failure(IllegalStateException("未选择服务器"))
         val backend = vm.currentRunningHubBackend()
@@ -705,7 +736,7 @@ object MainViewModelRhWorkflows {
         var last: String? = null
         repeat(batchCount.coerceIn(1, 8)) {
             val graph = vm.randomizeSeedsForSend(baseWorkflow)
-            when (val r = submitOne(vm, backend, graph, workflowId, key, cleanTitle)) {
+            when (val r = submitOne(vm, backend, graph, workflowId, key, cleanTitle, agentTurnId = turnId)) {
                 is SubmitOutcome.Submitted -> {
                     last = r.taskId
                     trackInBackground(vm, backend, r.localId, r.taskId, key)

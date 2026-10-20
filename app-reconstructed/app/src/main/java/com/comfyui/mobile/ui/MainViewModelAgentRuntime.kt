@@ -75,11 +75,13 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
     }
 
     fun send(userText: String, mode: AgentMode) {
+        if (!vm.agentWorkspace.requireWritable()) return
+        vm.agentWorkspace.referenceWarning()?.let { vm.showToast(it); return }
         val text = userText.trim()
         val attachments = vm._agentPendingAttachments.value.toList()
         if (text.isEmpty() && attachments.isEmpty()) return
         val version = session.contextVersion()
-        val turn = session.begin("${MainViewModelAgent.scope(vm)}:$version") ?: return
+        val turn = session.begin("${MainViewModelAgent.scope(vm)}:${vm.agentWorkspace.conversationId}:$version") ?: return
         val settings = AgentLlmSettings.capture(vm)
         val prior = vm._agentMessages.value.toList()
         val user = AgentChatMessage(
@@ -359,7 +361,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
 
         override suspend fun submit(): String = withContext(Dispatchers.Main) {
             session.requireCurrent(turn)
-            vm.enqueueCurrentWorkflowAwait(1).getOrElse {
+            vm.agentWorkspace.flush()
+            session.requireCurrent(turn)
+            vm.enqueueCurrentWorkflowAwait(1, turn.id).getOrElse {
                 throw AgentExecutionException("提交出图失败：${it.message ?: it.javaClass.simpleName}")
             }
         }

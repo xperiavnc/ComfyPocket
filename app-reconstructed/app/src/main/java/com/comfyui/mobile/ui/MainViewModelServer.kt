@@ -191,6 +191,10 @@ object MainViewModelServer {
         }
         editor.apply()
         vm._currentServerId.value = server.effectiveId
+        if (!server.isRunningHub) {
+            vm.repository.webSocketManager.mediaSourceKey =
+                com.comfyui.mobile.agent.workspace.AgentExecutionTarget("LOCAL_COMFY", server.effectiveId).key
+        }
         // Exactly one active backend; switching disposes the previous one's connections / in-flight calls.
         vm.backendProvider.activate(server)
         MainViewModelRhConn.reset(vm)

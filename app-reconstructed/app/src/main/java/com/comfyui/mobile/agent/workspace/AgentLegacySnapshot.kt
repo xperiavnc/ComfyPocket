@@ -42,18 +42,19 @@ object AgentLegacyReader {
         "agent_last_prompt", "agent_run_prompt_ids", "agent_wf_source", "agent_wf_id", "agent_wf_label"
     )
 
-    fun read(values: Map<String, *>, gson: Gson = Gson()): List<AgentLegacySnapshot> {
+    fun read(values: Map<String, *>, gson: Gson = Gson(), onlyScope: String? = null): List<AgentLegacySnapshot> {
         val scopes = sortedSetOf<String>()
         for (key in values.keys) for (base in bases) {
             if (key.startsWith("${base}__")) {
                 val scope = key.removePrefix("${base}__")
+                if (onlyScope != null && onlyScope != scope) continue
                 require(scope == "local" || scope.matches(Regex("cloud@[a-zA-Z0-9._-]+"))) { "Invalid legacy scope" }
                 scopes += scope
             }
         }
         if (bases.any { values.containsKey(it) } || values.containsKey("agent_wf_id_local") ||
             values.containsKey("agent_wf_id_cloud")) scopes += "local"
-        return scopes.map { scope ->
+        return scopes.filter { onlyScope == null || it == onlyScope }.map { scope ->
             val used = sortedMapOf<String, Any?>()
             fun value(key: String): Any? = values[key].also {
                 if (it != null) used[key] = if (it is Set<*>) it.map { v -> v.toString() }.sorted() else it

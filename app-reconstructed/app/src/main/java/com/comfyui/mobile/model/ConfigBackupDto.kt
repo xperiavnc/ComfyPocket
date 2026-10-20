@@ -7,8 +7,8 @@ package com.comfyui.mobile.model
  * Legacy standalone `.json` / `.zip` are not supported for import.
  */
 data class ConfigBackupDto(
-    /** Schema version: 1 = thin config JSON; 2 = full backup (+ zip payload). */
-    val version: Int = 2,
+    /** Schema version: 1 = config JSON; 2 = full package; 3 = optional Agent workspace. */
+    val version: Int = 3,
     val exportTime: Long = System.currentTimeMillis(),
     val appVersion: String = "",
 
@@ -61,7 +61,8 @@ data class ConfigBackupDto(
     /** RH cloud workflow site/meta prefs: rh_wf_site:*, rh_wf_meta:*, rh_wf_meta@* */
     val rhWorkflowPrefBag: Map<String, String>? = null,
     /** JSON map of official upload name → site id */
-    val rhUploadSitesJson: String? = null
+    val rhUploadSitesJson: String? = null,
+    val workspaceVersion: Int? = null
     ) {
     val rhKeysCount: Int
         get() = servers?.count { it.isRunningHub && it.effectiveRhApiKey.isNotBlank() } ?: 0
@@ -95,7 +96,8 @@ data class BackupExportOptions(
     val includeKeys: Boolean = true,
     val includeWorkflows: Boolean = true,
     val includeAiApps: Boolean = true,
-    val includeTaskHistory: Boolean = true
+    val includeTaskHistory: Boolean = true,
+    val includeAgentWorkspace: Boolean = true
     )
 
 /** Import toggles. */
@@ -103,7 +105,9 @@ data class BackupRestoreOptions(
     val restoreWorkflows: Boolean = true,
     val restoreAiApps: Boolean = true,
     val restoreTaskHistory: Boolean = true,
-    val restoreAgentBindings: Boolean = true
+    val restoreAgentBindings: Boolean = true,
+    /** Explicit opt-in to replacement, exposed in the import confirmation dialog. */
+    val restoreAgentWorkspace: Boolean = false
     )
 
 /**
@@ -114,5 +118,6 @@ data class BackupRestoreOptions(
 data class ParsedBackup(
     val dto: ConfigBackupDto,
     val stagingDir: java.io.File? = null,
-    val hasPackage: Boolean = false
+    val hasPackage: Boolean = false,
+    val workspaceConversationCount: Int? = null
     )

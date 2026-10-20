@@ -6,7 +6,7 @@ import com.comfyui.mobile.model.MediaOutput
 import java.io.File
 import java.util.UUID
 
-/** Versioned portable payload; the P1 production adapter will put this directory in .cui.bak. */
+/** Versioned portable payload embedded by the production adapter in .cui.bak. */
 data class AgentWorkspaceBackup(
     val version: Int = 1,
     val projects: List<AgentProject>,
@@ -100,6 +100,15 @@ private fun AgentWorkspaceRepository.validate(payload: AgentWorkspaceBackup) {
     payload.states.forEach {
         require(it.schemaVersion == 1 && conversations.containsKey(it.conversationId))
         listOf(it.workflowStateJson, it.promptOutputJson, it.draftJson, it.scrollAnchorJson).forEach(::validObject)
+        val draft = com.google.gson.JsonParser.parseString(it.draftJson).asJsonObject
+        draft["attachments"]?.asJsonArray?.forEach { element ->
+            val attachment = gson.fromJson(element, com.comfyui.mobile.model.AgentAttachment::class.java)
+            require(attachment.uri.startsWith(AgentWorkspaceRepository.ASSET_URI))
+            val asset = attachment.uri.removePrefix(AgentWorkspaceRepository.ASSET_URI)
+            require(assets.containsKey(asset) && payload.refs.any { ref ->
+                ref.assetId == asset && ref.ownerType == "draft" && ref.conversationId == it.conversationId
+            }) { "Missing draft asset ownership" }
+        }
     }
     require(payload.states.map { it.conversationId }.toSet() == conversations.keys) { "Incomplete conversation state" }
     payload.messages.forEach {
@@ -140,6 +149,18 @@ private fun AgentWorkspaceRepository.validate(payload: AgentWorkspaceBackup) {
         }
     }
     payload.migrations.forEach { require(it.version == 1 && scope(it.scope)) }
+}
+
+/** Preflight is also used before touching global settings in the enclosing backup container. */
+suspend fun AgentWorkspaceRepository.validateBackup(source: File) = locked {
+    val payload = gson.fromJson(File(source, "workspace.json").readText(Charsets.UTF_8), AgentWorkspaceBackup::class.java)
+    validate(payload)
+    payload.assets.filterNot { it.missing }.forEach { asset ->
+        val file = containedFile(source, asset.relativePath)
+        require(file.isFile && file.length() == asset.sizeBytes &&
+            workspaceHash(file.readBytes()) == asset.sha256) { "Backup attachment checksum mismatch" }
+    }
+    payload.conversations.size
 }
 
 /**
@@ -192,12 +213,16 @@ suspend fun AgentWorkspaceRepository.restoreFrom(
             payload.states.forEach { dao.putState(it) }
             dao.insertMessages(payload.messages.map { row ->
                 val message = gson.fromJson(row.payloadJson, AgentChatMessage::class.java)
-                row.copy(payloadJson = gson.toJson(message.copy(isThinking = false)))
+                row.copy(payloadJson = gson.toJson(message.copy(isThinking = false,
+                    errorMessage = if (message.isThinking) "上次回复已中断" else message.errorMessage)))
             })
             mappedAssets.forEach { dao.putAsset(it) }
             payload.refs.forEach { dao.putRef(it) }
             payload.executions.forEach { dao.putExecution(it.copy(workspaceEpoch = epoch)) }
-            payload.media.forEach { dao.putMedia(it) }
+            payload.media.forEach { row ->
+                val media = gson.fromJson(row.payloadJson, MediaOutput::class.java)
+                dao.putMedia(row.copy(payloadJson = gson.toJson(media.copy(workspaceEpoch = epoch))))
+            }
             payload.migrations.forEach { dao.putMigration(it) }
             payload.meta.filterNot { it.key == "epoch" }.forEach { dao.putMeta(it) }
             dao.putMeta(AgentWorkspaceMeta("epoch", epoch.toString()))

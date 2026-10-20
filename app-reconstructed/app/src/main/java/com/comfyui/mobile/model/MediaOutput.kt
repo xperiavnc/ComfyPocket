@@ -17,5 +17,11 @@ data class MediaOutput(
     val timestamp: Long = System.currentTimeMillis(),
     val promptId: String? = null,
     /** content/file URI when this item is from local save folder */
-    val localUri: String? = null
+    val localUri: String? = null,
+    /** Captured execution origin; independent of the server currently selected in the UI. */
+    val sourceKey: String? = null,
+    val sourceUrl: String? = null,
+    val sourceUnresolved: Boolean = false,
+    /** Local callback generation; ignored outside the Agent workspace. */
+    val workspaceEpoch: Long? = null
     )

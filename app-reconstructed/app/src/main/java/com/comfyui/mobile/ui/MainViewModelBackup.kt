@@ -16,6 +16,8 @@ import com.comfyui.mobile.model.ParsedBackup
 import com.comfyui.mobile.model.ServerProfile
 import com.comfyui.mobile.model.WorkflowBackupItem
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -53,6 +55,7 @@ object MainViewModelBackup {
     private const val WF_ROOT = "saved_workflows"
     private const val AI_ROOT = "ai_apps"
     private const val TASK_PATH = "tasks/task_store.json"
+    private const val WORKSPACE_ROOT = "agent_workspace"
 
     private val AGENT_PREF_PREFIXES = listOf(
         "agent_target_node_",
@@ -110,7 +113,7 @@ object MainViewModelBackup {
         }
 
         return ConfigBackupDto(
-            version = 2,
+            version = 3,
             exportTime = System.currentTimeMillis(),
             appVersion = BuildConfig.VERSION_NAME,
             servers = exportedServers,
@@ -142,13 +145,14 @@ object MainViewModelBackup {
             includeAiApps = options.includeAiApps,
             includeTaskHistory = options.includeTaskHistory,
             rhWorkflowPrefBag = collectPrefBag(vm, RH_PREF_PREFIXES),
-            rhUploadSitesJson = vm.prefs.getString("rh_upload_sites_v1", null)
+            rhUploadSitesJson = vm.prefs.getString("rh_upload_sites_v1", null),
+            workspaceVersion = if (options.includeAgentWorkspace) 1 else null
     )
     }
 
 
 
-    fun exportBackupToFile(vm: MainViewModel, options: BackupExportOptions = BackupExportOptions()): File {
+    suspend fun exportBackupToFile(vm: MainViewModel, options: BackupExportOptions = BackupExportOptions()): File {
         val dir = vm.getApplication<Application>().cacheDir
         val sdf = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
         val file = File(dir, "ComfyUI_Backup_${sdf.format(Date())}$BACKUP_EXTENSION")
@@ -158,7 +162,7 @@ object MainViewModelBackup {
     }
 
 
-    fun writeBackupToUri(
+    suspend fun writeBackupToUri(
         vm: MainViewModel,
         context: Context,
         uri: Uri,
@@ -179,7 +183,7 @@ object MainViewModelBackup {
 
 
     /** Writes a `.cui.bak` file: magic + version + gzip(internal zip). */
-    private fun writeBackupContainer(vm: MainViewModel, outFile: File, options: BackupExportOptions) {
+    private suspend fun writeBackupContainer(vm: MainViewModel, outFile: File, options: BackupExportOptions) {
         val zipBytes = buildInternalZipBytes(vm, options)
         val gz = ByteArrayOutputStream(zipBytes.size / 2 + 64)
         GZIPOutputStream(gz).use { it.write(zipBytes) }
@@ -191,11 +195,16 @@ object MainViewModelBackup {
     }
 
     /** Internal zip payload only — never exposed as a user .zip file. */
-    private fun buildInternalZipBytes(vm: MainViewModel, options: BackupExportOptions): ByteArray {
-        val dto = exportConfigBackup(vm, options)
+    private suspend fun buildInternalZipBytes(vm: MainViewModel, options: BackupExportOptions): ByteArray {
+        val dto = withContext(Dispatchers.Main) { exportConfigBackup(vm, options) }
+        val workspace = if (options.includeAgentWorkspace) File(vm.getApplication<Application>().cacheDir,
+            "workspace_export_" + java.util.UUID.randomUUID()).also { vm.agentWorkspace.export(it) } else null
         val baos = ByteArrayOutputStream()
-        ZipOutputStream(BufferedOutputStream(baos)).use { zos ->
+        try { ZipOutputStream(BufferedOutputStream(baos)).use { zos ->
             putTextEntry(zos, MANIFEST, vm.gson.toJson(dto))
+            workspace?.walkTopDown()?.filter { it.isFile }?.forEach {
+                putFileEntry(zos, "$WORKSPACE_ROOT/" + it.relativeTo(workspace).invariantSeparatorsPath, it)
+            }
 
             if (options.includeWorkflows) {
                 for ((rel, file) in listWorkflowFiles(vm)) {
@@ -216,6 +225,7 @@ object MainViewModelBackup {
                 }
             }
         }
+        } finally { workspace?.deleteRecursively() }
         return baos.toByteArray()
     }
 
@@ -231,6 +241,8 @@ object MainViewModelBackup {
         ) {
             throw IllegalArgumentException("非合法的 ComfyUI 备份文件")
         }
+        require(parsed.version in 1..3) { "备份版本尚不支持，请更新应用" }
+        require(parsed.workspaceVersion == null || parsed.workspaceVersion == 1) { "工作区备份版本尚不支持，请更新应用" }
         parsed
     }
 
@@ -266,7 +278,11 @@ object MainViewModelBackup {
                 throw IllegalArgumentException("备份包中缺少 manifest.json")
             }
             val dto = parseBackupJson(vm, manifestFile.readText(Charsets.UTF_8)).getOrThrow()
-            return ParsedBackup(dto = dto, stagingDir = staging, hasPackage = true)
+            val workspace = File(staging, WORKSPACE_ROOT)
+            require(dto.workspaceVersion == null || File(workspace, "workspace.json").isFile) { "备份缺少工作区数据" }
+            val count = if (File(workspace, "workspace.json").isFile)
+                runBlocking { vm.agentWorkspace.validate(workspace) } else null
+            return ParsedBackup(dto = dto, stagingDir = staging, hasPackage = true, workspaceConversationCount = count)
         } catch (e: Exception) {
             staging.deleteRecursively()
             throw e
@@ -280,11 +296,47 @@ object MainViewModelBackup {
     // ------------------------------------------------------------------ restore
 
 
-    fun restoreParsedBackup(
+    suspend fun restoreParsedBackup(
         vm: MainViewModel,
         parsed: ParsedBackup,
         options: BackupRestoreOptions = BackupRestoreOptions()
     ): Result<String> {
+        val workspace = parsed.stagingDir?.let { File(it, WORKSPACE_ROOT) }
+        var paused = false
+        return try {
+            if (options.restoreAgentWorkspace) {
+                require(workspace != null && File(workspace, "workspace.json").isFile) { "此备份没有 Agent 工作区" }
+                vm.agentWorkspace.validate(workspace)
+            }
+            withContext(Dispatchers.Main) {
+                vm.agentRuntime.stop("正在恢复备份", invalidateContext = true)
+                vm.agentWorkspace.beginRestore()
+                vm.repository.webSocketManager.disconnect()
+                vm.rhAppPollJobs.values.toList().forEach { it.cancel() }
+                vm.rhAppPollJobs.clear()
+            }
+            paused = true
+            vm.agentWorkspace.flush()
+            vm.agentWorkspace.invalidateCallbacks()
+            val restoredWorkspace = if (options.restoreAgentWorkspace)
+                vm.agentWorkspace.restore(workspace!!, confirmed = true) else null
+            val configuration = withContext(Dispatchers.Main) { restoreConfiguration(vm, parsed, options) }
+            if (configuration.isFailure && restoredWorkspace?.previousSnapshotDirectory != null) {
+                vm.agentWorkspace.restore(restoredWorkspace.previousSnapshotDirectory, confirmed = true)
+            }
+            configuration.map { summary -> if (restoredWorkspace == null) summary else
+                "$summary；Agent 会话 "+restoredWorkspace.conversationCount+" 个，原工作区快照已保留" }
+        } catch (e: Exception) {
+            Result.failure(e)
+        } finally {
+            if (paused) withContext(Dispatchers.Main) {
+                vm.agentWorkspace.finishRestore()
+            }
+            discardParsedBackup(parsed)
+        }
+    }
+
+    private fun restoreConfiguration(vm: MainViewModel, parsed: ParsedBackup, options: BackupRestoreOptions): Result<String> {
         return try {
             val backup = parsed.dto
             var restoredServersCount = 0
@@ -362,7 +414,12 @@ object MainViewModelBackup {
                 val activeId = merged.firstOrNull { it.id == targetLlmId }?.id
                     ?: merged.firstOrNull()?.id
                 if (!activeId.isNullOrBlank()) {
-                    vm.selectLlmProfile(activeId)
+                    vm._currentLlmProfileId.value = activeId
+                    val profile = merged.first { it.id == activeId }
+                    vm._llmBaseUrl.value = profile.baseUrl
+                    vm._llmApiKey.value = profile.apiKey
+                    vm._llmModel.value = profile.model
+                    vm.prefs.edit().putString("current_llm_profile_id", activeId).apply()
                 }
             }
 
@@ -384,14 +441,14 @@ object MainViewModelBackup {
                     vm.gson.toJson(backup.favoriteArtists)
     ).apply()
             }
-            if (!backup.agentWorkflowSource.isNullOrBlank() && !backup.agentWorkflowId.isNullOrBlank()) {
+            if (!vm.agentWorkspaceData.isInitialized() && !backup.agentWorkflowSource.isNullOrBlank() && !backup.agentWorkflowId.isNullOrBlank()) {
                 vm.setAgentDefaultWorkflow(
                     source = backup.agentWorkflowSource,
                     id = backup.agentWorkflowId,
                     label = backup.agentWorkflowLabel ?: backup.agentWorkflowId
     )
             }
-            if (!backup.agentInteractionMode.isNullOrBlank()) {
+            if (!vm.agentWorkspaceData.isInitialized() && !backup.agentInteractionMode.isNullOrBlank()) {
                 MainViewModelAgent.setAgentInteractionMode(vm, backup.agentInteractionMode)
             }
 
@@ -471,8 +528,6 @@ object MainViewModelBackup {
         } catch (e: Exception) {
             vm.addLog("配置导入失败: ${e.message}", LogType.ERROR)
             Result.failure(e)
-        } finally {
-            discardParsedBackup(parsed)
         }
     }
 

@@ -343,6 +343,7 @@ object MainViewModelRhApps {
         remoteId: String,
         workflowKey: String?
     ) {
+        val workspaceEpoch = vm.agentWorkspace.callbackEpoch
         if (!pollingLocalIds.add(localId)) return
         try {
             val started = vm.taskStore.find(localId)?.createdAt?.takeIf { it > 0 } ?: System.currentTimeMillis()
@@ -418,7 +419,7 @@ object MainViewModelRhApps {
                                 finishedAt = System.currentTimeMillis()
     )
                         }
-                        publishOutputs(vm, workflowKey, remoteId, outputs, backend.site.id)
+                        publishOutputs(vm, workflowKey, remoteId, outputs, backend.site.id, backend.serverId, workspaceEpoch)
                         val costText = s.cost?.coins?.let { String.format(Locale.US, "，消耗 %.2f RH 币", it) }.orEmpty()
                         val kindText = if (vm.taskStore.find(localId)?.origin == "official_workflow") "云端工作流" else "云端应用"
                         vm.addLog("RunningHub $kindText 完成 (taskId: $remoteId)，已保存 $saved/${outputs.size} 个结果$costText", LogType.SUCCESS)
@@ -504,9 +505,10 @@ object MainViewModelRhApps {
         }
     }
 
-    private suspend fun publishOutputs(vm: MainViewModel, workflowKey: String?, remoteId: String, outputs: List<TaskOutput>, siteId: String?) {
+    private suspend fun publishOutputs(vm: MainViewModel, workflowKey: String?, remoteId: String, outputs: List<TaskOutput>, siteId: String?, serverId: String, workspaceEpoch: Long) {
         val media = outputs.mapNotNull { o ->
-            val uri = o.localUri?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val uri = o.localUri?.takeIf { it.isNotBlank() }
+            if (uri == null && o.url.isNullOrBlank()) return@mapNotNull null
             val name = o.filename ?: "RH_$remoteId"
             MediaOutput(
                 filename = name,
@@ -514,13 +516,13 @@ object MainViewModelRhApps {
                 type = "local",
                 mediaType = MainViewModelGallery.outputMediaType(name),
                 promptId = remoteId,
-                localUri = uri
+                localUri = uri, sourceUrl = o.url, workspaceEpoch = workspaceEpoch
     )
         }
         if (media.isEmpty()) return
         if (!workflowKey.isNullOrBlank() && vm.detachedWorkflowKeys.contains(workflowKey)) return
         withContext(Dispatchers.Main) {
-            vm.publishRhAppOutputs(workflowKey, media, siteId)
+            vm.publishRhAppOutputs(workflowKey, media, siteId, serverId)
             val now = System.currentTimeMillis()
             vm.mergeCloudMediaIntoSession(media.mapIndexed { i, m -> m.copy(timestamp = now - i) })
             MainViewModelGallery.refreshLocalMedia(vm, vm.getApplication())
@@ -794,6 +796,7 @@ object MainViewModelRhApps {
 
     /** One status check of an AI-app task. Returns true when no further polling is wanted. */
     private suspend fun checkAppOnce(vm: MainViewModel, backend: RunningHubBackend, rec: TaskRecord): Boolean {
+        val workspaceEpoch = vm.agentWorkspace.callbackEpoch
         val pid = rec.remoteId ?: return true
         val r = backend.poll(pid)
         val e = r.exceptionOrNull()
@@ -807,7 +810,7 @@ object MainViewModelRhApps {
             TaskState.SUCCESS -> {
                 val outs = downloadOutputs(vm, backend, pid, s.outputs)
                 val merged = applyOutputs(vm, rec.localId, outs, s.cost, markSuccess = true)
-                publishOutputs(vm, rec.workflowKey, pid, merged, backend.site.id)
+                publishOutputs(vm, rec.workflowKey, pid, merged, backend.site.id, backend.serverId, workspaceEpoch)
                 vm.addLog("已找回云端任务「${rec.title ?: pid}」的结果：${merged.count { !it.localUri.isNullOrBlank() }}/${merged.size} 个", LogType.SUCCESS)
                 true
             }
@@ -825,6 +828,7 @@ object MainViewModelRhApps {
 
     /** SUCCESS task whose downloaded copies are missing: fetch fresh outputs and download only the missing ones. */
     private suspend fun redownloadMissing(vm: MainViewModel, backend: RunningHubBackend, rec: TaskRecord): Boolean {
+        val workspaceEpoch = vm.agentWorkspace.callbackEpoch
         val pid = rec.remoteId ?: return false
         val ctx = vm.getApplication<Application>()
         val prev = rec.outputs.orEmpty()
@@ -877,7 +881,7 @@ object MainViewModelRhApps {
         }
         val ok = downloaded.filter { !it.localUri.isNullOrBlank() }
         if (ok.isEmpty()) return false
-        publishOutputs(vm, rec.workflowKey, pid, ok, backend.site.id)
+        publishOutputs(vm, rec.workflowKey, pid, ok, backend.site.id, backend.serverId, workspaceEpoch)
         return true
     }
 

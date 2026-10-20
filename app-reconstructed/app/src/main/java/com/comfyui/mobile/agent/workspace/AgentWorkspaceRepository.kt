@@ -24,8 +24,8 @@ data class AgentExecutionTarget(val backend: String, val serverId: String, val s
 }
 
 /**
- * P1 storage boundary. No production adapter is enabled yet: do not run migration while
- * SharedPreferences remains the live writer. All filesystem mutations are confined to assets/.
+ * Transactional storage boundary. Production writes are serialized by the ViewModel adapter.
+ * Attachment mutations are confined to the managed workspace.
  */
 class AgentWorkspaceRepository(
     internal val database: AgentWorkspaceDatabase,
@@ -71,6 +71,30 @@ class AgentWorkspaceRepository(
     }
 
     suspend fun state(id: String): AgentConversationState? = locked { dao.state(id) }
+    suspend fun migrationComplete(scope: String): Boolean = locked { dao.migration(scope) != null }
+
+    /** A stable primary ID is reserved in memory; an empty new scope is not persisted until edited. */
+    suspend fun primaryConversation(scope: String): AgentConversation = locked {
+        validScope(scope)
+        val existing = dao.meta("active:$scope")?.let { dao.conversation(it) }
+            ?: dao.migration(scope)?.conversationId?.let { dao.conversation(it) }
+            ?: dao.allConversations().lastOrNull { it.scope == scope }
+        existing ?: AgentConversation("primary-" + workspaceId(scope), scope, "新会话",
+            createdAt = now(), updatedAt = now())
+    }
+
+    suspend fun saveConversation(row: AgentConversation) = locked {
+        validScope(row.scope)
+        database.withTransaction {
+            dao.putConversation(row.copy(updatedAt = now(),
+                lastMessagePreview = dao.conversation(row.id)?.lastMessagePreview ?: row.lastMessagePreview))
+            if (dao.state(row.id) == null) dao.putState(AgentConversationState(row.id))
+            dao.putMeta(AgentWorkspaceMeta("active:${row.scope}", row.id))
+        }
+    }
+
+    suspend fun messagePage(id: String, before: Long = Long.MAX_VALUE, limit: Int = 200): List<AgentMessage> =
+        locked { dao.messagePage(id, before, limit.coerceIn(1, 200)).reversed() }
     suspend fun messages(id: String): List<AgentChatMessage> = locked {
         dao.messages(id).map { gson.fromJson(it.payloadJson, AgentChatMessage::class.java) }
     }
@@ -100,11 +124,19 @@ class AgentWorkspaceRepository(
         val rewritten = try {
             messages.map { message ->
                 require(message.id.isNotBlank() && message.role.isNotBlank())
-                message.copy(isThinking = false, attachments = message.attachments?.map { attachment ->
+                message.copy(attachments = message.attachments?.map { attachment ->
                     val existingId = attachment.uri.takeIf { it.startsWith(ASSET_URI) }?.removePrefix(ASSET_URI)
                     val asset = if (existingId != null) {
                         requireNotNull(dao.asset(existingId)) { "Unknown attachment asset" }
-                    } else importLegacyAsset(attachment)
+                    } else {
+                        val managed = runCatching {
+                            val uri = URI(attachment.uri)
+                            if (uri.scheme != "file") null else File(uri).canonicalFile
+                                .takeIf { it.path.startsWith(File(directory, "assets").canonicalPath + File.separator) }
+                                ?.relativeTo(directory.canonicalFile)?.invariantSeparatorsPath
+                        }.getOrNull()?.let { dao.assetByPath(it) }
+                        managed ?: importLegacyAsset(attachment)
+                    }
                     assets[asset.id] = asset
                     val owner = workspaceId(conversationId, message.id)
                     val refId = workspaceId(asset.id, owner)
@@ -125,7 +157,8 @@ class AgentWorkspaceRepository(
         val source = runCatching {
             val uri = URI(attachment.uri)
             if (uri.scheme != "file") null else File(uri).canonicalFile.takeIf {
-                it.path.startsWith(legacyAttachments.canonicalPath + File.separator) && it.isFile
+                (it.path.startsWith(legacyAttachments.canonicalPath + File.separator) ||
+                    it.path.startsWith(File(directory, "imports").canonicalPath + File.separator)) && it.isFile
             }
         }.getOrNull()
         val bytes = source?.readBytes()
@@ -170,6 +203,85 @@ class AgentWorkspaceRepository(
         } catch (error: Throwable) {
             discardUncommittedAssets(prepared)
             throw error
+        }
+    }
+
+    /** Updates one row and its ownership only; streaming never rewrites the whole conversation. */
+    suspend fun saveMessage(conversationId: String, message: AgentChatMessage, checkpoint: Boolean = false): AgentChatMessage = locked {
+        val conversation = requireNotNull(dao.conversation(conversationId))
+        val prepared = prepare(conversationId, listOf(message))
+        try {
+            database.withTransaction {
+                val old = dao.message(conversationId, message.id)
+                val sequence = old?.sequence ?: dao.nextSequence(conversationId)
+                dao.putMessage(AgentMessage(conversationId, message.id, sequence,
+                    gson.toJson(prepared.messages.single()), message.timestamp))
+                dao.deleteMessageRefs(conversationId, message.id)
+                prepared.assets.forEach { dao.putAsset(it) }
+                prepared.refs.forEach { dao.putRef(it) }
+                if (!checkpoint) dao.putConversation(conversation.copy(
+                    lastMessagePreview = dao.messagePage(conversationId, Long.MAX_VALUE, 1).firstOrNull()
+                        ?.let { gson.fromJson(it.payloadJson, AgentChatMessage::class.java).content.take(180) }.orEmpty(),
+                    updatedAt = now()))
+            }
+            prepared.messages.single()
+        } catch (error: Throwable) {
+            discardUncommittedAssets(prepared)
+            throw error
+        }
+    }
+
+    suspend fun saveDraft(id: String, json: String, attachments: List<AgentAttachment>): List<AgentAttachment> = locked {
+        validObject(json)
+        val state = requireNotNull(dao.state(id))
+        val prepared = prepare(id, listOf(AgentChatMessage("draft", "user", "", attachments = attachments)))
+        try {
+            database.withTransaction {
+                dao.deleteDraftRefs(id)
+                prepared.assets.forEach { dao.putAsset(it) }
+                prepared.refs.forEach { dao.putRef(it.copy(ownerType = "draft", ownerKey = id, messageId = null)) }
+                val draft = JsonParser.parseString(json).asJsonObject
+                draft.add("attachments", gson.toJsonTree(prepared.messages.single().attachments.orEmpty()))
+                dao.putState(state.copy(draftJson = gson.toJson(draft)))
+            }
+            prepared.messages.single().attachments.orEmpty()
+        } catch (error: Throwable) {
+            discardUncommittedAssets(prepared)
+            throw error
+        }
+    }
+
+    suspend fun clearChat(id: String) = locked {
+        database.withTransaction {
+            dao.deleteMessages(id)
+            dao.deleteDraftRefs(id)
+            dao.state(id)?.let { dao.putState(it.copy(promptOutputJson = "{}", draftJson = "{}")) }
+            dao.conversation(id)?.let { dao.putConversation(it.copy(lastMessagePreview = "", updatedAt = now())) }
+        }
+        cleanupUnlocked()
+    }
+
+    suspend fun clearMedia(id: String) = locked { dao.deleteMedia(id) }
+
+    suspend fun executionBySource(sourceKey: String, remoteId: String): AgentExecutionLink? =
+        locked { dao.executionByRemote(sourceKey, remoteId) }
+
+    suspend fun executions(): List<AgentExecutionLink> = locked { dao.allExecutions() }
+
+    suspend fun conversation(id: String): AgentConversation? = locked { dao.conversation(id) }
+
+    suspend fun advanceEpoch(): Long = locked {
+        database.withTransaction {
+            val epoch = epochUnlocked() + 1
+            dao.allExecutions().forEach { dao.updateExecution(it.copy(workspaceEpoch = epoch)) }
+            dao.putMeta(AgentWorkspaceMeta("epoch", epoch.toString()))
+            epoch
+        }
+    }
+
+    suspend fun markRejected(link: AgentExecutionLink) = locked {
+        dao.execution(link.id)?.takeIf { it.remoteId == null && it.workspaceEpoch == link.workspaceEpoch }?.let {
+            dao.updateExecution(it.copy(submissionState = "rejected", updatedAt = now()))
         }
     }
 
@@ -231,9 +343,11 @@ class AgentWorkspaceRepository(
     }
 
     internal suspend fun epochUnlocked(): Long = dao.meta("epoch")?.toLongOrNull() ?: 0
+    suspend fun currentEpoch(): Long = locked { epochUnlocked() }
 
     suspend fun reserveExecution(
-        conversationId: String, turnId: String, target: AgentExecutionTarget, snapshotJson: String = "{}"
+        conversationId: String, turnId: String, target: AgentExecutionTarget, snapshotJson: String = "{}",
+        taskLocalId: String? = null
     ): AgentExecutionLink = locked {
         validObject(snapshotJson)
         val conversation = requireNotNull(dao.conversation(conversationId)) { "Conversation was deleted" }
@@ -242,8 +356,10 @@ class AgentWorkspaceRepository(
             "Execution target is outside conversation scope"
         }
         val time = now()
-        AgentExecutionLink(UUID.randomUUID().toString(), turnId, conversationId, conversation.scope,
+        val id = UUID.randomUUID().toString()
+        AgentExecutionLink(id, turnId, conversationId, conversation.scope,
             target.key, target.backend, target.serverId, target.siteId, snapshotJson = snapshotJson,
+            taskLocalId = taskLocalId ?: "agent_$id",
             workspaceEpoch = epochUnlocked(), createdAt = time, updatedAt = time
         ).also { dao.putExecution(it) }
     }
@@ -284,7 +400,8 @@ class AgentWorkspaceRepository(
     }
 
     private fun mediaRow(id: String, source: String, media: MediaOutput, executionId: String?) =
-        AgentConversationMedia(id, mediaKey(source, media), source, gson.toJson(media), executionId, media.timestamp)
+        AgentConversationMedia(id, mediaKey(source, media), source, gson.toJson(media.copy(
+            sourceKey = source, sourceUnresolved = source.startsWith("legacy:"))), executionId, media.timestamp)
 
     suspend fun deleteConversation(id: String) = locked {
         database.withTransaction {

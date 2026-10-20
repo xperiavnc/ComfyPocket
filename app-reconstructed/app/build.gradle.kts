@@ -14,8 +14,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 44
-        versionName = "0.0.42-agent-workspace-storage"
+        versionCode = 45
+        versionName = "0.0.43-agent-workspace-integration"
     }
 
     buildFeatures {

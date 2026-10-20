@@ -71,6 +71,11 @@ fun AgentChatPanel(
     sidePad: Dp,
     listState: LazyListState,
     modifier: Modifier = Modifier,
+    inputEnabled: Boolean = true,
+    statusMessage: String = "",
+    onStatusClick: () -> Unit = {},
+    hasEarlier: Boolean = false,
+    onLoadEarlier: () -> Unit = {},
     attachments: List<AgentAttachment> = emptyList(),
     onPickImages: () -> Unit = {},
     onPickFiles: () -> Unit = {},
@@ -98,6 +103,12 @@ fun AgentChatPanel(
         colors = cardColors
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(PanelPadding)) {
+            if (statusMessage.isNotBlank()) Text(
+                text = statusMessage,
+                style = MiuixTheme.textStyles.footnote1,
+                color = scheme.onSurfaceVariantSummary,
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onStatusClick).padding(bottom = 8.dp)
+            )
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -110,12 +121,16 @@ fun AgentChatPanel(
                 contentPadding = PaddingValues(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+                if (hasEarlier) item(key = "earlier") {
+                    Text("加载更早消息", color = scheme.primary,
+                        modifier = Modifier.fillMaxWidth().clickable(onClick = onLoadEarlier).padding(10.dp))
+                }
                 val pendingClarificationId = messages.lastOrNull()
                     ?.takeIf { it.role == "assistant" && it.clarification != null }?.id
                 items(messages, key = { it.id }) { msg ->
                     AgentBubble(
                         msg = msg,
-                        clarificationEnabled = !busy && msg.id == pendingClarificationId,
+                        clarificationEnabled = inputEnabled && !busy && msg.id == pendingClarificationId,
                         onClarificationOption = { option -> onSendMessage("我选择：$option") }
                     )
                 }
@@ -128,7 +143,7 @@ fun AgentChatPanel(
                     modifier = Modifier.padding(bottom = 6.dp)
     )
             }
-            if (attachMenuOpen && !busy) {
+            if (attachMenuOpen && !busy && inputEnabled) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -137,7 +152,7 @@ fun AgentChatPanel(
                     AttachMenuChip("文档") { attachMenuOpen = false; haptics.tick(); onPickFiles() }
                 }
             }
-            val canSend = !busy && (input.text.isNotBlank() || attachments.isNotEmpty())
+            val canSend = inputEnabled && !busy && (input.text.isNotBlank() || attachments.isNotEmpty())
             // Bottom-aligned so the buttons stay put while the field grows to 5 lines.
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -147,7 +162,7 @@ fun AgentChatPanel(
                 val plusRotation by animateFloatAsState(if (attachMenuOpen) 45f else 0f, label = "attachPlus")
                 ChatRoundButton(
                     filled = false,
-                    enabled = !busy,
+                    enabled = inputEnabled && !busy,
                     onClick = { haptics.tick(); attachMenuOpen = !attachMenuOpen }
     ) { tint ->
                     Icon(
@@ -172,7 +187,7 @@ fun AgentChatPanel(
                                 focusScope.launch { bringIntoViewRequester.bringIntoView() }
                             }
                         },
-                    enabled = !busy,
+                    enabled = inputEnabled && !busy,
                     maxLines = 5,
                     textStyle = MiuixTheme.textStyles.body2.copy(color = scheme.onSurface),
                     cursorBrush = SolidColor(scheme.primary),

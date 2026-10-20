@@ -55,6 +55,8 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
     // Event flow for every generated media (ensures we don't miss any for auto-save)
     private val _mediaEvents = kotlinx.coroutines.flow.MutableSharedFlow<MediaOutput>(extraBufferCapacity = 64)
     val mediaEvents = _mediaEvents.asSharedFlow()
+    @Volatile var mediaSourceKey: String? = null
+    @Volatile var mediaWorkspaceEpoch: Long = 0
 
     private val _executionStart = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 64)
     val executionStart = _executionStart.asSharedFlow()
@@ -353,6 +355,9 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
             _connectionError.value = null
         }
         
+        val capturedSourceKey = mediaSourceKey
+        val capturedWorkspaceEpoch = mediaWorkspaceEpoch
+        val capturedBaseUrl = trimmed
         webSocket = clientForHost(request.url.host).newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 if (webSocket !== this@WebSocketManager.webSocket) {
@@ -374,7 +379,7 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
                     return
                 }
                 lastInboundElapsedMs = android.os.SystemClock.elapsedRealtime()
-                handleMessage(text)
+                handleMessage(text, capturedSourceKey, capturedBaseUrl, capturedWorkspaceEpoch)
             }
 
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -727,7 +732,7 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
         emitLog("Test Media Injected: ${media.filename}")
     }
 
-    private fun handleMessage(text: String) {
+    private fun handleMessage(text: String, sourceKey: String? = null, sourceBaseUrl: String? = null, workspaceEpoch: Long? = null) {
         try {
             val json = JSONObject(text)
             val type = json.optString("type").ifBlank { json.optString("event") }
@@ -755,8 +760,13 @@ class WebSocketManager(private val clientForHost: (String) -> OkHttpClient) {
             fun emitMedia(media: MediaOutput) {
                 val key = "${media.subfolder}|${media.filename}|${media.type}"
                 if (emitted.add(key)) {
-                    _latestMedia.value = media
-                    _mediaEvents.tryEmit(media)
+                    val sourceUrl = sourceBaseUrl?.toHttpUrlOrNull()?.newBuilder()
+                        ?.addPathSegment("view")?.addQueryParameter("filename", media.filename)
+                        ?.addQueryParameter("subfolder", media.subfolder)?.addQueryParameter("type", media.type)
+                        ?.build()?.toString()
+                    val stamped = media.copy(sourceKey = sourceKey, sourceUrl = sourceUrl, workspaceEpoch = workspaceEpoch)
+                    _latestMedia.value = stamped
+                    _mediaEvents.tryEmit(stamped)
                 }
             }
 

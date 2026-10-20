@@ -119,10 +119,12 @@ Bridge **不依赖 Lora Manager**，也不打包进 APK。更新时替换完整�
 
 #### Agent 工作区开发进度
 
-`0.0.42-agent-workspace-storage` 完成 P1.1 存储基础：Room、旧数据迁移器、
-执行 / 附件归属及可移植备份接口。**本版尚未启用自动迁移，也没有新增项目 / 多会话页面**；
-现有 Agent 保持旧读写和原界面。下一批 P1.2 将统一接入生产读写、任务回调及 `.cui.bak`，
-阶段状态与后续验收见 [工作区计划](app-reconstructed/AGENT_WORKSPACE_PLAN.md)。
+`0.0.43-agent-workspace-integration` 完成 P1.2 生产接入：启动按作用域迁移旧记录，
+成功后聊天、草稿、工作流参数和正反提示词只写 Room；旧键和原附件保留。
+流式回复按单条消息保存，长历史分页；任务结果按提交时的服务器与会话归档，
+提交状态不明时保留记录并等待核对。设置中的 `.cui.bak` 已支持会话及附件导出、
+校验和确认替换，旧备份不清除会话。本版继续使用现有 Agent 页面，
+项目 / 多会话管理入口在 P2 / P3 实施。详见 [工作区计划](app-reconstructed/AGENT_WORKSPACE_PLAN.md)。
 
 ### 模型中心与在线集市
 
