@@ -234,12 +234,17 @@ class AgentInteractionLoopTest {
     }
 
     @Test fun customRulesCannotTurnTheDecisionStageIntoTwoPromptFields() {
-        val system = AgentInteractionProtocol.decisionSystem("直接完成", "真实档案", AgentMode.DRAW)
-        assertTrue(system.endsWith("不要输出最终 prompt/negative_prompt，不自问自答，不用推理文本代替工具调用。"))
+        val system = AgentInteractionProtocol.decisionSystem("USER_DIALOGUE_RULES_854", "真实档案", AgentMode.DRAW)
+        assertTrue(system.endsWith("正式答复和提示词由下一步骤输出。"))
         assertTrue(system.contains("真实档案"))
-        assertTrue(system.contains("重要冲突没有解决就不能继续"))
-        assertTrue(system.contains("用户已明确指定"))
-        assertTrue(system.contains("背景/构图/动作"))
-        assertFalse(system.contains(AgentPromptPolicy.defaultDrawRules))
+        assertTrue(system.contains("【应用决策协议】"))
+        assertTrue(system.contains("【用户导入的对话规则】\nUSER_DIALOGUE_RULES_854"))
+        assertTrue(system.contains("ask_user_question"))
+        assertTrue(system.contains("continue_task"))
+        assertFalse(system.contains("默认必须保留的绘画词"))
+        assertFalse(system.contains("Anima 文生图提示词"))
+        val empty = AgentInteractionProtocol.decisionSystem("", "", AgentMode.CHAT)
+        assertFalse(empty.contains("【用户导入的对话规则】"))
+        assertFalse(empty.contains("你是 ComfyPocket"))
     }
 }

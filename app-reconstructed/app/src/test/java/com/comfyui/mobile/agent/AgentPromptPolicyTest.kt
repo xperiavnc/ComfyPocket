@@ -6,21 +6,20 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AgentPromptPolicyTest {
-    @Test fun wardrobeQuestionsStayModelLedWithConfirmedAndDelegatedChoicesRespected() {
+    @Test fun transportRetainsActionsAndAliasesWithoutBuiltInPersonalityOrComposition() {
         val system = AgentPromptPolicy.system("", "", emptyList())
-        assertTrue(system.contains("档案默认款只是参考"))
-        assertTrue(system.contains("服装你来选"))
+        assertFalse(system.contains("Anima"))
+        assertFalse(system.contains("ComfyPocket 的任务执行助手"))
+        assertFalse(system.contains("双人"))
         assertTrue(system.contains("prompt_aliases"))
         assertTrue(system.contains("negative_prompt_aliases"))
-        assertTrue(system.contains("推荐不代表用户已选"))
         assertTrue(system.contains("description"))
     }
 
-    @Test fun defaultsFollowCurrentUserRequirementsWithoutOverridingOutputContract() {
+    @Test fun emptyRuleSlotsStayEmptyWithoutFallbackText() {
         val system = AgentPromptPolicy.system("", "", emptyList())
-        assertTrue(AgentPromptPolicy.defaultPersona.contains("不以个人偏好无故拒绝"))
-        assertTrue(AgentPromptPolicy.defaultDrawRules.contains("不偷换主题，不省略重点"))
-        assertTrue(system.contains("明确要求多格分镜时保留格数"))
+        assertFalse(system.contains("用户导入"))
+        assertFalse(AgentPromptPolicy.chat("").contains("用户导入"))
         assertTrue(system.contains("只输出一个 JSON"))
         assertTrue(system.contains("negative_prompt"))
         assertFalse(system.contains("generation.execute"))
@@ -28,17 +27,15 @@ class AgentPromptPolicyTest {
     }
     @Test fun onlyTheModelChoosesWhenToAskAndCandidatesDoNotMandateQuestions() {
         val system = AgentPromptPolicy.system("", "", emptyList())
-        assertTrue(system.contains("你自主判断是否需要 action=ask_user"))
+        assertTrue(system.contains("由你自行选择"))
         assertTrue(system.contains("普通文字问题不触发表单"))
         assertFalse(system.contains("必须另行询问"))
         assertFalse(system.contains("必须用 needs_clarification=true"))
         assertTrue(AgentPromptPolicy.chat("").contains("自行选择 action=\"ask_user\""))
     }
     @Test fun personaAndVisualRulesDoNotCompeteWithTransportContract() {
-        assertFalse(AgentPromptPolicy.defaultPersona.contains("should_draw"))
-        assertFalse(AgentPromptPolicy.defaultDrawRules.contains("只输出最终"))
         val prompt = AgentPromptPolicy.system("自定义人设", "自定义分镜", emptyList())
-        assertTrue(prompt.contains("人设仅作用于 reply"))
+        assertTrue(prompt.contains("用户导入的对话规则"))
         assertTrue(prompt.contains("只输出一个 JSON"))
         assertTrue(prompt.contains("自定义人设"))
         assertTrue(prompt.contains("自定义分镜"))
@@ -78,14 +75,11 @@ class AgentPromptPolicyTest {
         assertTrue(AgentDrawIntent.isExplicitVeto("反推这张图片"))
     }
 
-    @Test fun compositionAdaptsReferenceRulesWithoutItsHostSpecificEnvelope() {
-        val rules = AgentPromptPolicy.defaultDrawRules
-        assertTrue(rules.contains("Anima 文生图提示词 V2.6"))
-        assertTrue(rules.contains("可见人物数与计数标签一致"))
-        assertTrue(rules.contains("双人直接互动"))
-        assertTrue(rules.contains("跨角色使用完整名字"))
-        assertFalse(rules.contains("<images>"))
-        assertFalse(rules.contains("regex:"))
-        assertFalse(rules.contains("explicit"))
+    @Test fun uploadedRulesAreInsertedOnceWithoutRewritingXmlOrPunctuation() {
+        val rules = "<instruction>\r\n只使用用户定义的格式，保留 \"原文\"。\r\n</instruction>\n"
+        val system = AgentPromptPolicy.system("", rules, emptyList())
+        assertTrue(system.contains(rules))
+        assertEquals(1, Regex("<instruction>").findAll(system).count())
+        assertFalse(AgentPromptPolicy.chat("").contains(rules))
     }
 }

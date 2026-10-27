@@ -24,6 +24,8 @@ data class ConfigBackupDto(
     val currentLlmProfileId: String? = null,
     val agentSystemPrompt: String? = null,
     val agentDrawPrompt: String? = null,
+    /** null = older backup, ignored; an explicit empty object restores the no-rule state. */
+    val agentRuleFiles: com.comfyui.mobile.agent.AgentRuleFiles? = null,
     val characterLores: List<CharacterLore>? = null,
     val favoriteArtists: List<String>? = null,
     val agentWorkflowSource: String? = null,

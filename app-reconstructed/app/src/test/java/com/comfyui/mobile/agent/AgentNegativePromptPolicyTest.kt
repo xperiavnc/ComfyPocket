@@ -47,13 +47,16 @@ class AgentNegativePromptPolicyTest {
         assertTrue(AgentNegativePromptPolicy.conflicts("", "cat").isEmpty())
     }
 
-    @Test fun requiresEvidenceWithoutBanningIndependentNegativeComposition() {
+    @Test fun keepsOnlyTransportProtocolAndImportedRules() {
         val system = AgentPromptPolicy.system("custom persona", "custom draw rules", emptyList())
-        assertTrue(system.contains("字段必填不等于内容必须非空"))
-        assertTrue(system.contains("每轮独立分析反向"))
-        assertTrue(system.contains("用户本轮明确的排除"))
-        assertTrue(system.contains("不凭空编造 embedding"))
-        assertTrue(system.contains("历史 AI 反向只是候选"))
-        assertFalse(system.contains("你需要主动编写完整 negative_prompt"))
+        assertTrue(system.contains("【应用输出协议】"))
+        assertTrue(system.contains("JSON 字段名固定"))
+        assertTrue(system.contains("【应用提问协议】"))
+        assertTrue(system.contains("【用户导入的对话规则】"))
+        assertTrue(system.contains("custom persona"))
+        assertTrue(system.contains("【用户导入的绘图规则】"))
+        assertTrue(system.contains("custom draw rules"))
+        assertFalse(system.contains("ComfyPocket 内置人格"))
+        assertFalse(system.contains("Anima 内置分镜规则"))
     }
 }

@@ -123,8 +123,7 @@ object MainViewModelBackup {
             savedScheme = vm._savedScheme.value,
             llmProfiles = exportedLlmProfiles,
             currentLlmProfileId = vm._currentLlmProfileId.value,
-            agentSystemPrompt = vm._agentSystemPrompt.value,
-            agentDrawPrompt = vm._agentDrawPrompt.value,
+            agentRuleFiles = vm._agentRuleFiles.value,
             characterLores = vm._characterLores.value,
             favoriteArtists = vm._favoriteArtists.value,
             agentWorkflowSource = vm._agentWorkflowSource.value,
@@ -423,12 +422,7 @@ object MainViewModelBackup {
                 }
             }
 
-            if (!backup.agentSystemPrompt.isNullOrBlank()) {
-                vm.setAgentSystemPrompt(backup.agentSystemPrompt)
-            }
-            if (!backup.agentDrawPrompt.isNullOrBlank()) {
-                vm.setAgentDrawPrompt(backup.agentDrawPrompt)
-            }
+            backup.agentRuleFiles?.let { vm.agentRules.restore(it) }
             if (!backup.characterLores.isNullOrEmpty()) {
                 vm._characterLores.value = backup.characterLores
                 vm.persistCharacterLores(backup.characterLores)

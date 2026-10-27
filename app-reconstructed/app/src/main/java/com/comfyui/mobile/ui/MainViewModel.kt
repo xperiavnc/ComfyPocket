@@ -65,8 +65,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         const val AGENT_WF_AI_APP = "ai_app"
         const val AGENT_WF_SAVED = "saved"
 
-        val DEFAULT_AGENT_SYSTEM_PROMPT: String = com.comfyui.mobile.agent.AgentPromptPolicy.defaultPersona
-        val DEFAULT_AGENT_DRAW_PROMPT: String = com.comfyui.mobile.agent.AgentPromptPolicy.defaultDrawRules
 
         fun getComboOptions(objectInfo: Map<String, Any>, classType: String, inputKey: String): List<String>? =
             com.comfyui.mobile.model.WorkflowOptionParser.getComboOptions(objectInfo, classType, inputKey)
@@ -2851,10 +2849,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
     suspend fun searchLocalTags(query: String, kind: String) = localTagLibrary.search(query, kind)
 
-    internal val _agentSystemPrompt = MutableStateFlow(MainViewModelAgent.loadAgentSystemPrompt(this))
+    internal val _agentRuleFiles = MutableStateFlow(com.comfyui.mobile.agent.AgentRuleFilesStore(prefs, gson).load())
+    val agentRuleFiles = _agentRuleFiles.asStateFlow()
+    internal val agentRules = MainViewModelAgentRules(this)
+    val agentRulesImporting = agentRules.importing
+    fun importAgentRules(kind: com.comfyui.mobile.agent.AgentRuleKind, uri: android.net.Uri) = agentRules.import(kind, uri)
+    fun removeAgentRules(kind: com.comfyui.mobile.agent.AgentRuleKind) {
+        agentRules.replace(kind, null)
+        showToast("已移除${kind.title}，下一轮生效")
+    }
+
+    internal val _agentSystemPrompt = MutableStateFlow(_agentRuleFiles.value.dialogue?.content.orEmpty())
     val agentSystemPrompt = _agentSystemPrompt.asStateFlow()
 
-    internal val _agentDrawPrompt = MutableStateFlow(MainViewModelAgent.loadAgentDrawPrompt(this))
+    internal val _agentDrawPrompt = MutableStateFlow(_agentRuleFiles.value.drawing?.content.orEmpty())
     val agentDrawPrompt = _agentDrawPrompt.asStateFlow()
 
     internal val _agentWorkflowSource = MutableStateFlow(prefs.getString("agent_wf_source", "") ?: "")
@@ -3076,14 +3084,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun setAgentSystemPrompt(value: String) =
         MainViewModelAgent.setAgentSystemPrompt(this, value)
 
-    fun resetAgentSystemPrompt() =
-        MainViewModelAgent.resetAgentSystemPrompt(this)
 
     fun setAgentDrawPrompt(value: String) =
         MainViewModelAgent.setAgentDrawPrompt(this, value)
 
-    fun resetAgentDrawPrompt() =
-        MainViewModelAgent.resetAgentDrawPrompt(this)
 
     fun setAgentDefaultWorkflow(source: String, id: String, label: String) =
         MainViewModelAgent.setAgentDefaultWorkflow(this, source, id, label)

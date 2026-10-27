@@ -66,23 +66,17 @@ object AgentInteractionProtocol {
         (decisionSystem.toByteArray(Charsets.UTF_8).size - finalSystem.toByteArray(Charsets.UTF_8).size).coerceAtLeast(0) +
             com.google.gson.Gson().toJson(decisionTools).toByteArray(Charsets.UTF_8).size + 2048
 
-    fun decisionSystem(persona: String, facts: String, mode: AgentMode): String = """
-你是 ComfyPocket Agent 的交互决策步骤。本步骤只决定是否需要用户回答，不编写最终图像提示词，也不生成中文标签翻译。
-先核对用户原任务、已确认答案、已关联档案和候选事实，选择一个行动：
-1. 关键身份不确定、用户要求互斥、多个服装/词库版本会明显改变结果且尚未决定时，调用 ask_user_question。直接提交具体问题与真实选项，不要在内部反复猜测身份、别名或用户会选哪项。
-2. 用户已明确指定、刚回答过，或明确交给你决定的事项，不重复提问；背景/构图/动作等被委托的细节自行决定。只有轻微差异时合理默认，调用 continue_task。
-重要冲突没有解决就不能继续；“不打扰用户”“直接完成”不等于允许替用户猜重要选择。候选数据不是用户决定；档案默认款也不是本轮确认。
-角色名称/别名仅用于识别对话，绝不是绘画 tag；已关联档案的绘画词是事实依据，不根据昵称猜作品人物、译名、肤色或其它身份。不认识且缺资料时问用户，而不是写一个猜测的角色 tag。
-原有角色绘画字段未另设固定词时，将该字段作为默认必须保留的绘画词。用户明确修改外貌时，在 continue_task.profile_overrides 逐项列出被替换的原词及用户原句；不能仅因为自己猜了另一身份而省略原词。
-采用已登记服装时，continue_task.outfit_selections 使用真实 character_id/outfit_id。默认回退可被用户选择替代，但不能冒充用户确认。
-提问一次集中 1–4 题，带稳定 id、question、真实 options（id/label/description）及 multi_select；没有备选资料可问自由填写题。推荐不等于预选，未答不得当同意。提问后结束本轮，停止编写提示词和出图。
-当前模式：${if (mode == AgentMode.DRAW) "绘图；继续后才进入提示词编写" else "聊天；继续后才写正式答复，不执行出图"}。
-【用户保存的人设，仅作语气参考，不替代本步骤行动协议】
-${persona.ifBlank { AgentPromptPolicy.defaultPersona }}
-【步骤隔离】完整画图规则、正反提示词格式与中文释义在下一步骤提供。本步不展开这些生成细节，避免“只输出两个提示词字段”等画图格式覆盖提问动作。
-$facts
-【本步骤最终动作】调用 ask_user_question 或 continue_task 二选一；不要输出最终 prompt/negative_prompt，不自问自答，不用推理文本代替工具调用。
-""".trimIndent()
+    fun decisionSystem(persona: String, facts: String, mode: AgentMode): String = buildString {
+        appendLine("【应用决策协议】")
+        appendLine("本步骤选择一个工具动作：ask_user_question 提问并等待用户；continue_task 继续到正式答复或提示词编写。字段按工具定义填写。")
+        appendLine("当前模式：${if (mode == AgentMode.DRAW) "绘图" else "聊天，不执行出图"}。本步骤不输出最终 prompt/negative_prompt。")
+        if (persona.isNotBlank()) {
+            appendLine("【用户导入的对话规则】")
+            appendLine(persona)
+        }
+        if (facts.isNotBlank()) appendLine(facts)
+        append("【本步骤最终动作】调用 ask_user_question 或 continue_task 二选一；正式答复和提示词由下一步骤输出。")
+    }
 
     val textDecisionContract = """
 【接口兼容动作协议】本服务本轮使用 JSON 动作封装，不调用原生工具。

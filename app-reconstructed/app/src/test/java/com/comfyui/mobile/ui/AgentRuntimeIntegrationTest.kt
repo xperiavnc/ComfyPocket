@@ -237,6 +237,37 @@ class AgentRuntimeIntegrationTest {
         assertTrue(promptBodies.isEmpty())
     }
 
+    @Test fun importedRuleFilesReachTheRealRequestAndRemovalHasNoBuiltInFallback() {
+        val dialogue = File(app.cacheDir, "dialogue.md").apply { writeText("USER_DIALOGUE_RULES_918") }
+        val drawing = File(app.cacheDir, "drawing.txt").apply { writeText("<instruction>\nUSER_DRAW_RULES_736\n</instruction>") }
+        vm.importAgentRules(com.comfyui.mobile.agent.AgentRuleKind.DIALOGUE, Uri.fromFile(dialogue))
+        vm.importAgentRules(com.comfyui.mobile.agent.AgentRuleKind.DRAWING, Uri.fromFile(drawing))
+        pumpUntil { vm.agentRulesImporting.value.isEmpty() }
+        assertEquals(dialogue.readText(), vm.agentSystemPrompt.value)
+        assertEquals(drawing.readText(), vm.agentDrawPrompt.value)
+        responses += success("""{"action":"apply_prompt","reply":"好","prompt":"cat","negative_prompt":"","should_draw":false}""")
+        vm.sendAgentMessage("只编写提示词")
+        awaitDone()
+        val body = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray
+        val system = body.first().asJsonObject["content"].asString
+        assertTrue(system.contains(dialogue.readText()))
+        assertTrue(system.contains(drawing.readText()))
+        assertFalse(system.contains("Anima 文生图提示词"))
+        assertTrue(decisionBodies.single().contains("USER_DIALOGUE_RULES_918"))
+        vm.removeAgentRules(com.comfyui.mobile.agent.AgentRuleKind.DIALOGUE)
+        vm.removeAgentRules(com.comfyui.mobile.agent.AgentRuleKind.DRAWING)
+        responses += success("""{"action":"apply_prompt","reply":"好","prompt":"dog","negative_prompt":"","should_draw":false}""")
+        vm.sendAgentMessage("新的提示词")
+        awaitDone()
+        val emptySystem = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
+            .first().asJsonObject["content"].asString
+        assertFalse(emptySystem.contains("USER_DIALOGUE_RULES_918"))
+        assertFalse(emptySystem.contains("USER_DRAW_RULES_736"))
+        assertFalse(emptySystem.contains("Anima"))
+        assertFalse(emptySystem.contains("任务执行助手"))
+        assertTrue(promptBodies.isEmpty())
+    }
+
     @Test fun reviewAcceptedSendClearsDraftButRejectedDuplicateKeepsTheNextDraft() {
         vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
         vm.updateAgentDraft(AgentInputDraft("发送内容"))
@@ -397,7 +428,7 @@ class AgentRuntimeIntegrationTest {
                     val body = request.body.readUtf8()
                     val json = JsonParser.parseString(body).asJsonObject
                     val deciding = json["tool_choice"]?.asString == "required" ||
-                        json["messages"].asJsonArray.first().asJsonObject["content"].asString.contains("交互决策步骤")
+                        json["messages"].asJsonArray.first().asJsonObject["content"].asString.contains("【应用决策协议】")
                     if (deciding) decisionBodies += body else llmBodies += body
                     if (deciding && automaticDecisions)
                         nativeAction("continue_task", """{"summary":"本地模拟模型决定继续，后续响应由测试指定。"}""", "call-ready")
@@ -1220,11 +1251,13 @@ class AgentRuntimeIntegrationTest {
         val modelReference = request.firstOrNull {
             it.asJsonObject["content"].asString.contains("my-model.safetensors")
         }?.asJsonObject?.get("content")?.asString
-        println("NEGATIVE_MODEL_CONTEXT present=${modelReference != null} emptyAllowed=${system.contains("字段必填不等于内容必须非空")}")
+        println("NEGATIVE_MODEL_CONTEXT present=${modelReference != null} protocol=${system.contains("JSON 字段名固定")}")
         assertNotNull(modelReference)
         assertTrue(modelReference!!.contains("仅作事实参考"))
-        assertTrue(system.contains("字段必填不等于内容必须非空"))
-        assertFalse(system.contains("你需要主动编写完整 negative_prompt"))
+        assertTrue(system.contains("JSON 字段名固定"))
+        assertTrue(system.contains("空反向用空字符串"))
+        assertFalse(system.contains("ComfyPocket 内置人格"))
+        assertFalse(system.contains("Anima 内置分镜规则"))
         assertEquals("", submittedNegative())
     }
 

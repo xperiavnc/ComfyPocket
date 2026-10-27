@@ -77,59 +77,20 @@ class AgentSettingsFeedbackTest {
         assertEquals("已保存本地词库设置", ShadowToast.getTextOfLatestToast())
     }
 
-    @Test fun customPersonaAndDrawRulesSurviveTheOfflineMigration() {
-        vm.prefs.edit().putBoolean("agent_offline_prompt_migrated", false)
-            .putString("agent_system_prompt", "我的自定义人设")
-            .putString("agent_draw_prompt", "我的自定义正反向规则").commit()
-        assertEquals("我的自定义人设", MainViewModelAgent.loadAgentSystemPrompt(vm))
-        assertEquals("我的自定义正反向规则", MainViewModelAgent.loadAgentDrawPrompt(vm))
-    }
-
-    @Test fun exactPreviousDefaultsUpgradeAndKeepLocalCopies() {
-        val previous = javaClass.classLoader!!.getResourceAsStream("agent-previous-rules.json")!!.bufferedReader().use {
-            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject
-        }
-        for (field in listOf("draw", "drawBeforeNegative")) {
-            val old = previous[field].asString
-            vm.prefs.edit().putBoolean("agent_offline_prompt_migrated", false)
-                .putString("agent_draw_prompt", old).putString("agent_system_prompt", previous["persona"].asString).commit()
-            assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
-            assertEquals(MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT, MainViewModelAgent.loadAgentSystemPrompt(vm))
-            assertEquals(old, vm.prefs.getString("agent_offline_previous_agent_draw_prompt", null))
-        }
-    }
-
-    @Test fun newUserFirstDefaultsMigrateOnlyExactBuiltInsAndBackThemUp() {
-        val previous = javaClass.classLoader!!.getResourceAsStream("agent-pre-toolbox-rules.json")!!.bufferedReader().use {
-            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject
-        }
-        val oldPersona = previous["defaultPersona"].asString
-        val oldRules = previous["defaultDrawRules"].asString
-        vm.prefs.edit().putBoolean("agent_user_instruction_prompt_migrated", false)
-            .putString("agent_system_prompt", oldPersona).putString("agent_draw_prompt", oldRules).commit()
-        assertEquals(MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT, MainViewModelAgent.loadAgentSystemPrompt(vm))
-        assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
-        assertEquals(oldPersona, vm.prefs.getString("agent_user_instruction_previous_agent_system_prompt", null))
-        assertEquals(oldRules, vm.prefs.getString("agent_user_instruction_previous_agent_draw_prompt", null))
-        vm.prefs.edit().putBoolean("agent_user_instruction_prompt_migrated", false)
-            .putString("agent_system_prompt", "我自己改的人设")
-            .putString("agent_draw_prompt", "我自己改的分镜").commit()
-        assertEquals("我自己改的人设", MainViewModelAgent.loadAgentSystemPrompt(vm))
-        assertEquals("我自己改的分镜", MainViewModelAgent.loadAgentDrawPrompt(vm))
-    }
-
-    @Test fun negativeRulesUpgradeExactPreviousDefaultAndPreserveUserEdits() {
-        val previous = javaClass.classLoader!!.getResourceAsStream("agent-pre-negative-rules.json")!!.bufferedReader().use {
-            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject["defaultDrawRules"].asString
-        }
-        vm.prefs.edit().putBoolean("agent_negative_prompt_v1_migrated", false)
-            .putString("agent_draw_prompt", previous).commit()
-        assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
-        assertEquals(previous, vm.prefs.getString("agent_negative_previous_agent_draw_prompt", null))
-        vm.prefs.edit().putBoolean("agent_negative_prompt_v1_migrated", false)
-            .putString("agent_draw_prompt", "$previous\n我自己补充的规则").commit()
-        assertEquals("$previous\n我自己补充的规则", MainViewModelAgent.loadAgentDrawPrompt(vm))
-        assertEquals(previous, vm.prefs.getString("agent_negative_previous_agent_draw_prompt", null))
+    @Test fun rulesStartEmptyAndExplicitRemovalDoesNotRestoreAnyDefault() {
+        assertEquals("", vm.agentSystemPrompt.value)
+        assertEquals("", vm.agentDrawPrompt.value)
+        vm.setAgentSystemPrompt("USER_DIALOGUE")
+        vm.setAgentDrawPrompt("USER_DRAWING")
+        val settings = AgentLlmSettings.capture(vm)
+        vm.removeAgentRules(com.comfyui.mobile.agent.AgentRuleKind.DIALOGUE)
+        vm.removeAgentRules(com.comfyui.mobile.agent.AgentRuleKind.DRAWING)
+        assertEquals("", vm.agentSystemPrompt.value)
+        assertEquals("", vm.agentDrawPrompt.value)
+        assertEquals(com.comfyui.mobile.agent.AgentRuleFiles(),
+            com.comfyui.mobile.agent.AgentRuleFilesStore(vm.prefs).load())
+        assertEquals("USER_DIALOGUE", settings.persona)
+        assertEquals("USER_DRAWING", settings.drawRules)
     }
 
     @Test fun contextAndOutputLimitsPersistPerProfileAndRejectInvalidUpdates() {
@@ -146,16 +107,4 @@ class AgentSettingsFeedbackTest {
         assertEquals(first.generationLimits, vm.loadLlmProfiles().first { it.id == first.id }.generationLimits)
     }
 
-    @Test fun compositionUpgradeCopiesExactOldDefaultAndLeavesEditedRules() {
-        val previous = javaClass.classLoader!!.getResourceAsStream("agent-pre-composition-rules.json")!!.bufferedReader().use {
-            com.google.gson.JsonParser.parseString(it.readText()).asJsonObject["defaultDrawRules"].asString
-        }
-        vm.prefs.edit().putBoolean("agent_composition_prompt_v1_migrated", false)
-            .putString("agent_draw_prompt", previous).commit()
-        assertEquals(MainViewModel.DEFAULT_AGENT_DRAW_PROMPT, MainViewModelAgent.loadAgentDrawPrompt(vm))
-        assertEquals(previous, vm.prefs.getString("agent_composition_previous_agent_draw_prompt", null))
-        vm.prefs.edit().putBoolean("agent_composition_prompt_v1_migrated", false)
-            .putString("agent_draw_prompt", "$previous\n自定义").commit()
-        assertEquals("$previous\n自定义", MainViewModelAgent.loadAgentDrawPrompt(vm))
-    }
 }

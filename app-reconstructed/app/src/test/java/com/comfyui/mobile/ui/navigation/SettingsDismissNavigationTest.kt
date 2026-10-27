@@ -49,28 +49,28 @@ class SettingsDismissNavigationTest {
                 compose.onNodeWithTag("pocket-tab-2").performTouchInput { click() }
                 compose.onNodeWithContentDescription("Agent 设置").performTouchInput { click() }
                 compose.waitForIdle()
-                compose.onAllNodesWithText("编辑提示词")[0].performScrollTo().performTouchInput { click() }
+                compose.onNodeWithTag("agent-rules-system-view").performScrollTo().performTouchInput { click() }
                 compose.waitForIdle()
-                compose.onNodeWithText("编辑系统人设").assertIsDisplayed()
+                compose.onNodeWithText("查看对话规则").assertIsDisplayed()
                 compose.mainClock.autoAdvance = false
-                compose.onNodeWithText("取消").performTouchInput { click() }
+                compose.onNodeWithText("关闭").performTouchInput { click() }
                 compose.waitForIdle(); compose.mainClock.advanceTimeBy(80)
                 compose.runOnIdle { controller.get().onBackPressedDispatcher.onBackPressed() }
                 compose.waitForIdle()
                 compose.mainClock.advanceTimeBy(600)
                 compose.mainClock.autoAdvance = true; compose.waitForIdle()
-                compose.onNodeWithText("编辑系统人设").assertDoesNotExist()
+                compose.onNodeWithText("查看对话规则").assertDoesNotExist()
                 // The rapid second Back was consumed by the exiting dialog, not the settings route.
-                compose.onAllNodesWithText("编辑提示词").assertCountEquals(2)
+                compose.onNodeWithTag("agent-rules-system-view").assertExists()
                 assertEquals("本地回归人设：保留用户设置", vm.agentSystemPrompt.value)
                 assertEquals("本地回归规则：正反向提示词都保留", vm.agentDrawPrompt.value)
 
-                compose.onAllNodesWithText("恢复默认")[0].performScrollTo().performTouchInput { click() }
+                compose.onNodeWithTag("agent-rules-system-remove").performScrollTo().performTouchInput { click() }
                 compose.waitForIdle()
-                compose.onNodeWithText("恢复默认确认").assertIsDisplayed()
+                compose.onNodeWithText("移除对话规则").assertIsDisplayed()
                 compose.onNodeWithText("取消").performTouchInput { click() }
                 compose.waitForIdle()
-                compose.onNodeWithText("恢复默认确认").assertDoesNotExist()
+                compose.onNodeWithText("移除对话规则").assertDoesNotExist()
                 assertEquals("本地回归人设：保留用户设置", vm.agentSystemPrompt.value)
                 compose.runOnIdle { controller.get().onBackPressedDispatcher.onBackPressed() }
                 compose.waitForIdle()

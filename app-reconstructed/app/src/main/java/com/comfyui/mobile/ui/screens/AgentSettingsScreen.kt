@@ -83,8 +83,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     val llmProfiles by viewModel.llmProfiles.collectAsState()
     val currentLlmProfileId by viewModel.currentLlmProfileId.collectAsState()
     val currentLlmProfile by viewModel.currentLlmProfile.collectAsState()
-    val agentSystemPrompt by viewModel.agentSystemPrompt.collectAsState()
-    val agentDrawPrompt by viewModel.agentDrawPrompt.collectAsState()
+    val ruleFiles by viewModel.agentRuleFiles.collectAsState()
+    val importingRules by viewModel.agentRulesImporting.collectAsState()
     val tagSettings by viewModel.agentPromptSettings.collectAsState()
     val libraryState by viewModel.localTagLibraryState.collectAsState()
     val importLibrary = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -108,11 +108,6 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             ?: com.comfyui.mobile.agent.AgentGenerationLimits()))
     }
     var showPassword by remember { mutableStateOf(false) }
-
-    // 独立编辑对话框状态，彻底隔离超长文本与主界面滚动，杜绝滑动卡顿
-    var editDialogTarget by remember { mutableStateOf<PromptTarget?>(null) }
-    var draftPromptText by rememberSaveable { mutableStateOf("") }
-    var confirmResetTarget by remember { mutableStateOf<PromptTarget?>(null) }
 
     Scaffold(
         containerColor = scheme.background,
@@ -235,9 +230,9 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                         }
                                         if (label.contains("RunningHub")) {
                                             val isOverseas = label.contains("海外")
-                                            val matchedRh = rhServers.firstOrNull { 
-                                                if (isOverseas) it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.OVERSEAS_AI 
-                                                else it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.DOMESTIC_CN 
+                                            val matchedRh = rhServers.firstOrNull {
+                                                if (isOverseas) it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.OVERSEAS_AI
+                                                else it.effectiveRhSite == com.comfyui.mobile.model.RunningHubSite.DOMESTIC_CN
                                             } // same-site profile only; never borrow another site's key
                                             if (matchedRh != null && apiKey.isBlank()) {
                                                 apiKey = matchedRh.effectiveRhApiKey
@@ -344,38 +339,9 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 }
             }
 
-            Text("提示词", Modifier.padding(start = 4.dp, top = 8.dp),
-                style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
-
-            // 2. 系统人设提示词卡片（自然清爽的预览区，点击弹出全屏编辑，彻底解决滑动卡顿）
-            PromptCard(
-                title = "系统人设提示词",
-                description = "对话语气、回复风格与任务偏好",
-                promptContent = agentSystemPrompt,
-                defaultPrompt = MainViewModel.DEFAULT_AGENT_SYSTEM_PROMPT,
-                onEditClick = {
-                    draftPromptText = agentSystemPrompt
-                    editDialogTarget = PromptTarget.SYSTEM
-                },
-                onResetClick = {
-                    confirmResetTarget = PromptTarget.SYSTEM
-                }
-    )
-
-            // 3. 画图分镜提示词规则卡片
-            PromptCard(
-                title = "画图分镜规则",
-                description = "正向与反向提示词、画面编排及连续性",
-                promptContent = agentDrawPrompt,
-                defaultPrompt = MainViewModel.DEFAULT_AGENT_DRAW_PROMPT,
-                onEditClick = {
-                    draftPromptText = agentDrawPrompt
-                    editDialogTarget = PromptTarget.DRAW
-                },
-                onResetClick = {
-                    confirmResetTarget = PromptTarget.DRAW
-                }
-    )
+            com.comfyui.mobile.ui.screens.agent.AgentRuleFilesPanel(
+                files = ruleFiles, importing = importingRules,
+                onImport = viewModel::importAgentRules, onRemove = viewModel::removeAgentRules)
             Text("可选资源", Modifier.padding(start = 4.dp, top = 8.dp),
                 style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
             com.comfyui.mobile.ui.screens.agent.AgentLocalTagSettings(
@@ -385,177 +351,4 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
         }
     }
 
-    // 恢复默认二次确认弹窗，杜绝手滑误触导致自定义提示词瞬间丢失
-    confirmResetTarget?.let { target ->
-        val dismissal = rememberDialogDismiss { confirmResetTarget = null }
-        val isSystem = target == PromptTarget.SYSTEM
-        val targetTitle = if (isSystem) "系统人设提示词" else "画图分镜规则"
-        OverlayDialog(
-            show = dismissal.show,
-            modifier = dismissal.modifier,
-            title = "恢复默认确认",
-            onDismissRequest = dismissal::dismiss,
-            onDismissFinished = dismissal::onDismissFinished
-    ) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-                Text(
-                    text = "确定要将「$targetTitle」恢复为系统默认吗？\n当前自定义的内容将被清除覆盖，且无法撤销。",
-                    style = MiuixTheme.textStyles.body2,
-                    color = scheme.onSurface
-    )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-                    TextButton(
-                        modifier = Modifier.weight(1f),
-                        text = "取消",
-                        onClick = dismissal::dismiss
-    )
-                    Button(
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(),
-                        onClick = {
-                            if (!dismissal.show) return@Button
-                            if (isSystem) {
-                                viewModel.resetAgentSystemPrompt()
-                                viewModel.showUserMessage("已恢复默认人设")
-                            } else {
-                                viewModel.resetAgentDrawPrompt()
-                                viewModel.showUserMessage("已恢复默认画图规则")
-                            }
-                            dismissal.dismiss()
-                        }
-    ) {
-                        Text("确认恢复", color = scheme.error)
-                    }
-                }
-            }
-        }
-    }
-
-    // 独立富文本提示词编辑器弹窗
-    if (editDialogTarget != null) {
-        val dismissal = rememberDialogDismiss { editDialogTarget = null }
-        val target = editDialogTarget!!
-        val dialogTitle = if (target == PromptTarget.SYSTEM) "编辑系统人设" else "编辑画图规则"
-
-        OverlayDialog(
-            show = dismissal.show,
-            modifier = dismissal.modifier,
-            title = dialogTitle,
-            onDismissRequest = dismissal::dismiss,
-            onDismissFinished = dismissal::onDismissFinished
-    ) {
-            DialogFormColumn(
-                footer = {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-                        TextButton(
-                            modifier = Modifier.weight(1f),
-                            text = "取消",
-                            onClick = dismissal::dismiss
-    )
-                        TextButton(
-                            modifier = Modifier.weight(1f),
-                            text = "保存生效",
-                            colors = ButtonDefaults.textButtonColorsPrimary(),
-                            onClick = {
-                                if (!dismissal.show) return@TextButton
-                                val trimmed = draftPromptText.trim()
-                                if (trimmed.isEmpty()) {
-                                    viewModel.showUserMessage("提示词内容不能为空，如需恢复默认请使用「恢复默认」")
-                                    return@TextButton
-                                }
-                                if (target == PromptTarget.SYSTEM) {
-                                    viewModel.setAgentSystemPrompt(draftPromptText)
-                                } else {
-                                    viewModel.setAgentDrawPrompt(draftPromptText)
-                                }
-                                viewModel.showUserMessage("已保存提示词")
-                                dismissal.dismiss()
-                            }
-    )
-                    }
-                }
-    ) {
-                Text(
-                    text = "当前字数: ${draftPromptText.length}",
-                    fontSize = 12.sp,
-                    color = scheme.onSurfaceVariantSummary
-    )
-
-                // 独立滚动文本编辑容器
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 160.dp, max = 280.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(scheme.surfaceContainerHigh)
-                        .padding(12.dp)
-    ) {
-                    val editScrollState = rememberScrollState()
-                    BasicTextField(
-                        value = draftPromptText,
-                        onValueChange = { draftPromptText = it },
-                        textStyle = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 13.sp,
-                            color = scheme.onSurface,
-                            lineHeight = 18.sp
-    ),
-                        cursorBrush = SolidColor(scheme.primary),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(editScrollState)
-    )
-                }
-
-            }
-        }
-    }
-}
-
-private enum class PromptTarget {
-    SYSTEM, DRAW
-}
-
-@Composable
-private fun PromptCard(
-    title: String,
-    description: String,
-    promptContent: String,
-    defaultPrompt: String,
-    onEditClick: () -> Unit,
-    onResetClick: () -> Unit
-) {
-    val scheme = MiuixTheme.colorScheme
-    val customized = promptContent.trim() != defaultPrompt.trim()
-    Card(
-        modifier = Modifier.fillMaxWidth().testTag(if (title == "系统人设提示词") "agent-prompt-system" else "agent-prompt-draw")
-            .clickable(onClick = onEditClick),
-        insideMargin = PaddingValues(18.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(title, Modifier.weight(1f), style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)
-                Text(if (customized) "自定义" else "默认", style = MiuixTheme.textStyles.footnote2,
-                    color = if (customized) scheme.primary else scheme.onSurfaceVariantSummary)
-                Icon(MiuixIcons.Edit, contentDescription = "编辑$title", Modifier.size(18.dp), tint = scheme.onSurfaceVariantSummary)
-            }
-            Text(description, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
-            Text(promptContent.take(240), maxLines = 2, overflow = TextOverflow.Ellipsis,
-                style = MiuixTheme.textStyles.body2, color = scheme.onSurface)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton("编辑提示词", onClick = onEditClick,
-                    colors = ButtonDefaults.textButtonColorsPrimary())
-                if (customized) TextButton("恢复默认", onClick = onResetClick)
-            }
-        }
-    }
 }

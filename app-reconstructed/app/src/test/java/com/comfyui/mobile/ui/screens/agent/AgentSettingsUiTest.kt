@@ -96,14 +96,16 @@ class AgentSettingsUiTest {
             compose.onNodeWithText("未安装").assertExists()
             compose.onNodeWithTag("agent-local-tags-enabled").assertDoesNotExist()
             capture(controller.get(), "optional-pack-dark")
+            compose.runOnIdle { vm.setAgentSystemPrompt("USER_UPLOADED_RULES") }
             val before = vm.agentSystemPrompt.value
             compose.onNodeWithTag("agent-prompt-system").performScrollTo().performClick()
             compose.waitForIdle()
-            compose.onNodeWithText("编辑系统人设").assertExists()
-            compose.onNodeWithText("取消").performClick()
+            compose.onNodeWithText("查看对话规则").assertExists()
+            compose.onNodeWithText("关闭").performClick()
             compose.waitForIdle()
             assertEquals(before, vm.agentSystemPrompt.value)
-            compose.onNodeWithText("编辑系统人设").assertDoesNotExist()
+            compose.onNodeWithText("查看对话规则").assertDoesNotExist()
+            compose.onNodeWithText("恢复默认").assertDoesNotExist()
         } finally {
             store.clear()
             vm.repository.disconnect()
