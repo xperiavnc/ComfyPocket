@@ -1,0 +1,61 @@
+--- a/docs/design/agent-page-density.html
++++ b/docs/design/agent-page-density.html
+@@ -46,10 +46,10 @@
+               <button type="button" class="ad-send cursor-interaction" data-action="send" aria-label="发送消息"><i data-lucide="arrow-up" aria-hidden="true"></i></button>
+             </form>
+           </div>
+-          <nav class="ad-bottom-nav" aria-label="主要导航">
++          <nav class="ad-bottom-nav" aria-label="主要导航" data-navigation-style="classic">
+             <button type="button" class="cursor-interaction" data-action="nav" data-label="主页"><i data-lucide="house" aria-hidden="true"></i><span>主页</span></button>
+             <button type="button" class="cursor-interaction" data-action="nav" data-label="控制"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>控制</span></button>
+-            <button type="button" class="cursor-interaction ad-nav-active" data-action="nav" data-label="Agent" aria-current="page"><i data-lucide="bot" aria-hidden="true"></i><span>Agent</span></button>
++            <button type="button" class="cursor-interaction ad-nav-active" data-action="nav" data-label="Agent" aria-current="page"><i data-lucide="flower-2" aria-hidden="true"></i><span>Agent</span></button>
+             <button type="button" class="cursor-interaction" data-action="nav" data-label="应用"><i data-lucide="layout-grid" aria-hidden="true"></i><span>应用</span></button>
+             <button type="button" class="cursor-interaction" data-action="nav" data-label="画廊"><i data-lucide="images" aria-hidden="true"></i><span>画廊</span></button>
+           </nav>
+@@ -80,7 +80,7 @@
+             <div class="ad-compose-tools"><div class="ad-segment" role="group" aria-label="输入模式"><button type="button" class="cursor-interaction" data-input-mode="chat" aria-pressed="false">Chat</button><button type="button" class="cursor-interaction" data-input-mode="draw" aria-pressed="true">绘图</button></div><button type="button" class="ad-context cursor-interaction" data-action="context">dsh<i data-lucide="chevron-down" aria-hidden="true"></i></button><button type="button" class="ad-icon cursor-interaction" data-action="settings" aria-label="绘图设置"><i data-lucide="sliders-horizontal" aria-hidden="true"></i></button></div>
+             <form class="ad-composer" aria-label="输入下一条消息"><button type="button" class="ad-icon cursor-interaction" data-action="add" aria-label="添加内容"><i data-lucide="plus" aria-hidden="true"></i></button><label class="ad-input-label"><span class="ad-sr-only">消息</span><input type="text" name="message" placeholder="补充你的想法…" autocomplete="off"></label><button type="button" class="ad-send cursor-interaction" data-action="send" aria-label="发送消息"><i data-lucide="arrow-up" aria-hidden="true"></i></button></form>
+           </div>
+-          <nav class="ad-bottom-nav" aria-label="主要导航"><button type="button" class="cursor-interaction" data-action="nav" data-label="主页"><i data-lucide="house" aria-hidden="true"></i><span>主页</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="控制"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>控制</span></button><button type="button" class="cursor-interaction ad-nav-active" data-action="nav" data-label="Agent" aria-current="page"><i data-lucide="bot" aria-hidden="true"></i><span>Agent</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="应用"><i data-lucide="layout-grid" aria-hidden="true"></i><span>应用</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="画廊"><i data-lucide="images" aria-hidden="true"></i><span>画廊</span></button></nav>
++          <nav class="ad-bottom-nav" aria-label="主要导航" data-navigation-style="classic"><button type="button" class="cursor-interaction" data-action="nav" data-label="主页"><i data-lucide="house" aria-hidden="true"></i><span>主页</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="控制"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>控制</span></button><button type="button" class="cursor-interaction ad-nav-active" data-action="nav" data-label="Agent" aria-current="page"><i data-lucide="flower-2" aria-hidden="true"></i><span>Agent</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="应用"><i data-lucide="layout-grid" aria-hidden="true"></i><span>应用</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="画廊"><i data-lucide="images" aria-hidden="true"></i><span>画廊</span></button></nav>
+           <div class="ad-home-indicator" aria-hidden="true"><span></span></div>
+         </div>
+         <div class="ad-overlay" hidden></div>
+@@ -104,6 +104,9 @@
+     --ad-send-text:light-dark(#ffffff,#14223b);
+     --ad-success:light-dark(#267354,#8bd7b4);
+     --ad-danger:light-dark(#b33039,#ffadb4);
++    --ad-nav-surface:light-dark(#ffffff,#171d28);
++    --ad-nav-text:light-dark(#1a1d24,#e8eef7);
++    --ad-nav-accent:light-dark(#3b6fd9,#6b9eff);
+     --ad-radius:22px;
+     width:min(100%,400px); min-width:0; min-height:880px; border:1px solid var(--ad-line); border-radius:32px;
+     color:var(--ad-text); background:var(--ad-bg); position:relative; overflow:clip; isolation:isolate;
+@@ -177,11 +180,12 @@
+   #agent-density-preview .ad-composer input { background:transparent; color:var(--ad-text); width:100%; min-width:0; padding:10px 0; font:inherit; font-size:16px; border:0; }
+   #agent-density-preview .ad-composer input::placeholder { color:var(--ad-muted); opacity:1; }
+   #agent-density-preview .ad-send { width:48px; min-width:48px; border-radius:16px; background:var(--ad-send) !important; color:var(--ad-send-text) !important; }
+-  #agent-density-preview .ad-bottom-nav { border-top:1px solid var(--ad-line); padding:8px 11px 2px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:2px; background:var(--ad-bg); }
+-  #agent-density-preview .ad-bottom-nav > button { min-width:0; min-height:59px; flex-direction:column; gap:4px; color:var(--ad-muted); font-size:11px; position:relative; }
+-  #agent-density-preview .ad-bottom-nav .ad-nav-active { color:var(--ad-accent); }
+-  #agent-density-preview .ad-bottom-nav .ad-nav-active :is(svg,i[data-lucide]) { box-shadow:0 0 0 7px var(--ad-selected); border-radius:5px; background:var(--ad-selected); }
+-  #agent-density-preview .ad-bottom-nav :is(svg,i[data-lucide]) { width:21px; height:21px; }
++  /* Shared classic bottom bar: keep app chrome outside the content redesign. */
++  #agent-density-preview .ad-bottom-nav { width:max(248px,calc(100% - 88px)); max-width:calc(100% - 16px); height:52px; flex:none; align-self:center; margin:0 auto 4px; padding:0 4px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); border-radius:999px; background:var(--ad-nav-surface); box-shadow:0 4px 10px light-dark(#00000020,#00000033); }
++  #agent-density-preview .ad-bottom-nav > button { min-width:0; min-height:52px; flex-direction:column; gap:1px; color:var(--ad-nav-text); font-size:11px; position:relative; isolation:isolate; border-radius:999px; }
++  #agent-density-preview .ad-bottom-nav .ad-nav-active { color:var(--ad-nav-accent); font-weight:500; }
++  #agent-density-preview .ad-bottom-nav .ad-nav-active::before { content:""; position:absolute; inset:4px 0; z-index:-1; border-radius:999px; background:color-mix(in srgb,var(--ad-nav-accent) 22%,var(--ad-nav-surface)); }
++  #agent-density-preview .ad-bottom-nav :is(svg,i[data-lucide]) { width:20px; height:20px; }
+   #agent-density-preview .ad-home-indicator { height:17px; display:flex; align-items:center; justify-content:center; }
+   #agent-density-preview .ad-home-indicator > span { display:block; height:4px; width:100px; border-radius:4px; background:var(--ad-text); opacity:.65; }
+   #agent-density-preview .ad-local-message { color:var(--ad-muted); font-size:13px; overflow-wrap:anywhere; padding:8px 0; }
+@@ -265,7 +269,7 @@
+     "wifi":"◔", "signal":"▥", "battery":"▰", "chevron-down":"⌄",
+     "settings":"⚙", "ellipsis":"⋯", "maximize-2":"⤢",
+     "sliders-horizontal":"☷", "chevron-right":"›", "circle-check":"✓",
+-    "bot":"◇", "arrow-up-right":"↗", "plus":"+", "arrow-up":"↑",
++    "bot":"◇", "flower-2":"♧", "arrow-up-right":"↗", "plus":"+", "arrow-up":"↑",
+     "house":"⌂", "layout-grid":"▦", "images":"▧", "x":"×",
+     "message-circle":"◯", "messages-square":"▣", "trash-2":"⌫",
+     "check":"✓", "list":"☰", "chevron-left":"‹"
