@@ -1,0 +1,716 @@
+{
+  "executed_at_utc": "2026-10-27T09:58:16.624941+00:00",
+  "baseline_commit": "e63e1446646c30ba4c5459d9fe8b7bcabbdd930c",
+  "baseline_sha256": "dc8d1951bdc83ea569d9a0b883e9e796adc5e8d1dda7ff107c3eb9c96023044e",
+  "modified_sha256": "5ed4c28475b33147c82a2fad6204dd1b4ad4be4cddff4e6bcf3a581def8b8359",
+  "scope": "Browser harness with the installed host reporter's script-error classification; final conversation attachment must render in its host separately.",
+  "commands": [
+    {
+      "role": "baseline syntax",
+      "command": [
+        "node",
+        "--check"
+      ],
+      "stdin": "inline script extracted from the fragment",
+      "input_sha256": "845d9281158322c7a77d309ae1f3205a542c329a3fe12f41e5a9bcf80c183a3e",
+      "exit_status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "role": "modified syntax",
+      "command": [
+        "node",
+        "--check"
+      ],
+      "stdin": "inline script extracted from the fragment",
+      "input_sha256": "346e4999f34e32c83d560e8d1837c8235641b1554c01e78030b02dcf8d1e9c68",
+      "exit_status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "role": "blocked helpers baseline versus repaired",
+      "command": [
+        "npx.cmd",
+        "--yes",
+        "--package",
+        "@playwright/cli",
+        "playwright-cli",
+        "-s=agent-density-fixed",
+        "run-code",
+        "--filename",
+        "C:\\Users\\x\\Documents\\ChatGPT\\Android\\docs\\design\\agent-page-density.loading.check.js"
+      ],
+      "cwd": "C:\\Users\\x\\Documents\\ChatGPT\\Android\\output\\playwright",
+      "exit_status": 0,
+      "stdout": "### Result\n{\"status\":\"PASS\",\"scenario\":\"Fixture CSP blocks all three host-injected optional helper requests\",\"baseline\":{\"reports\":[{\"type\":\"resource\",\"message\":\"Visualization script could not be loaded\",\"source\":\"https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js\"},{\"type\":\"resource\",\"message\":\"Visualization script could not be loaded\",\"source\":\"https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js\"},{\"type\":\"resource\",\"message\":\"Visualization script could not be loaded\",\"source\":\"https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js\"}],\"resources\":[{\"source\":\"https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js\",\"hasOwnErrorHandler\":false},{\"source\":\"https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js\",\"hasOwnErrorHandler\":false},{\"source\":\"https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js\",\"hasOwnErrorHandler\":false}]},\"modified\":{\"reports\":[],\"resources\":[{\"source\":\"https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js\",\"hasOwnErrorHandler\":true},{\"source\":\"https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js\",\"hasOwnErrorHandler\":true},{\"source\":\"https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js\",\"hasOwnErrorHandler\":true}]},\"fallback\":{\"ready\":\"true\",\"helpers\":\"floating-core,floating-dom,lucide\",\"emptyIconCount\":0,\"hasSvgIcons\":false},\"negativeControls\":[{\"type\":\"resource\",\"message\":\"Visualization script could not be loaded\",\"source\":\"https://unpkg.com/agent-required-fixture.js\"},{\"type\":\"exception\",\"message\":\"agent-required-exception-fixture\"},{\"type\":\"rejection\",\"message\":\"agent-required-rejection-fixture\"}],\"scope\":\"Local harness reproduces the installed host error-reporting branch; final in-conversation rendering is emitted separately.\"}\n### Ran Playwright code\n```js\nawait (async (page) => {\n  const assert = (condition, message) => { if (!condition) throw new Error(message); };\n  // The fixture places a reporter before the fragment, matching the installed\n  // host's event-handler order. It records locally instead of calling host APIs.\n  // Baseline/candidate fixture CSP excludes the helpers' CDN, so each request\n  // fails deterministically with its original URL and the normal error event.\n  const readProbe = async () => {\n    const frame = page.frames().find((item) => item.parentFrame());\n    await frame.waitForFunction(() => document.readyState === \"complete\");\n    return { frame, probe:await frame.evaluate(() => window.__agentLoadingProbe) };\n  };\n  await page.goto(\"http://127.0.0.1:8771/baseline\");\n  const baseline = await readProbe();\n  assert(baseline.probe.resources.length === 3, `Baseline did not exercise all helper loads: ${JSON.stringify(baseline.probe)}`);\n  assert(baseline.probe.reports.filter((item) => item.type === \"resource\").length === 3, `Expected original load failure: ${JSON.stringify(baseline.probe)}`);\n  await page.goto(\"http://127.0.0.1:8771/candidate\");\n  const candidate = await readProbe();\n  const fallback = await candidate.frame.evaluate(() => {\n    const root = document.getElementById(\"agent-density-preview\");\n    return {\n      ready:root.dataset.previewReady,\n      helpers:root.dataset.optionalHelperFallback,\n      emptyIconCount:Array.from(root.querySelectorAll(\"i[data-lucide]\")).filter((icon) => !icon.textContent.trim()).length,\n      hasSvgIcons:root.querySelectorAll(\"svg[data-lucide]\").length > 0\n    };\n  });\n  assert(candidate.probe.resources.length === 3, `Candidate did not exercise all helper loads: ${JSON.stringify(candidate.probe)}`);\n  assert(candidate.probe.resources.every((item) => item.hasOwnErrorHandler), \"Optional helper lacks explicit rendering fallback\");\n  assert(!candidate.probe.reports.length, `Unexpected candidate report: ${JSON.stringify(candidate.probe)}`);\n  assert(fallback.ready === \"true\", \"Candidate did not finish initialization\");\n  assert(fallback.helpers === \"floating-core,floating-dom,lucide\", `Missing helper fallback state: ${JSON.stringify(fallback)}`);\n  assert(fallback.emptyIconCount === 0, `Empty controls remain: ${JSON.stringify(fallback)}`);\n  assert(!fallback.hasSvgIcons, \"Outage test unexpectedly loaded the icon library\");\n  await candidate.frame.locator('[data-design=\"generation\"]').screenshot({ path:\"agent-loading-offline.png\" });\n  // Negative control: an unknown required script must still reach the reporter.\n  await candidate.frame.evaluate(() => {\n    const script = document.createElement(\"script\");\n    script.src = \"https://unpkg.com/agent-required-fixture.js\";\n    document.body.appendChild(script);\n  });\n  await candidate.frame.waitForFunction(() => window.__agentLoadingProbe.reports.some((item) => item.source?.endsWith(\"/agent-required-fixture.js\")));\n  // A thrown application exception and an unhandled rejection must also remain\n  // visible; the repair never installs a blanket suppressor.\n  await candidate.frame.evaluate(() => {\n    const script = document.createElement(\"script\");\n    script.textContent = \"throw new Error('agent-required-exception-fixture')\";\n    document.body.appendChild(script);\n    Promise.reject(new Error(\"agent-required-rejection-fixture\"));\n  });\n  await candidate.frame.waitForFunction(() => window.__agentLoadingProbe.reports.some((item) => item.message === \"agent-required-rejection-fixture\"));\n  const critical = await candidate.frame.evaluate(() => window.__agentLoadingProbe.reports);\n  assert(critical.some((item) => item.type === \"resource\" && item.source.endsWith(\"/agent-required-fixture.js\")), \"Required script failure was hidden\");\n  assert(critical.some((item) => item.type === \"exception\" && item.message === \"agent-required-exception-fixture\"), \"Application exception was hidden\");\n  assert(critical.some((item) => item.type === \"rejection\" && item.message === \"agent-required-rejection-fixture\"), \"Unhandled rejection was hidden\");\n  await page.reload();\n  const fresh = await readProbe();\n  assert(!fresh.probe.reports.length, \"Fresh repaired preview produced a host error\");\n  return {\n    status:\"PASS\",\n    scenario:\"Fixture CSP blocks all three host-injected optional helper requests\",\n    baseline:baseline.probe,\n    modified:candidate.probe,\n    fallback,\n    negativeControls:critical,\n    scope:\"Local harness reproduces the installed host error-reporting branch; final in-conversation rendering is emitted separately.\"\n  };\n}\n)(page);\n```\n### Events\n- New console entries: .playwright-cli\\console-2026-10-27T09-55-17-388Z.log#L62-L110\n",
+      "stderr": "",
+      "result": {
+        "status": "PASS",
+        "scenario": "Fixture CSP blocks all three host-injected optional helper requests",
+        "baseline": {
+          "reports": [
+            {
+              "type": "resource",
+              "message": "Visualization script could not be loaded",
+              "source": "https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js"
+            },
+            {
+              "type": "resource",
+              "message": "Visualization script could not be loaded",
+              "source": "https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js"
+            },
+            {
+              "type": "resource",
+              "message": "Visualization script could not be loaded",
+              "source": "https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js"
+            }
+          ],
+          "resources": [
+            {
+              "source": "https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js",
+              "hasOwnErrorHandler": false
+            },
+            {
+              "source": "https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js",
+              "hasOwnErrorHandler": false
+            },
+            {
+              "source": "https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js",
+              "hasOwnErrorHandler": false
+            }
+          ]
+        },
+        "modified": {
+          "reports": [],
+          "resources": [
+            {
+              "source": "https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js",
+              "hasOwnErrorHandler": true
+            },
+            {
+              "source": "https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js",
+              "hasOwnErrorHandler": true
+            },
+            {
+              "source": "https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js",
+              "hasOwnErrorHandler": true
+            }
+          ]
+        },
+        "fallback": {
+          "ready": "true",
+          "helpers": "floating-core,floating-dom,lucide",
+          "emptyIconCount": 0,
+          "hasSvgIcons": false
+        },
+        "negativeControls": [
+          {
+            "type": "resource",
+            "message": "Visualization script could not be loaded",
+            "source": "https://unpkg.com/agent-required-fixture.js"
+          },
+          {
+            "type": "exception",
+            "message": "agent-required-exception-fixture"
+          },
+          {
+            "type": "rejection",
+            "message": "agent-required-rejection-fixture"
+          }
+        ],
+        "scope": "Local harness reproduces the installed host error-reporting branch; final in-conversation rendering is emitted separately."
+      }
+    },
+    {
+      "role": "blocked helpers layout and interaction regression",
+      "command": [
+        "npx.cmd",
+        "--yes",
+        "--package",
+        "@playwright/cli",
+        "playwright-cli",
+        "-s=agent-density-fixed",
+        "run-code",
+        "--filename",
+        "C:\\Users\\x\\Documents\\ChatGPT\\Android\\docs\\design\\agent-page-density.check.js"
+      ],
+      "cwd": "C:\\Users\\x\\Documents\\ChatGPT\\Android\\output\\playwright",
+      "exit_status": 0,
+      "stdout": "### Result\n{\"minimumTargetCssPx\":48,\"layouts\":[{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16}],\"interactions\":[{\"variant\":\"generation\",\"action\":\"negative details + 6 translations + inert + label + Escape + focus return\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"open/edit/save drawing settings\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"mode switch + image preview\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"send button + Enter + visible local status update\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"clear confirmation + cancel preserves + confirm clears local sample\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"negative details + 6 translations + inert + label + Escape + focus return\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"open/edit/save drawing settings\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"mode switch + image preview\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"send button + Enter + visible local status update\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"clear confirmation + cancel preserves + confirm clears local sample\",\"status\":\"PASS\"}],\"runtimeErrors\":[],\"sameCanvas\":{\"width\":400,\"heights\":[882,882,882,882],\"status\":\"PASS\"},\"status\":\"PASS\"}\n### Ran Playwright code\n```js\nawait (async (page) => {\n  const errors = [];\n  const onError = (error) => errors.push(error.message);\n  page.on(\"pageerror\", onError);\n  const frame = page.frames().find((item) => item.parentFrame());\n  const root = frame.locator(\"#agent-density-preview\");\n  const results = { minimumTargetCssPx:48, layouts:[], interactions:[], runtimeErrors:errors };\n  const assert = (condition, message) => { if (!condition) throw new Error(message); };\n  const inspect = async (phone, variant, theme, requestedWidth) => {\n    const result = await phone.evaluate((element) => {\n      const rect = element.getBoundingClientRect();\n      const buttons = Array.from(element.querySelectorAll(\"button\")).filter((button) => button.getClientRects().length);\n      const smallTargets = buttons.map((button) => {\n        const bounds = button.getBoundingClientRect();\n        return { label:button.getAttribute(\"aria-label\") || button.textContent.trim(), width:bounds.width, height:bounds.height };\n      }).filter((button) => button.width < 48 || button.height < 48);\n      const structuralSelectors = [\".ad-page\",\".ad-header\",\".ad-workspace-bar\",\".ad-main\",\".ad-settings-row\",\".ad-composer\",\".ad-bottom-nav\",\".ad-compose-tools\",\".ad-task-card\"];\n      const overflow = structuralSelectors.flatMap((selector) => Array.from(element.querySelectorAll(selector)).filter((node) => node.getClientRects().length && node.scrollWidth > node.clientWidth + 2).map(() => selector));\n      const outside = buttons.map((button) => {\n        const bounds = button.getBoundingClientRect();\n        return { label:button.getAttribute(\"aria-label\") || button.textContent.trim(), left:bounds.left, right:bounds.right, top:bounds.top, bottom:bounds.bottom };\n      }).filter((button) => button.left < rect.left - 1 || button.right > rect.right + 1 || button.top < rect.top - 1 || button.bottom > rect.bottom + 1);\n      const composer = element.querySelector(\".ad-composer\").getBoundingClientRect();\n      const nav = element.querySelector(\".ad-bottom-nav\").getBoundingClientRect();\n      return { width:rect.width, height:rect.height, smallTargets, overflow, outside, composerAboveNavigation:composer.bottom <= nav.top, visibleButtonCount:buttons.length };\n    });\n    const item = { variant, theme, requestedWidth, ...result };\n    results.layouts.push(item);\n    assert(Math.abs(result.width-requestedWidth)<1, `Viewport had not settled: ${JSON.stringify(item)}`);\n    assert(!result.smallTargets.length, `Small touch targets: ${JSON.stringify(item)}`);\n    assert(!result.overflow.length, `Horizontal overflow: ${JSON.stringify(item)}`);\n    assert(!result.outside.length, `Controls outside phone: ${JSON.stringify(item)}`);\n    assert(result.composerAboveNavigation, `Composer/nav overlap: ${JSON.stringify(item)}`);\n  };\n  for (const variant of [\"generation\",\"conversation\"]) {\n    if (variant === \"conversation\") await root.getByRole(\"button\", { name:\"下一个方案\", exact:true }).click();\n    const phone = frame.locator(`[data-design=\"${variant}\"]`);\n    await phone.waitFor({ state:\"visible\" });\n    for (const theme of [\"dark\",\"light\"]) {\n      await page.emulateMedia({ colorScheme:theme });\n      for (const [viewportWidth, requestedWidth] of [[352,320],[392,360],[768,400]]) {\n        await page.setViewportSize({ width:viewportWidth, height:1100 });\n        await frame.waitForFunction((width) => window.innerWidth === width, viewportWidth - 32);\n        await inspect(phone, variant, theme, requestedWidth);\n        if (viewportWidth === 768) await phone.screenshot({ path:`agent-${variant}-${theme}.png` });\n      }\n    }\n    await page.emulateMedia({ colorScheme:\"dark\" });\n    await page.setViewportSize({ width:768, height:1100 });\n    const negativeTrigger = phone.locator('[data-action=\"negative\"]').filter({ visible:true }).first();\n    await negativeTrigger.click();\n    const dialog = phone.locator('[role=\"dialog\"]');\n    assert(await dialog.isVisible(), `${variant}: missing negative detail`);\n    assert(await dialog.locator(\"dt\").count() === 6, `${variant}: translations lost`);\n    const modalState = await phone.evaluate((element) => {\n      const modal = element.querySelector('[role=\"dialog\"]');\n      const phoneRect = element.getBoundingClientRect(), modalRect = modal.getBoundingClientRect();\n      return {\n        inert:element.querySelector(\".ad-page\").inert,\n        named:!!document.getElementById(modal.getAttribute(\"aria-labelledby\")),\n        fits:modalRect.top >= phoneRect.top && modalRect.bottom <= phoneRect.bottom + 1\n      };\n    });\n    assert(modalState.inert && modalState.named && modalState.fits, `${variant}: modal invalid`);\n    await phone.screenshot({ path:`agent-${variant}-details-dark.png` });\n    await page.keyboard.press(\"Escape\");\n    assert(!await dialog.count(), `${variant}: Escape failed to close details`);\n    assert(await negativeTrigger.evaluate((button) => document.activeElement === button), `${variant}: focus not restored`);\n    results.interactions.push({ variant, action:\"negative details + 6 translations + inert + label + Escape + focus return\", status:\"PASS\" });\n    await phone.locator('[data-action=\"settings\"]').filter({ visible:true }).first().click();\n    await phone.locator('textarea[name=\"prompt\"]').fill(\"手指自然，保持原有构图。\");\n    await phone.getByRole(\"button\", { name:\"保存设置\", exact:true }).click();\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"已保存\"), `${variant}: settings not saved`);\n    results.interactions.push({ variant, action:\"open/edit/save drawing settings\", status:\"PASS\" });\n    if (variant === \"generation\") {\n      await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).click();\n      assert(await phone.locator(\".ad-chat-view\").isVisible(), \"Chat workspace not visible\");\n      await phone.getByRole(\"button\", { name:\"绘图\", exact:true }).click();\n      assert(await phone.locator(\".ad-draw-view\").isVisible(), \"Drawing workspace not restored\");\n      await phone.getByRole(\"button\", { name:\"放大查看预览示意图\", exact:true }).click();\n    } else {\n      await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).click();\n      assert(await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).getAttribute(\"aria-pressed\") === \"true\", \"Input mode did not change\");\n      await phone.getByRole(\"button\", { name:\"绘图\", exact:true }).click();\n      await phone.getByRole(\"button\", { name:\"查看预览\", exact:true }).click();\n    }\n    assert(await phone.locator('[data-panel=\"preview\"]').isVisible(), `${variant}: preview did not open`);\n    await phone.getByRole(\"button\", { name:\"关闭面板\", exact:true }).click();\n    results.interactions.push({ variant, action:\"mode switch + image preview\", status:\"PASS\" });\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).fill(\"保留构图，调整手部细节。\");\n    await phone.getByRole(\"button\", { name:\"发送消息\", exact:true }).click();\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"保留构图\"), `${variant}: send did not update visible state`);\n    assert(await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).inputValue() === \"\", `${variant}: message input not cleared`);\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).fill(\"回车发送验证\");\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).press(\"Enter\");\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"回车发送验证\"), `${variant}: Enter did not send`);\n    results.interactions.push({ variant, action:\"send button + Enter + visible local status update\", status:\"PASS\" });\n    await phone.getByRole(\"button\", { name:\"更多会话操作\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"清空当前对话\", exact:true }).click();\n    assert(await phone.getByRole(\"button\", { name:\"确认清空\", exact:true }).isVisible(), `${variant}: clear lacks confirmation`);\n    await phone.getByRole(\"button\", { name:\"保留对话\", exact:true }).click();\n    assert(await phone.locator(\".ad-user-message\").first().evaluate((node) => !node.hidden), `${variant}: cancel clear removed messages`);\n    await phone.getByRole(\"button\", { name:\"更多会话操作\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"清空当前对话\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"确认清空\", exact:true }).click();\n    assert(await phone.locator(\".ad-user-message\").first().evaluate((node) => node.hidden), `${variant}: confirm clear did not clear messages`);\n    results.interactions.push({ variant, action:\"clear confirmation + cancel preserves + confirm clears local sample\", status:\"PASS\" });\n  }\n  const heights = results.layouts.filter((item) => item.width === 400).map((item) => item.height);\n  assert(Math.max(...heights)-Math.min(...heights) < 1, `Variants use different canvas heights: ${JSON.stringify(heights)}`);\n  assert(!errors.length, `Runtime errors: ${JSON.stringify(errors)}`);\n  results.sameCanvas = { width:400, heights, status:\"PASS\" };\n  results.status = \"PASS\";\n  await page.reload();\n  await page.emulateMedia({ colorScheme:\"dark\" });\n  page.off(\"pageerror\", onError);\n  return results;\n}\n)(page);\n```\n### Events\n- New console entries: .playwright-cli\\console-2026-10-27T09-55-17-388Z.log#L111-L122\n",
+      "stderr": "",
+      "result": {
+        "minimumTargetCssPx": 48,
+        "layouts": [
+          {
+            "variant": "generation",
+            "theme": "dark",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "dark",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "dark",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "light",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "light",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "light",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "dark",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "dark",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "dark",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "light",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "light",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "light",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          }
+        ],
+        "interactions": [
+          {
+            "variant": "generation",
+            "action": "negative details + 6 translations + inert + label + Escape + focus return",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "open/edit/save drawing settings",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "mode switch + image preview",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "send button + Enter + visible local status update",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "clear confirmation + cancel preserves + confirm clears local sample",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "negative details + 6 translations + inert + label + Escape + focus return",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "open/edit/save drawing settings",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "mode switch + image preview",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "send button + Enter + visible local status update",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "clear confirmation + cancel preserves + confirm clears local sample",
+            "status": "PASS"
+          }
+        ],
+        "runtimeErrors": [],
+        "sameCanvas": {
+          "width": 400,
+          "heights": [
+            882,
+            882,
+            882,
+            882
+          ],
+          "status": "PASS"
+        },
+        "status": "PASS"
+      }
+    },
+    {
+      "role": "navigate to repaired current fragment with normal CDN allowlist",
+      "command": [
+        "npx.cmd",
+        "--yes",
+        "--package",
+        "@playwright/cli",
+        "playwright-cli",
+        "-s=agent-density-fixed",
+        "goto",
+        "http://127.0.0.1:8771/current"
+      ],
+      "cwd": "C:\\Users\\x\\Documents\\ChatGPT\\Android\\output\\playwright",
+      "exit_status": 0,
+      "stdout": "### Ran Playwright code\n```js\nawait page.goto('http://127.0.0.1:8771/current');\n```\n### Page\n- Page URL: http://127.0.0.1:8771/current\n- Page Title: Agent Page Density\n### Snapshot\n- [Snapshot](.playwright-cli\\page-2026-10-27T09-58-24-757Z.yml)\n",
+      "stderr": ""
+    },
+    {
+      "role": "normal network layout and interaction regression",
+      "command": [
+        "npx.cmd",
+        "--yes",
+        "--package",
+        "@playwright/cli",
+        "playwright-cli",
+        "-s=agent-density-fixed",
+        "run-code",
+        "--filename",
+        "C:\\Users\\x\\Documents\\ChatGPT\\Android\\docs\\design\\agent-page-density.check.js"
+      ],
+      "cwd": "C:\\Users\\x\\Documents\\ChatGPT\\Android\\output\\playwright",
+      "exit_status": 0,
+      "stdout": "### Result\n{\"minimumTargetCssPx\":48,\"layouts\":[{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16}],\"interactions\":[{\"variant\":\"generation\",\"action\":\"negative details + 6 translations + inert + label + Escape + focus return\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"open/edit/save drawing settings\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"mode switch + image preview\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"send button + Enter + visible local status update\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"clear confirmation + cancel preserves + confirm clears local sample\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"negative details + 6 translations + inert + label + Escape + focus return\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"open/edit/save drawing settings\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"mode switch + image preview\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"send button + Enter + visible local status update\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"clear confirmation + cancel preserves + confirm clears local sample\",\"status\":\"PASS\"}],\"runtimeErrors\":[],\"sameCanvas\":{\"width\":400,\"heights\":[882,882,882,882],\"status\":\"PASS\"},\"status\":\"PASS\"}\n### Ran Playwright code\n```js\nawait (async (page) => {\n  const errors = [];\n  const onError = (error) => errors.push(error.message);\n  page.on(\"pageerror\", onError);\n  const frame = page.frames().find((item) => item.parentFrame());\n  const root = frame.locator(\"#agent-density-preview\");\n  const results = { minimumTargetCssPx:48, layouts:[], interactions:[], runtimeErrors:errors };\n  const assert = (condition, message) => { if (!condition) throw new Error(message); };\n  const inspect = async (phone, variant, theme, requestedWidth) => {\n    const result = await phone.evaluate((element) => {\n      const rect = element.getBoundingClientRect();\n      const buttons = Array.from(element.querySelectorAll(\"button\")).filter((button) => button.getClientRects().length);\n      const smallTargets = buttons.map((button) => {\n        const bounds = button.getBoundingClientRect();\n        return { label:button.getAttribute(\"aria-label\") || button.textContent.trim(), width:bounds.width, height:bounds.height };\n      }).filter((button) => button.width < 48 || button.height < 48);\n      const structuralSelectors = [\".ad-page\",\".ad-header\",\".ad-workspace-bar\",\".ad-main\",\".ad-settings-row\",\".ad-composer\",\".ad-bottom-nav\",\".ad-compose-tools\",\".ad-task-card\"];\n      const overflow = structuralSelectors.flatMap((selector) => Array.from(element.querySelectorAll(selector)).filter((node) => node.getClientRects().length && node.scrollWidth > node.clientWidth + 2).map(() => selector));\n      const outside = buttons.map((button) => {\n        const bounds = button.getBoundingClientRect();\n        return { label:button.getAttribute(\"aria-label\") || button.textContent.trim(), left:bounds.left, right:bounds.right, top:bounds.top, bottom:bounds.bottom };\n      }).filter((button) => button.left < rect.left - 1 || button.right > rect.right + 1 || button.top < rect.top - 1 || button.bottom > rect.bottom + 1);\n      const composer = element.querySelector(\".ad-composer\").getBoundingClientRect();\n      const nav = element.querySelector(\".ad-bottom-nav\").getBoundingClientRect();\n      return { width:rect.width, height:rect.height, smallTargets, overflow, outside, composerAboveNavigation:composer.bottom <= nav.top, visibleButtonCount:buttons.length };\n    });\n    const item = { variant, theme, requestedWidth, ...result };\n    results.layouts.push(item);\n    assert(Math.abs(result.width-requestedWidth)<1, `Viewport had not settled: ${JSON.stringify(item)}`);\n    assert(!result.smallTargets.length, `Small touch targets: ${JSON.stringify(item)}`);\n    assert(!result.overflow.length, `Horizontal overflow: ${JSON.stringify(item)}`);\n    assert(!result.outside.length, `Controls outside phone: ${JSON.stringify(item)}`);\n    assert(result.composerAboveNavigation, `Composer/nav overlap: ${JSON.stringify(item)}`);\n  };\n  for (const variant of [\"generation\",\"conversation\"]) {\n    if (variant === \"conversation\") await root.getByRole(\"button\", { name:\"下一个方案\", exact:true }).click();\n    const phone = frame.locator(`[data-design=\"${variant}\"]`);\n    await phone.waitFor({ state:\"visible\" });\n    for (const theme of [\"dark\",\"light\"]) {\n      await page.emulateMedia({ colorScheme:theme });\n      for (const [viewportWidth, requestedWidth] of [[352,320],[392,360],[768,400]]) {\n        await page.setViewportSize({ width:viewportWidth, height:1100 });\n        await frame.waitForFunction((width) => window.innerWidth === width, viewportWidth - 32);\n        await inspect(phone, variant, theme, requestedWidth);\n        if (viewportWidth === 768) await phone.screenshot({ path:`agent-${variant}-${theme}.png` });\n      }\n    }\n    await page.emulateMedia({ colorScheme:\"dark\" });\n    await page.setViewportSize({ width:768, height:1100 });\n    const negativeTrigger = phone.locator('[data-action=\"negative\"]').filter({ visible:true }).first();\n    await negativeTrigger.click();\n    const dialog = phone.locator('[role=\"dialog\"]');\n    assert(await dialog.isVisible(), `${variant}: missing negative detail`);\n    assert(await dialog.locator(\"dt\").count() === 6, `${variant}: translations lost`);\n    const modalState = await phone.evaluate((element) => {\n      const modal = element.querySelector('[role=\"dialog\"]');\n      const phoneRect = element.getBoundingClientRect(), modalRect = modal.getBoundingClientRect();\n      return {\n        inert:element.querySelector(\".ad-page\").inert,\n        named:!!document.getElementById(modal.getAttribute(\"aria-labelledby\")),\n        fits:modalRect.top >= phoneRect.top && modalRect.bottom <= phoneRect.bottom + 1\n      };\n    });\n    assert(modalState.inert && modalState.named && modalState.fits, `${variant}: modal invalid`);\n    await phone.screenshot({ path:`agent-${variant}-details-dark.png` });\n    await page.keyboard.press(\"Escape\");\n    assert(!await dialog.count(), `${variant}: Escape failed to close details`);\n    assert(await negativeTrigger.evaluate((button) => document.activeElement === button), `${variant}: focus not restored`);\n    results.interactions.push({ variant, action:\"negative details + 6 translations + inert + label + Escape + focus return\", status:\"PASS\" });\n    await phone.locator('[data-action=\"settings\"]').filter({ visible:true }).first().click();\n    await phone.locator('textarea[name=\"prompt\"]').fill(\"手指自然，保持原有构图。\");\n    await phone.getByRole(\"button\", { name:\"保存设置\", exact:true }).click();\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"已保存\"), `${variant}: settings not saved`);\n    results.interactions.push({ variant, action:\"open/edit/save drawing settings\", status:\"PASS\" });\n    if (variant === \"generation\") {\n      await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).click();\n      assert(await phone.locator(\".ad-chat-view\").isVisible(), \"Chat workspace not visible\");\n      await phone.getByRole(\"button\", { name:\"绘图\", exact:true }).click();\n      assert(await phone.locator(\".ad-draw-view\").isVisible(), \"Drawing workspace not restored\");\n      await phone.getByRole(\"button\", { name:\"放大查看预览示意图\", exact:true }).click();\n    } else {\n      await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).click();\n      assert(await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).getAttribute(\"aria-pressed\") === \"true\", \"Input mode did not change\");\n      await phone.getByRole(\"button\", { name:\"绘图\", exact:true }).click();\n      await phone.getByRole(\"button\", { name:\"查看预览\", exact:true }).click();\n    }\n    assert(await phone.locator('[data-panel=\"preview\"]').isVisible(), `${variant}: preview did not open`);\n    await phone.getByRole(\"button\", { name:\"关闭面板\", exact:true }).click();\n    results.interactions.push({ variant, action:\"mode switch + image preview\", status:\"PASS\" });\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).fill(\"保留构图，调整手部细节。\");\n    await phone.getByRole(\"button\", { name:\"发送消息\", exact:true }).click();\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"保留构图\"), `${variant}: send did not update visible state`);\n    assert(await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).inputValue() === \"\", `${variant}: message input not cleared`);\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).fill(\"回车发送验证\");\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).press(\"Enter\");\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"回车发送验证\"), `${variant}: Enter did not send`);\n    results.interactions.push({ variant, action:\"send button + Enter + visible local status update\", status:\"PASS\" });\n    await phone.getByRole(\"button\", { name:\"更多会话操作\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"清空当前对话\", exact:true }).click();\n    assert(await phone.getByRole(\"button\", { name:\"确认清空\", exact:true }).isVisible(), `${variant}: clear lacks confirmation`);\n    await phone.getByRole(\"button\", { name:\"保留对话\", exact:true }).click();\n    assert(await phone.locator(\".ad-user-message\").first().evaluate((node) => !node.hidden), `${variant}: cancel clear removed messages`);\n    await phone.getByRole(\"button\", { name:\"更多会话操作\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"清空当前对话\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"确认清空\", exact:true }).click();\n    assert(await phone.locator(\".ad-user-message\").first().evaluate((node) => node.hidden), `${variant}: confirm clear did not clear messages`);\n    results.interactions.push({ variant, action:\"clear confirmation + cancel preserves + confirm clears local sample\", status:\"PASS\" });\n  }\n  const heights = results.layouts.filter((item) => item.width === 400).map((item) => item.height);\n  assert(Math.max(...heights)-Math.min(...heights) < 1, `Variants use different canvas heights: ${JSON.stringify(heights)}`);\n  assert(!errors.length, `Runtime errors: ${JSON.stringify(errors)}`);\n  results.sameCanvas = { width:400, heights, status:\"PASS\" };\n  results.status = \"PASS\";\n  await page.reload();\n  await page.emulateMedia({ colorScheme:\"dark\" });\n  page.off(\"pageerror\", onError);\n  return results;\n}\n)(page);\n```\n",
+      "stderr": "",
+      "result": {
+        "minimumTargetCssPx": 48,
+        "layouts": [
+          {
+            "variant": "generation",
+            "theme": "dark",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "dark",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "dark",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "light",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "light",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "generation",
+            "theme": "light",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "dark",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "dark",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "dark",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "light",
+            "requestedWidth": 320,
+            "width": 320,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "light",
+            "requestedWidth": 360,
+            "width": 360,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          },
+          {
+            "variant": "conversation",
+            "theme": "light",
+            "requestedWidth": 400,
+            "width": 400,
+            "height": 882,
+            "smallTargets": [],
+            "overflow": [],
+            "outside": [],
+            "composerAboveNavigation": true,
+            "visibleButtonCount": 16
+          }
+        ],
+        "interactions": [
+          {
+            "variant": "generation",
+            "action": "negative details + 6 translations + inert + label + Escape + focus return",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "open/edit/save drawing settings",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "mode switch + image preview",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "send button + Enter + visible local status update",
+            "status": "PASS"
+          },
+          {
+            "variant": "generation",
+            "action": "clear confirmation + cancel preserves + confirm clears local sample",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "negative details + 6 translations + inert + label + Escape + focus return",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "open/edit/save drawing settings",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "mode switch + image preview",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "send button + Enter + visible local status update",
+            "status": "PASS"
+          },
+          {
+            "variant": "conversation",
+            "action": "clear confirmation + cancel preserves + confirm clears local sample",
+            "status": "PASS"
+          }
+        ],
+        "runtimeErrors": [],
+        "sameCanvas": {
+          "width": 400,
+          "heights": [
+            882,
+            882,
+            882,
+            882
+          ],
+          "status": "PASS"
+        },
+        "status": "PASS"
+      }
+    },
+    {
+      "role": "normal network host reporter and rendered icon state",
+      "command": [
+        "npx.cmd",
+        "--yes",
+        "--package",
+        "@playwright/cli",
+        "playwright-cli",
+        "-s=agent-density-fixed",
+        "run-code",
+        "--filename",
+        "C:\\Users\\x\\.codex\\visualizations\\2026\\10\\27\\01a17c38-accc-7c70-bfc9-c1b6ba29f551\\repair\\inspect-online.js"
+      ],
+      "cwd": "C:\\Users\\x\\Documents\\ChatGPT\\Android\\output\\playwright",
+      "exit_status": 0,
+      "stdout": "### Result\n{\"status\":\"PASS\",\"previewReady\":\"true\",\"optionalFallback\":\"\",\"svgIconCount\":45,\"emptyIconCount\":0,\"reports\":[]}\n### Ran Playwright code\n```js\nawait (async (page) => {\n  const frame = page.frames().find((item) => item.parentFrame());\n  await frame.waitForFunction(() => document.readyState === \"complete\");\n  return frame.evaluate(() => {\n    const root = document.getElementById(\"agent-density-preview\");\n    return {\n      status:window.__agentLoadingProbe.reports.length ? \"FAIL\" : \"PASS\",\n      previewReady:root.dataset.previewReady,\n      optionalFallback:root.dataset.optionalHelperFallback || \"\",\n      svgIconCount:root.querySelectorAll(\"svg\").length,\n      emptyIconCount:Array.from(root.querySelectorAll(\"i[data-lucide]\")).filter((icon) => !icon.textContent.trim()).length,\n      reports:window.__agentLoadingProbe.reports\n    };\n  });\n}\n)(page);\n```\n",
+      "stderr": "",
+      "result": {
+        "status": "PASS",
+        "previewReady": "true",
+        "optionalFallback": "",
+        "svgIconCount": 45,
+        "emptyIconCount": 0,
+        "reports": []
+      }
+    }
+  ],
+  "status": "PASS",
+  "summary": {
+    "blocked_baseline_resource_errors": 3,
+    "blocked_modified_resource_errors": 0,
+    "blocked_modified_empty_icons": 0,
+    "critical_error_negative_controls": 3,
+    "responsive_theme_cases": 24,
+    "interaction_groups": 20,
+    "normal_network": {
+      "status": "PASS",
+      "previewReady": "true",
+      "optionalFallback": "",
+      "svgIconCount": 45,
+      "emptyIconCount": 0,
+      "reports": []
+    }
+  },
+  "artifact_checks": [
+    {
+      "role": "diff check against original copy",
+      "command": [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "apply",
+        "--check",
+        "C:\\Users\\x\\Documents\\ChatGPT\\Android\\docs\\design\\agent-page-density-loading.patch"
+      ],
+      "cwd": "C:\\Users\\x\\.codex\\visualizations\\2026\\10\\27\\01a17c38-accc-7c70-bfc9-c1b6ba29f551\\repair\\patch-test",
+      "exit_status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "role": "execute diff against original copy",
+      "command": [
+        "git",
+        "-c",
+        "core.autocrlf=false",
+        "apply",
+        "C:\\Users\\x\\Documents\\ChatGPT\\Android\\docs\\design\\agent-page-density-loading.patch"
+      ],
+      "cwd": "C:\\Users\\x\\.codex\\visualizations\\2026\\10\\27\\01a17c38-accc-7c70-bfc9-c1b6ba29f551\\repair\\patch-test",
+      "exit_status": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "role": "patched artifact",
+      "sha256": "5ed4c28475b33147c82a2fad6204dd1b4ad4be4cddff4e6bcf3a581def8b8359",
+      "matches_modified": true
+    },
+    {
+      "role": "execute rollback on patched copy",
+      "command": [
+        "python",
+        "C:\\Users\\x\\Documents\\ChatGPT\\Android\\docs\\design\\agent-page-density.rollback.py",
+        "--target",
+        "C:\\Users\\x\\.codex\\visualizations\\2026\\10\\27\\01a17c38-accc-7c70-bfc9-c1b6ba29f551\\repair\\patch-test\\docs\\design\\agent-page-density.html",
+        "--apply"
+      ],
+      "cwd": "C:\\Users\\x\\Documents\\ChatGPT\\Android",
+      "exit_status": 0,
+      "stdout": "Current SHA256: 5ed4c28475b33147c82a2fad6204dd1b4ad4be4cddff4e6bcf3a581def8b8359\nRollback SHA256: dc8d1951bdc83ea569d9a0b883e9e796adc5e8d1dda7ff107c3eb9c96023044e\nRollback verified\n",
+      "stderr": ""
+    },
+    {
+      "role": "rolled-back artifact",
+      "sha256": "dc8d1951bdc83ea569d9a0b883e9e796adc5e8d1dda7ff107c3eb9c96023044e",
+      "matches_baseline": true
+    }
+  ],
+  "qa": {
+    "visual_review": [
+      "normal generation dark",
+      "blocked generation dark",
+      "blocked conversation dark"
+    ],
+    "source_bytes": 43794,
+    "patch_sha256": "6c79e5e2c67736059b81bacf84f324324a8856fa0ecf662cde8740fa7f2f2d04",
+    "rollback_sha256": "6c8e9a0c50d8b30b8ada939c9fa7bb1639f1dcc3bd118cf239b3fd88072631e5",
+    "loading_check_sha256": "010cbd003b4078818a079523fcb5188d7ce68293e06bc995ddb1f5d62101167d",
+    "network_or_console_errors_under_deliberate_csp_block": "Expected; optional fallback handles resource failures while critical negative controls remain reportable."
+  }
+}

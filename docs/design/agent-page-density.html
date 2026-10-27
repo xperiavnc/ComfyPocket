@@ -116,25 +116,26 @@
   #agent-density-preview .ad-phone button:focus-visible { outline:2px solid var(--ad-accent); outline-offset:2px; }
   #agent-density-preview .ad-phone button:hover { filter:brightness(1.08); }
   #agent-density-preview .ad-phone button:disabled { opacity:.5; }
-  #agent-density-preview .ad-phone svg { width:20px; height:20px; flex:none; stroke-width:1.8; }
+  #agent-density-preview .ad-phone :is(svg,i[data-lucide]) { width:20px; height:20px; flex:none; stroke-width:1.8; }
+  #agent-density-preview .ad-phone i[data-lucide] { display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-size:20px; line-height:1; }
   #agent-density-preview .ad-phone strong { font-weight:500; }
   #agent-density-preview .ad-page { min-height:880px; display:flex; flex-direction:column; }
   #agent-density-preview .ad-system { padding:13px 22px 7px; display:flex; justify-content:space-between; align-items:center; font-size:12px; min-height:37px; font-weight:500; }
   #agent-density-preview .ad-system-icons { display:flex; gap:6px; align-items:center; }
-  #agent-density-preview .ad-system-icons svg { width:14px; height:14px; }
+  #agent-density-preview .ad-system-icons :is(svg,i[data-lucide]) { width:14px; height:14px; font-size:12px; }
   #agent-density-preview .ad-header { padding:3px 16px 6px 20px; display:flex; align-items:center; justify-content:space-between; gap:4px; min-height:62px; }
   #agent-density-preview .ad-header-actions { display:flex; align-items:center; flex:none; }
   #agent-density-preview .ad-heading { display:flex; align-items:center; min-width:0; gap:12px; }
   #agent-density-preview .ad-heading > strong { font-size:23px; letter-spacing:-.5px; }
   #agent-density-preview .ad-session { color:var(--ad-muted); }
-  #agent-density-preview .ad-session svg { width:14px; }
+  #agent-density-preview .ad-session :is(svg,i[data-lucide]) { width:14px; }
   #agent-density-preview .ad-icon { width:48px; min-width:48px; border-radius:16px; }
   #agent-density-preview .ad-workspace-bar { display:flex; align-items:center; justify-content:space-between; padding:0 20px 10px; gap:8px; }
   #agent-density-preview .ad-segment { display:flex; padding:3px; gap:2px; background:var(--ad-surface); border-radius:15px; min-width:0; }
   #agent-density-preview .ad-segment button { padding:0 19px; border-radius:12px; min-height:48px; color:var(--ad-muted); }
   #agent-density-preview .ad-segment button[aria-pressed="true"] { color:var(--ad-text); background:var(--ad-selected); font-weight:500; }
   #agent-density-preview .ad-context { padding:0 7px; color:var(--ad-muted); min-width:60px; }
-  #agent-density-preview .ad-context svg { width:14px; }
+  #agent-density-preview .ad-context :is(svg,i[data-lucide]) { width:14px; }
   #agent-density-preview .ad-main { padding:0 20px; flex:1; min-width:0; }
   #agent-density-preview .ad-draw-view { display:flex; flex-direction:column; gap:0; }
   #agent-density-preview .ad-picture { width:100%; aspect-ratio:1.18; position:relative; overflow:hidden; border-radius:var(--ad-radius); min-height:0 !important; display:block !important; }
@@ -161,14 +162,14 @@
   #agent-density-preview .ad-settings-icon { display:flex; align-items:center; justify-content:center; width:34px; height:40px; color:var(--ad-muted); flex:none; }
   #agent-density-preview .ad-settings-row > span:nth-child(2) { min-width:0; display:flex; flex-direction:column; gap:2px; flex:1; }
   #agent-density-preview .ad-settings-row small { color:var(--ad-muted); font-size:12px; overflow-wrap:anywhere; }
-  #agent-density-preview .ad-settings-row > svg { color:var(--ad-muted); width:16px; }
+  #agent-density-preview .ad-settings-row > :is(svg,i[data-lucide]) { color:var(--ad-muted); width:16px; }
   #agent-density-preview .ad-update-row { width:100%; padding:15px 0 !important; gap:9px !important; justify-content:flex-start !important; }
-  #agent-density-preview .ad-update-row > svg { width:18px; color:var(--ad-success); align-self:flex-start; margin-top:3px; }
+  #agent-density-preview .ad-update-row > :is(svg,i[data-lucide]) { width:18px; color:var(--ad-success); align-self:flex-start; margin-top:3px; }
   #agent-density-preview .ad-update-row > span:nth-child(2) { display:flex; flex-direction:column; flex:1; min-width:0; gap:2px; }
   #agent-density-preview .ad-update-row strong { font-size:13px; }
   #agent-density-preview .ad-update-row small { font-size:12px; color:var(--ad-muted); }
   #agent-density-preview .ad-link { display:flex; align-items:center; gap:1px; color:var(--ad-accent); font-size:12px; min-height:48px; }
-  #agent-density-preview .ad-link svg { width:14px; }
+  #agent-density-preview .ad-link :is(svg,i[data-lucide]) { width:14px; }
   #agent-density-preview .ad-compose-area { padding:8px 16px 14px; }
   #agent-density-preview .ad-composer { display:flex; align-items:center; gap:4px; background:var(--ad-surface); border:1px solid var(--ad-line); border-radius:21px; padding:5px; margin:0; }
   #agent-density-preview .ad-composer .ad-icon { color:var(--ad-muted); }
@@ -179,8 +180,8 @@
   #agent-density-preview .ad-bottom-nav { border-top:1px solid var(--ad-line); padding:8px 11px 2px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:2px; background:var(--ad-bg); }
   #agent-density-preview .ad-bottom-nav > button { min-width:0; min-height:59px; flex-direction:column; gap:4px; color:var(--ad-muted); font-size:11px; position:relative; }
   #agent-density-preview .ad-bottom-nav .ad-nav-active { color:var(--ad-accent); }
-  #agent-density-preview .ad-bottom-nav .ad-nav-active svg { box-shadow:0 0 0 7px var(--ad-selected); border-radius:5px; background:var(--ad-selected); }
-  #agent-density-preview .ad-bottom-nav svg { width:21px; height:21px; }
+  #agent-density-preview .ad-bottom-nav .ad-nav-active :is(svg,i[data-lucide]) { box-shadow:0 0 0 7px var(--ad-selected); border-radius:5px; background:var(--ad-selected); }
+  #agent-density-preview .ad-bottom-nav :is(svg,i[data-lucide]) { width:21px; height:21px; }
   #agent-density-preview .ad-home-indicator { height:17px; display:flex; align-items:center; justify-content:center; }
   #agent-density-preview .ad-home-indicator > span { display:block; height:4px; width:100px; border-radius:4px; background:var(--ad-text); opacity:.65; }
   #agent-density-preview .ad-local-message { color:var(--ad-muted); font-size:13px; overflow-wrap:anywhere; padding:8px 0; }
@@ -189,18 +190,18 @@
   #agent-density-preview .ad-agent-message { display:flex; gap:10px; align-items:flex-start; }
   #agent-density-preview .ad-agent-message > div { flex:1; min-width:0; }
   #agent-density-preview .ad-avatar { display:flex; width:31px; height:31px; flex:none; align-items:center; justify-content:center; border-radius:11px; color:var(--ad-accent); background:var(--ad-surface-two); }
-  #agent-density-preview .ad-avatar svg { width:18px; }
+  #agent-density-preview .ad-avatar :is(svg,i[data-lucide]) { width:18px; }
   #agent-density-preview .ad-agent-message p { margin:7px 0 2px; color:var(--ad-text); }
   #agent-density-preview .ad-agent-message strong { font-size:12px; color:var(--ad-muted); }
   #agent-density-preview .ad-inline-button { color:var(--ad-muted) !important; font-size:12px !important; gap:5px !important; }
-  #agent-density-preview .ad-inline-button svg { width:14px; }
-  #agent-density-preview .ad-inline-button svg:first-child { color:var(--ad-success); }
+  #agent-density-preview .ad-inline-button :is(svg,i[data-lucide]) { width:14px; }
+  #agent-density-preview .ad-inline-button :is(svg,i[data-lucide]):first-child { color:var(--ad-success); }
   #agent-density-preview .ad-inline-job { margin:20px 0 0 41px; display:flex; gap:14px; align-items:center; padding:12px; border-radius:18px; background:var(--ad-surface); }
   #agent-density-preview .ad-thumb { width:80px; height:94px; border-radius:12px; flex:none; }
   #agent-density-preview .ad-inline-job > div:last-child { min-width:0; flex:1; }
   #agent-density-preview .ad-inline-job small { display:block; color:var(--ad-muted); font-size:12px; margin:4px 0 9px; }
   #agent-density-preview .ad-text-button { font-size:12px !important; color:var(--ad-accent) !important; }
-  #agent-density-preview .ad-text-button svg { width:14px; }
+  #agent-density-preview .ad-text-button :is(svg,i[data-lucide]) { width:14px; }
   #agent-density-preview .ad-conversation-main { padding-top:9px; }
   #agent-density-preview .ad-date-divider { text-align:center; color:var(--ad-muted); font-size:11px; padding:9px 0 10px; }
   #agent-density-preview .ad-conversation .ad-user-message { margin:12px 0 27px auto; }
@@ -250,6 +251,58 @@
 <script>
 (() => {
   const root = document.getElementById("agent-density-preview");
+  if (!root) return;
+  // These optional helpers are appended by the visualization host, not this file.
+  // Give only these exact resources an explicit offline rendering path. Other
+  // script errors and application exceptions remain visible to the host reporter.
+  const optionalHelpers = new Map([
+    ["https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js", "floating-core"],
+    ["https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js", "floating-dom"],
+    ["https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js", "lucide"]
+  ]);
+  const missingHelpers = new Set();
+  const iconText = {
+    "wifi":"◔", "signal":"▥", "battery":"▰", "chevron-down":"⌄",
+    "settings":"⚙", "ellipsis":"⋯", "maximize-2":"⤢",
+    "sliders-horizontal":"☷", "chevron-right":"›", "circle-check":"✓",
+    "bot":"◇", "arrow-up-right":"↗", "plus":"+", "arrow-up":"↑",
+    "house":"⌂", "layout-grid":"▦", "images":"▧", "x":"×",
+    "message-circle":"◯", "messages-square":"▣", "trash-2":"⌫",
+    "check":"✓", "list":"☰", "chevron-left":"‹"
+  };
+  function renderTextIcons() {
+    root.querySelectorAll("i[data-lucide]").forEach((icon) => {
+      const glyph = iconText[icon.dataset.lucide];
+      if (glyph && !icon.textContent) icon.textContent = glyph;
+    });
+  }
+  function handleOptionalScript(script) {
+    if (!(script instanceof HTMLScriptElement)) return;
+    const helper = optionalHelpers.get(script.src);
+    if (!helper || typeof script.onerror === "function") return;
+    // No tooltips are used by this preview. If the host's tooltip library fails,
+    // nothing essential is lost; icon placeholders retain readable text glyphs.
+    script.onerror = () => {
+      missingHelpers.add(helper);
+      root.dataset.optionalHelperFallback = Array.from(missingHelpers).sort().join(",");
+      renderTextIcons();
+    };
+  }
+  const helperObserver = new MutationObserver((records) => {
+    records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        handleOptionalScript(node);
+        node.querySelectorAll("script[src]").forEach(handleOptionalScript);
+      });
+    });
+    renderTextIcons();
+  });
+  // Install before the parser encounters the host-injected optional resources.
+  helperObserver.observe(document, { childList:true, subtree:true });
+  document.querySelectorAll("script[src]").forEach(handleOptionalScript);
+  renderTextIcons();
+  window.addEventListener("pagehide", () => helperObserver.disconnect(), { once:true });
   const phones = Array.from(root.querySelectorAll(".ad-phone"));
   const translations = [
     ["bad hands", "手部画得差"],
@@ -288,7 +341,8 @@
     if (window.openai?.setWidgetState) window.openai.setWidgetState({ modelContent:{ preview:"Agent 页面密度优化", variants:["生成优先","对话优先"] }, privateContent }).catch(() => {});
   };
   const refreshIcons = () => {
-    if (globalThis.lucide) globalThis.lucide.createIcons({ attrs:{ width:20, height:20 } });
+    renderTextIcons();
+    if (typeof globalThis.lucide?.createIcons === "function") globalThis.lucide.createIcons({ attrs:{ width:20, height:20 } });
   };
   function applyWorkspace(phone, workspace) {
     phoneState.get(phone).workspace = workspace;
@@ -435,5 +489,6 @@
     tweak.addSelect(design, "appearance", { label:"外观", options:[{label:"跟随系统",value:"system"},{label:"深色",value:"dark"},{label:"浅色",value:"light"}] });
     tweak.addSlider(design, "radius", { label:"内容圆角", min:12, max:28, step:2, unit:"px" });
   }
+  root.dataset.previewReady = "true";
 })();
 </script>
