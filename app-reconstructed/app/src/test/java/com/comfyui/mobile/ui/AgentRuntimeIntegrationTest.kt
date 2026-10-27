@@ -211,6 +211,171 @@ class AgentRuntimeIntegrationTest {
         println("ORIGINAL_PROFILE actual=${graphText()}")
     }
 
+    @Test fun reviewBlankEditDoesNotGuessClothesOrSubmitTheOldImage() {
+        responses += success("""{"action":"draw","reply":"好了","prompt":"cat, red scarf","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画一只猫")
+        awaitDone()
+        responses += success("""{"action":"draw","reply":"换好了","prompt":"","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("去掉红围巾，换成蓝色外套")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat, red scarf", graphText())
+    }
+
+    @Test fun reviewDrawingActuallyReceivesTheAttachedTextDocument() {
+        val file = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "scene.txt").apply {
+            writeText("SCENE_REFERENCE_782: a cat beside a blue ceramic vase")
+        }
+        vm._agentPendingAttachments.value = listOf(AgentAttachment(
+            "reference", "file", file.toURI().toString(), file.name, file.length(), textContent = file.readText()))
+        responses += success("""{"action":"apply_prompt","reply":"好了","prompt":"cat, blue vase","negative_prompt":"","should_draw":false}""")
+        vm.sendAgentMessage("参考附件写提示词，先别出图")
+        awaitDone()
+        assertTrue(decisionBodies.single().contains("SCENE_REFERENCE_782"))
+        assertTrue(llmBodies.single().contains("SCENE_REFERENCE_782"))
+        assertTrue(promptBodies.isEmpty())
+    }
+
+    @Test fun reviewAcceptedSendClearsDraftButRejectedDuplicateKeepsTheNextDraft() {
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
+        vm.updateAgentDraft(AgentInputDraft("发送内容"))
+        responses += blocked("partial")
+        assertTrue(vm.sendAgentMessage("发送内容"))
+        assertEquals("", vm.agentInputDraft.value.text)
+        vm.updateAgentDraft(AgentInputDraft("下一条尚未发送"))
+        assertFalse(vm.sendAgentMessage("下一条尚未发送"))
+        assertEquals("下一条尚未发送", vm.agentInputDraft.value.text)
+        vm.stopAgentGeneration()
+        awaitDone()
+    }
+
+    @Test fun reviewOmittedNegativeChecksThePreservedAutoBoundValueBeforeApplying() {
+        withNegativeWorkflow()
+        val file = File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json")
+        file.writeText(file.readText().replace("template_embedding, (blurry:1.2)", "cat"))
+        responses += success("""{"action":"draw","reply":"好了","prompt":"cat","should_draw":true}""")
+        vm.sendAgentMessage("画一只猫")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("before", graphText())
+        assertTrue(promptBodies.isEmpty())
+    }
+
+    @Test fun reviewFailedAnswerCanRetryTheSameQuestionWithItsOriginalTask() {
+        responses += success(askThree)
+        vm.sendAgentMessage("画星澜，保留蓝色外套")
+        awaitDone()
+        val question = vm.agentMessages.value.last()
+        responses += MockResponse().setResponseCode(503).setBody("""{"error":{"message":"fixture unavailable"}}""")
+        assertTrue(vm.answerAgentQuestions(question.id, threeAnswers))
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(question.id, com.comfyui.mobile.agent.AgentQuestionPolicy.pending(vm.agentMessages.value)?.id)
+        responses += success("""{"action":"apply_prompt","reply":"好了","prompt":"blue coat, rain","negative_prompt":"","should_draw":false}""")
+        vm.updateAgentDraft(AgentInputDraft("另一条还没发送的草稿"))
+        assertTrue(vm.answerAgentQuestions(question.id, threeAnswers))
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("另一条还没发送的草稿", vm.agentInputDraft.value.text)
+        assertTrue(llmBodies.last().contains("画星澜，保留蓝色外套"))
+        assertTrue(promptBodies.isEmpty())
+        assertNull(com.comfyui.mobile.agent.AgentQuestionPolicy.pending(vm.agentMessages.value))
+    }
+
+    @Test fun reviewBlankApplyPromptFailsWithoutChangingTheWorkflow() {
+        responses += success("""{"action":"apply_prompt","reply":"改好了","prompt":"","should_draw":false}""")
+        vm.sendAgentMessage("只要提示词，给猫加一条蓝围巾")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(promptBodies.isEmpty())
+        assertNull(vm.agentWorkflow)
+        assertEquals("", vm.agentPromptOutput.value.positive)
+    }
+
+    @Test fun reviewDocumentAddedWhileAnsweringSurvivesAnotherFollowupQuestion() {
+        responses += success(askThree)
+        vm.sendAgentMessage("画星澜，背景稍后确认")
+        awaitDone()
+        val first = vm.agentMessages.value.last()
+        val file = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "extra-reference.txt")
+            .apply { writeText("FOLLOWUP_DOCUMENT_613") }
+        vm._agentPendingAttachments.value = listOf(AgentAttachment(
+            "extra-reference", "file", file.toURI().toString(), file.name, textContent = file.readText()))
+        responses += success("""{"action":"ask_user","questions":[{"id":"light","prompt":"选择光线","kind":"free_text"}]}""")
+        assertTrue(vm.answerAgentQuestions(first.id, threeAnswers))
+        awaitDone()
+        val next = vm.agentMessages.value.last()
+        responses += success("""{"action":"apply_prompt","reply":"好","prompt":"portrait, rain","negative_prompt":"","should_draw":false}""")
+        assertTrue(vm.answerAgentQuestions(next.id, listOf(AgentQuestionAnswer("light", text = "晨光"))))
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        val lastRequest = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
+            .last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asString
+        assertTrue(lastRequest.contains("FOLLOWUP_DOCUMENT_613"))
+        assertTrue(lastRequest.contains("画星澜，背景稍后确认"))
+        assertTrue(lastRequest.contains("晨光"))
+        assertTrue(promptBodies.isEmpty())
+    }
+
+    @Test fun reviewNativeQuestionRetrySurvivesRestartAndKeepsItsInvocationAndDocument() {
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
+        val profile = vm.llmProfiles.value.first()
+        // AndroidKeyStore is not emulated by this fixture; only its test key is injected.
+        vm.addOrUpdateLlmProfile(profile.copy(baseUrl = server.url("/v1").toString(),
+            apiKey = "", model = "fixture-model"))
+        vm._llmApiKey.value = "fixture-key"
+        val file = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "reference.txt")
+            .apply { writeText("TASK_REFERENCE_925") }
+        vm._agentPendingAttachments.value = listOf(AgentAttachment(
+            "reference-925", "file", file.toURI().toString(), file.name, textContent = file.readText()))
+        automaticDecisions = false
+        responses += nativeAction("ask_user_question",
+            """{"questions":[{"id":"choice","question":"选哪项？","options":[{"id":"a","label":"第一项"},{"id":"b","label":"第二项"}]}]}""",
+            "retry-native-call")
+        vm.sendAgentMessage("参考附件比较两个方案")
+        awaitDone()
+        val question = vm.agentMessages.value.last()
+        val answers = listOf(AgentQuestionAnswer("choice", listOf("b")))
+        responses += MockResponse().setResponseCode(503).setBody("""{"error":{"message":"fixture unavailable"}}""")
+        assertTrue(vm.answerAgentQuestions(question.id, answers))
+        awaitDone()
+        assertEquals(question.id, com.comfyui.mobile.agent.AgentQuestionPolicy.pending(vm.agentMessages.value)?.id)
+        store.clear()
+        kotlinx.coroutines.runBlocking { vm.agentWorkspace.awaitClosed() }
+        vm.repository.disconnect()
+        vm = MainViewModel(app)
+        store = ViewModelStore().apply { put("agent", vm) }
+        pumpUntil { vm.agentWorkspace.ready }
+        vm._llmApiKey.value = "fixture-key"
+        assertEquals(question.id, com.comfyui.mobile.agent.AgentQuestionPolicy.pending(vm.agentMessages.value)?.id)
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        automaticDecisions = true
+        responses += success("比较结果：第二项")
+        assertTrue(vm.answerAgentQuestions(question.id, answers))
+        awaitDone()
+        assertEquals(vm.agentMessages.value.last().toString(), AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        val request = JsonParser.parseString(decisionBodies.last()).asJsonObject["messages"].asJsonArray
+        assertTrue(request.toString().contains("TASK_REFERENCE_925"))
+        assertTrue(request.any { it.asJsonObject["tool_call_id"]?.asString == "retry-native-call" })
+        assertTrue(promptBodies.isEmpty())
+    }
+
+    @Test fun reviewQuestionIsNotReopenedAfterAWorkflowExecutionFailure() {
+        responses += success(askThree)
+        vm.sendAgentMessage("画星澜")
+        awaitDone()
+        val question = vm.agentMessages.value.last()
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").delete()
+        responses += success("""{"action":"draw","reply":"开始","prompt":"portrait","negative_prompt":"","should_draw":true}""")
+        assertTrue(vm.answerAgentQuestions(question.id, threeAnswers))
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertNull(com.comfyui.mobile.agent.AgentQuestionPolicy.pending(vm.agentMessages.value))
+        assertFalse(vm.answerAgentQuestions(question.id, threeAnswers))
+        assertTrue(promptBodies.isEmpty())
+    }
+
     private fun event(text: String) = "data: " + gson.toJson(mapOf(
         "choices" to listOf(mapOf("delta" to mapOf("content" to text)))
     )) + "\n\n"

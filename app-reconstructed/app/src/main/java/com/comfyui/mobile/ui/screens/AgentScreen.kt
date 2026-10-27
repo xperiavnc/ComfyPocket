@@ -143,9 +143,10 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val input = TextFieldValue(draft.text, TextRange(
         draft.selectionStart.coerceIn(0, draft.text.length), draft.selectionEnd.coerceIn(0, draft.text.length)))
     var pickerOwner by rememberSaveable(stateSaver = Saver<AgentAttachmentOwner?, List<Any>>(
-        save = { owner -> owner?.let { listOf(it.conversationId.orEmpty(), it.scope, it.epoch, it.ticket, it.mayCreate) } },
+        save = { owner -> owner?.let { listOf(it.conversationId.orEmpty(), it.scope, it.epoch, it.ticket, it.mayCreate,
+            it.attachmentGeneration) } },
         restore = { AgentAttachmentOwner((it[0] as String).ifEmpty { null }, it[1] as String,
-            it[2] as Long, it[3] as Long, it[4] as Boolean) }
+            it[2] as Long, it[3] as Long, it[4] as Boolean, it.getOrNull(5) as? Long ?: 0L) }
     )) { mutableStateOf<AgentAttachmentOwner?>(null) }
 
     val agentImagePickerLauncher = rememberLauncherForActivityResult(
@@ -435,8 +436,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 },
                 onSendMessage = { text ->
                     viewModel.sendAgentMessage(text)
-                    if (storageStatus.writable && viewModel.agentReferenceWarning() == null)
-                        viewModel.updateAgentDraft(draft.copy(text = "", selectionStart = 0, selectionEnd = 0))
                 }
     )
         }

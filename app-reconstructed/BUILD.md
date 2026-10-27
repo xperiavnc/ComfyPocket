@@ -28,9 +28,11 @@
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.49-agent-sessions`，版本号为 `51`。显示名 **ComfyPocket**；
+当前构建版本名为 `0.0.50-agent-fixes`，版本号为 `52`。显示名 **ComfyPocket**；
 模型中心的手机直连资料 / 代理预览与详情说明见 `MODEL_CENTER.md`，Agent 见 `AGENT.md`，
 在线画廊见 `DANBOORU_GALLERY_PLAN.md`，底栏与动画说明见 `MATERIAL.md`。
+本批 Agent 复查的 125 个测试类 / 951 项全部通过，0 失败 / 错误 / 跳过；
+八项改前失败的状态/执行复现改后通过，Debug 构建及 APK 版本、签名和 ZIP 检查通过。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 

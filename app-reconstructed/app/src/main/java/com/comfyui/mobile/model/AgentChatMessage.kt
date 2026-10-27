@@ -72,6 +72,8 @@ data class AgentChatMessage(
     val clarificationAnswer: AgentClarificationAnswer? = null,
     val positiveAliases: List<com.comfyui.mobile.agent.AgentPromptAlias>? = null,
     val negativeAliases: List<com.comfyui.mobile.agent.AgentPromptAlias>? = null,
+    /** Retry only a failed question continuation that has not produced an actionable reply. */
+    val retryClarificationId: String? = null,
     /** Transient progress label; cleared at every terminal state. */
     val activity: String? = null
     )

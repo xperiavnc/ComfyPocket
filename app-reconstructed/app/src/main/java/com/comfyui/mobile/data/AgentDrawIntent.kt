@@ -1,8 +1,8 @@
 package com.comfyui.mobile.data
 
 /**
- * Draw-mode intent + prompt recovery for edit turns (换装 etc.).
- * Recall only an explicit visual edit; a model pause must remain a pause.
+ * Draw-mode intent for edit turns.
+ * A model pause must remain a pause; missing output never reuses a prior prompt.
  * Pure Kotlin — unit-testable.
  */
 object AgentDrawIntent {
@@ -54,13 +54,6 @@ object AgentDrawIntent {
             "怎么用|怎麼用|如何使用|你能做什么|你能做什麼|帮助|幫助|说明一下|說明一下)"
     )
 
-    data class PromptRecovery(
-        val prompt: String,
-        /** True when we reused / patched last prompt because parse yielded nothing usable. */
-        val recoveredFromLast: Boolean,
-        val reason: String
-    )
-
     fun isExplicitVeto(userText: String): Boolean {
         val t = userText.trim()
         if (t.isEmpty()) return false
@@ -108,60 +101,6 @@ object AgentDrawIntent {
         val t = userText.trim()
         if (t.isEmpty() || isExplicitVeto(t)) return false
         return suggestsDraw(t) || looksLikeVisualPrompt(t)
-    }
-
-    /**
-     * When the LLM returns chat-only / Chinese-only "prompt" that sanitizes to empty,
-     * reuse the last English tags and append a light English outfit hint from the user text.
-     */
-    fun recoverPromptIfNeeded(
-        parsedPrompt: String,
-        userText: String,
-        lastPrompt: String
-    ): PromptRecovery {
-        val parsed = parsedPrompt.trim()
-        if (parsed.isNotEmpty()) {
-            return PromptRecovery(parsed, recoveredFromLast = false, reason = "parsed")
-        }
-        if (isExplicitVeto(userText)) {
-            return PromptRecovery("", recoveredFromLast = false, reason = "veto")
-        }
-        val last = lastPrompt.trim()
-        if (last.isEmpty()) {
-            return PromptRecovery("", recoveredFromLast = false, reason = "no_last_prompt")
-        }
-        // Missing prompts in questions or general conversation must not resurrect an old render.
-        if (!looksLikeEditRequest(userText)) {
-            return PromptRecovery("", recoveredFromLast = false, reason = "not_visual_edit")
-        }
-        val merged = appendEditHints(last, userText)
-        return PromptRecovery(merged, recoveredFromLast = true, reason = "recovered_last_prompt")
-    }
-
-    /** Append coarse English outfit hints so a blank LLM edit still changes the render a bit. */
-    fun appendEditHints(lastPrompt: String, userText: String): String {
-        val t = userText
-        val hints = mutableListOf<String>()
-        fun has(vararg keys: String) = keys.any { t.contains(it, ignoreCase = true) }
-        when {
-            has("泳装", "泳裝", "比基尼") -> hints.addAll(listOf("swimsuit", "bikini"))
-            has("校服") -> hints.add("school uniform")
-            has("连衣裙", "連身裙", "洋装", "洋裝") -> hints.add("dress")
-            has("旗袍") -> hints.add("china dress")
-            has("和服", "浴衣") -> hints.add("kimono")
-            has("西装", "西裝") -> hints.add("suit")
-            has("婚纱", "婚紗") -> hints.add("wedding dress")
-            has("睡衣", "睡袍") -> hints.add("pajamas")
-            has("盔甲", "铠甲", "鎧甲") -> hints.add("armor")
-            has("换装", "換裝", "换服装", "換服裝", "换个服装", "換個服裝",
-                "换衣服", "換衣服", "换个衣服", "換個衣服", "换一身", "换一套", "换衣") ->
-                hints.addAll(listOf("different outfit", "change of clothes"))
-        }
-        if (hints.isEmpty()) return lastPrompt.trim().trimEnd(',')
-        val base = lastPrompt.trim().trimEnd(',')
-        val extra = hints.filter { h -> !base.contains(h, ignoreCase = true) }
-        if (extra.isEmpty()) return base
-        return "$base, ${extra.joinToString(", ")}"
     }
 
     fun resolveShouldDraw(

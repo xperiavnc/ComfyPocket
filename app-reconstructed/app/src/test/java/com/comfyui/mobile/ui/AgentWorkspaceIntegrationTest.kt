@@ -389,6 +389,72 @@ class AgentWorkspaceIntegrationTest {
         assertEquals(listOf("saved A", "unsaved A"), vm.agentMessages.value.map { it.content })
     }
 
+    @Test fun reviewDeletingTheGlobalDefaultDoesNotBreakEveryNewSession() {
+        val default = vm.llmProfiles.value.first()
+        val replacement = default.copy(id = "replacement", name = "剩余配置")
+        vm.addOrUpdateLlmProfile(replacement, selectAfterSave = false)
+        vm.prefs.edit().putString("current_llm_profile_id", default.id).commit()
+        vm.deleteLlmProfile(default.id)
+        flush()
+        fresh("新任务")
+        assertNull(vm.agentReferenceWarning())
+        assertEquals(replacement.id, vm.currentLlmProfileId.value)
+        assertEquals(replacement.id, vm.activeAgentConversation.value!!.llmProfileId)
+    }
+
+    @Test fun reviewDeletingAnotherSessionKeepsTheActiveConfigurationAndRequestWritable() {
+        message("a", "A")
+        flush()
+        val other = database { repo, _ -> repo.createConversation("local", "B").id }
+        val owner = vm.captureAgentConfigurationOwner()
+        val turn = vm.agentSession.begin("active-a")!!
+        vm.requestDeleteAgentConversation(other)
+        pump { vm.agentConversationDeleteInfo.value != null }
+        vm.deleteAgentConversation(other)
+        assertEquals(AgentStorageMode.ROOM, vm.agentStorageStatus.value.mode)
+        flush()
+        assertTrue(vm.isCurrentAgentConfiguration(owner))
+        assertTrue(vm.agentSession.isCurrent(turn))
+        assertNull(database { repo, _ -> repo.conversation(other) })
+        vm.stopAgentGeneration()
+    }
+
+    @Test fun reviewResetChatRejectsAnOlderPickerEvenAfterReturningToTheSession() {
+        message("a", "A")
+        flush()
+        val a = vm.agentWorkspace.conversationId!!
+        val old = vm.captureAgentAttachmentOwner()!!
+        vm.clearAgentChat()
+        flush()
+        fresh("B")
+        vm.updateAgentDraft(AgentInputDraft("B 草稿"))
+        flush()
+        open(a)
+        val source = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "before-reset.txt").apply {
+            writeText("discard this old selection")
+        }
+        io { vm.agentWorkspace.addAttachments(old,
+            listOf(AgentAttachment("old-picker", "file", source.toURI().toString(), source.name, source.length()))) }
+        flush()
+        assertTrue(vm.agentPendingAttachments.value.isEmpty())
+        assertFalse(source.exists())
+        stop()
+        start()
+        assertEquals("", vm.agentInputDraft.value.text)
+        assertEquals("", vm.agentPromptOutput.value.positive)
+        val afterRestart = File(vm.agentWorkspace.importsDirectory.apply { mkdirs() }, "old-after-restart.txt")
+            .apply { writeText("stale callback") }
+        io { vm.agentWorkspace.addAttachments(old, listOf(AgentAttachment(
+            "stale-restored", "file", afterRestart.toURI().toString(), afterRestart.name))) }
+        assertTrue(vm.agentPendingAttachments.value.isEmpty())
+        assertFalse(afterRestart.exists())
+        val current = vm.captureAgentAttachmentOwner()!!
+        val valid = File(vm.agentWorkspace.importsDirectory, "new-after-reset.txt").apply { writeText("new selection") }
+        io { vm.agentWorkspace.addAttachments(current, listOf(AgentAttachment(
+            "fresh", "file", valid.toURI().toString(), valid.name))) }
+        assertEquals(listOf("fresh"), vm.agentPendingAttachments.value.map { it.id })
+    }
+
     private fun rewritePackage(file: File, transform: (String, ByteArray) -> ByteArray): ByteArray {
         val entries = linkedMapOf<String, ByteArray>()
         java.util.zip.GZIPInputStream(file.readBytes().drop(11).toByteArray().inputStream()).use { gzip ->

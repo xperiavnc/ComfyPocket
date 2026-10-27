@@ -45,6 +45,29 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 class AgentClarificationUiTest {
     @get:Rule val compose = createEmptyComposeRule()
 
+    @Test fun failedContinuationReenablesTheSameFormAndPreservesThePreviousSelection() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val enabled = mutableStateOf(true)
+        val sent = mutableListOf<List<AgentQuestionAnswer>>()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply {
+                setContent { MiuixTheme {
+                    AgentQuestionForm("retry", listOf(AgentUserQuestion("outfit", "选哪套？", "multiple_choice",
+                        listOf(AgentQuestionOption("a", "常服"), AgentQuestionOption("b", "礼服")))),
+                        enabled.value, { sent += it; enabled.value = false; true }, {})
+                } }
+            })
+            compose.onNodeWithTag("agent-question-outfit-option-b").performClick()
+            compose.onNodeWithTag("agent-question-submit").performClick()
+            compose.waitForIdle()
+            assertEquals(1, sent.size)
+            compose.runOnIdle { enabled.value = true }
+            compose.onNodeWithTag("agent-question-submit").assertIsEnabled().performClick()
+            assertEquals(2, sent.size)
+            assertEquals(sent.first(), sent.last())
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test fun wardrobeDescriptionsShowDifferencesWithoutAutoSelectingTheRecommendation() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val submitted = mutableListOf<List<AgentQuestionAnswer>>()

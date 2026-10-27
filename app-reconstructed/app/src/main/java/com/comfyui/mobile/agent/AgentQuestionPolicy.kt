@@ -9,10 +9,25 @@ import com.comfyui.mobile.model.AgentUserQuestion
 
 /** The durable question lives in the transcript; no socket or coroutine stays open while waiting. */
 object AgentQuestionPolicy {
-    fun pending(history: List<AgentChatMessage>): AgentChatMessage? =
-        history.lastOrNull()?.takeIf {
-            it.role == "assistant" && !it.isThinking && it.errorMessage == null && it.clarification != null
-        }
+    fun pending(history: List<AgentChatMessage>): AgentChatMessage? {
+        fun isQuestion(message: AgentChatMessage) =
+            message.role == "assistant" && !message.isThinking &&
+                message.errorMessage == null && message.clarification != null
+        val last = history.lastOrNull() ?: return null
+        if (isQuestion(last)) return last
+        val retryId = last.retryClarificationId ?: return null
+        val index = history.indexOfLast { it.id == retryId && isQuestion(it) }
+        if (index < 0) return null
+        // Only explicitly marked failed continuations can reopen a question. Never skip a
+        // successful response, a different task, or an attempt that reached workflow effects.
+        val attempts = history.drop(index + 1)
+        if (attempts.isEmpty() || attempts.size % 2 != 0) return null
+        if (attempts.chunked(2).any { (user, assistant) ->
+            user.role != "user" || assistant.role != "assistant" || assistant.isThinking ||
+                assistant.errorMessage == null || assistant.retryClarificationId != retryId
+        }) return null
+        return history[index]
+    }
 
     private val cancellation = Regex(
         """(?i)^(?:取消(?:(?:本轮|本次|这次)?(?:的)?(?:提问|问题|任务|绘图))?|算了|不画了|先不画了|cancel|never\s*mind)[。.!！\s]*$""")

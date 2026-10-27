@@ -53,8 +53,9 @@ internal fun AgentQuestionForm(
     val scheme = MiuixTheme.colorScheme
     var choices by rememberSaveable(messageId) { mutableStateOf(List(questions.size) { emptyList<String>() }) }
     var texts by rememberSaveable(messageId) { mutableStateOf(List(questions.size) { "" }) }
-    var submitted by rememberSaveable(messageId) { mutableStateOf(false) }
-    val active = enabled && !submitted
+    // The runtime owns acceptance/busy/retry state. A saved local "submitted" flag can
+    // permanently disable this same question after a failed request or process restart.
+    val active = enabled
     val answers = questions.mapIndexed { index, question ->
         AgentQuestionAnswer(question.id, choices[index], texts[index])
     }
@@ -63,7 +64,7 @@ internal fun AgentQuestionForm(
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
         Text(
-            if (active) "等待你回答 · $answered/${questions.size}" else if (submitted) "答案已发送" else "历史问题",
+            if (active) "等待你回答 · $answered/${questions.size}" else "历史问题",
             style = MiuixTheme.textStyles.footnote1,
             color = scheme.primary,
             modifier = Modifier.testTag("agent-question-status")
@@ -147,7 +148,7 @@ internal fun AgentQuestionForm(
         }
         if (enabled) {
             QuestionFormButton("提交全部回答", active && normalized != null, true, "agent-question-submit") {
-                if (normalized != null && onSubmit(normalized)) submitted = true
+                if (normalized != null) onSubmit(normalized)
             }
             QuestionFormButton("取消本次提问", active, false, "agent-question-cancel", onCancel)
         }

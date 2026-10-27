@@ -17,6 +17,7 @@ import com.comfyui.mobile.data.LlmErrorMapper
 import com.comfyui.mobile.data.LlmException
 import com.comfyui.mobile.data.SecretStore
 import com.comfyui.mobile.model.AgentChatMessage
+import com.comfyui.mobile.model.AgentAttachment
 import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.LlmProfile
@@ -954,6 +955,9 @@ object MainViewModelAgent {
         SecretStore.get(vm.getApplication()).removeLlmKey(id)
         persistLlmProfiles(vm, list)
         vm._llmProfiles.value = list
+        if (vm.prefs.getString("current_llm_profile_id", null) == id) {
+            vm.prefs.edit().putString("current_llm_profile_id", list.first().id).apply()
+        }
         if (vm._currentLlmProfileId.value == id) {
             selectLlmProfile(vm, list.first().id)
         }
@@ -1264,6 +1268,7 @@ object MainViewModelAgent {
         userText: String,
         priorHistory: List<AgentChatMessage> = emptyList(),
         imageDataUrls: List<String> = emptyList(),
+        textAttachments: List<AgentAttachment> = emptyList(),
         settings: AgentLlmSettings = AgentLlmSettings.capture(vm),
         requestId: String = UUID.randomUUID().toString(),
         currentNegativePrompt: String? = null,
@@ -1282,7 +1287,7 @@ object MainViewModelAgent {
             if (hist.role == "user") {
                 hist.content.isNotBlank() || !hist.attachments.isNullOrEmpty()
             } else if (hist.role == "assistant") {
-                !hist.isThinking &&
+                !hist.isThinking && hist.errorMessage == null &&
                 !hist.content.startsWith("扩写失败") &&
                 !hist.content.startsWith("出错了") &&
                 !hist.content.startsWith("请先在右上角") &&
@@ -1345,8 +1350,9 @@ object MainViewModelAgent {
                     vm.gson.toJson(currentNegativePrompt) +
                     "\n以此为基线核对本轮反向，保留仍适用的已有词与权重；按用户要求删改冲突项。原值为空不代表缺项，不为填满字段凑词。"))
         }
-        val confirmedUserRequest = com.comfyui.mobile.agent.AgentQuestionPolicy.requestText(
-            userText, priorHistory, structuredAnswer)
+        val confirmedUserRequest = chatText(AgentChatMessage("request", "user",
+            com.comfyui.mobile.agent.AgentQuestionPolicy.requestText(userText, priorHistory, structuredAnswer),
+            attachments = textAttachments))
         messages.add(com.comfyui.mobile.network.ChatMessageDto("user", confirmedUserRequest))
 
         val totalChars = messages.sumOf { (it.content ?: "").length }
@@ -1428,10 +1434,7 @@ object MainViewModelAgent {
             checkCurrent()
             val output = outcome.output
             val parsed = outcome.question ?: parseAgentLlmReply(vm, checkNotNull(output).content, output.reasoning,
-                userText = userText, previousPrompt = settings.lastPrompt.takeIf {
-                    characterContext.reusePreviousPrompt &&
-                        priorHistory.lastOrNull { message -> message.role == "assistant" }?.clarification == null
-                }.orEmpty())
+                userText = userText)
             val planned = parsed.copy(outfitSelections = parsed.outfitSelections ?: outcome.plan?.outfits?.ifEmpty { null })
             val completed = com.comfyui.mobile.agent.AgentCharacterPolicy.complete(planned, characterContext, taskText,
                 outcome.plan?.profileOverrides.orEmpty())
@@ -1568,8 +1571,7 @@ object MainViewModelAgent {
         vm: MainViewModel,
         raw: String,
         apiReasoning: String? = null,
-        userText: String = "",
-        previousPrompt: String? = null
+        userText: String = ""
     ): AgentLlmResult {
         val thinking = (apiReasoning?.takeIf { it.isNotBlank() } ?: extractThinkingContent(raw)).trim()
         val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(sanitizeThinkingContent(raw), preserveNaturalLanguage = true)
@@ -1590,17 +1592,10 @@ object MainViewModelAgent {
             return AgentLlmResult(parsed.reply, thinking = thinking,
                 action = com.comfyui.mobile.agent.AgentAction.RESPOND)
         }
-        val lastPrompt = previousPrompt ?: vm._agentLastExpandedPrompt.value.trim().ifBlank {
-            vm._agentMessages.value.asReversed().firstOrNull {
-                it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()
-            }?.expandedPrompt.orEmpty()
-        }
-        val recovery = com.comfyui.mobile.data.AgentDrawIntent.recoverPromptIfNeeded(
-            parsedPrompt = parsed.prompt,
-            userText = userText,
-            lastPrompt = if (parsed.shouldDraw == false) "" else lastPrompt
-        )
-        val prompt = recovery.prompt
+        // Missing output is an error, not permission to reuse a previous render or invent edits.
+        val prompt = parsed.prompt.trim()
+        val requiresPrompt = parsed.action == com.comfyui.mobile.agent.AgentAction.DRAW ||
+            parsed.action == com.comfyui.mobile.agent.AgentAction.APPLY_PROMPT || parsed.shouldDraw == true
         val llmFlagForDraw = if (parsed.action == com.comfyui.mobile.agent.AgentAction.APPLY_PROMPT) false
             else parsed.shouldDraw
         val (draw, reason) = resolveShouldDraw(
@@ -1609,14 +1604,11 @@ object MainViewModelAgent {
             promptNonEmpty = prompt.isNotEmpty()
         )
         vm.addLog(
-            "Agent should_draw decision: $draw (reason=$reason, llm=${parsed.shouldDraw}, recover=${recovery.reason}, user=${userText.take(40)})",
+            "Agent should_draw decision: $draw (reason=$reason, llm=${parsed.shouldDraw}, user=${userText.take(40)})",
             LogType.INFO
     )
         if (parsed.error != null) {
             vm.addLog("Agent 提示词解析: ${parsed.error}（原始 ${raw.length} 字）", LogType.WARNING)
-        }
-        if (recovery.recoveredFromLast) {
-            vm.addLog("Agent prompt 空，已沿用上一轮 tags (${recovery.reason})", LogType.WARNING)
         }
         return AgentLlmResult(
             tip = parsed.reply,
@@ -1624,13 +1616,14 @@ object MainViewModelAgent {
             thinking = thinking,
             shouldDraw = draw,
             negativePrompt = parsed.negativePrompt,
-            parseError = if (prompt.isNotEmpty() || parsed.shouldDraw == false ||
+            parseError = if (prompt.isNotEmpty() || (!requiresPrompt && parsed.shouldDraw == false) ||
                 (parsed.shouldDraw != true && parsed.reply.isNotBlank() &&
+                    !requiresPrompt &&
                     !com.comfyui.mobile.data.AgentDrawIntent.looksLikeEditRequest(userText))) null
-                else parsed.error,
+                else parsed.error ?: "模型未返回有效的完整正向提示词",
             action = parsed.action,
             outfitSelections = parsed.outfitSelections,
-            positiveAliases = if (recovery.recoveredFromLast) null else parsed.positiveAliases,
+            positiveAliases = parsed.positiveAliases,
             negativeAliases = parsed.negativeAliases
     )
     }

@@ -35,7 +35,6 @@ internal class AgentLlmSettings(
     val persona: String,
     val drawRules: String,
     val lores: List<CharacterLore>,
-    val lastPrompt: String,
     val tagSettings: AgentPromptSettings = AgentPromptSettings(),
     val generationLimits: AgentGenerationLimits = AgentGenerationLimits()
 ) {
@@ -44,11 +43,6 @@ internal class AgentLlmSettings(
             vm._llmBaseUrl.value, vm._llmApiKey.value, vm._llmModel.value,
             vm._llmReasoningEffort.value, vm._agentSystemPrompt.value, vm._agentDrawPrompt.value,
             vm._characterLores.value.toList(),
-            vm._agentLastExpandedPrompt.value.ifBlank {
-                vm._agentMessages.value.asReversed().firstOrNull {
-                    it.role == "assistant" && !it.expandedPrompt.isNullOrBlank()
-                }?.expandedPrompt.orEmpty()
-            },
             vm._agentPromptSettings.value,
             vm._llmProfiles.value.firstOrNull { it.id == vm._currentLlmProfileId.value }
                 ?.generationLimits ?: AgentGenerationLimits()
@@ -116,9 +110,14 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         MainViewModelAgent.appendAgentMessage(vm, user)
         MainViewModelAgent.appendAgentMessage(vm, AgentChatMessage(
             id = turn.assistantId, role = "assistant",
-            content = if (mode == AgentMode.DRAW) "✨深度求索中..." else "", isThinking = true
+            content = if (mode == AgentMode.DRAW) "✨深度求索中..." else "", isThinking = true,
+            retryClarificationId = continuing?.id
         ))
         vm.clearAgentAttachments()
+        val draft = vm.agentWorkspace.draft.value
+        if (answer == null && draft.text.trim() == text) {
+            vm.agentWorkspace.saveDraft(draft.copy(text = "", selectionStart = 0, selectionEnd = 0))
+        }
         val job = vm.viewModelScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
             try {
                 val source = AgentGenerationSource { progress ->
@@ -132,6 +131,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                         MainViewModelAgent.expandPromptWithLlm(
                             vm, text, prior,
                             attachments.filter { it.isImage }.mapNotNull(MainViewModelAgent::imageDataUrl),
+                            textAttachments = attachments.filter { !it.isImage },
                             answerLookupText = answerLookupText, structuredAnswer = answer,
                             settings = settings, requestId = turn.id,
                             currentNegativePrompt = workflowContext.negativePrompt,
@@ -179,10 +179,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                         withContext(Dispatchers.Main) {
                             session.requireCurrent(turn)
                             val clarification = reply.clarification?.let {
-                                AgentQuestionPolicy.bind(it, text, prior, answerLookupText, answer).let { bound ->
-                                    if (continuing == null && bound.sourceRequest == text)
-                                        bound.copy(sourceRequest = MainViewModelAgent.chatText(user)) else bound
-                                }
+                                // Attachments have their own durable store below. Keep the source
+                                // task as text so repeated questions do not inline the same file twice.
+                                AgentQuestionPolicy.bind(it, text, prior, answerLookupText, answer)
                             }
                             MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = true) {
                                 it.copy(
@@ -197,7 +196,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                                     clarification = clarification,
                                     // Also use the ordinary attachment store, so Room/export can relocate these URIs.
                                     attachments = if (clarification != null) attachments.ifEmpty { null } else null,
-                                    isThinking = false, errorMessage = null, activity = null
+                                    isThinking = false, errorMessage = null, activity = null,
+                                    retryClarificationId = null
                                 )
                             }
                         }
@@ -254,6 +254,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         val history = allMessages.filter {
             (it.role == "user" || it.role == "assistant") && !it.isThinking && it.errorMessage == null
         }.takeLast(201)
+        val prior = allMessages.dropLast(1)
         val imagesById = mutableMapOf<String, List<String>>()
         var budget = 8
         for (i in history.indices.reversed()) {
@@ -266,8 +267,11 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         fun context(message: AgentChatMessage): AgentContextMessage {
             val content = when {
                 message.role == "user" && message.id == history.last().id ->
-                    AgentQuestionPolicy.requestText(MainViewModelAgent.chatText(message), history.dropLast(1),
-                        message.clarificationAnswer)
+                    MainViewModelAgent.chatText(message.copy(
+                        content = AgentQuestionPolicy.requestText(message.content, prior, message.clarificationAnswer),
+                        attachments = (message.attachments.orEmpty() +
+                            AgentQuestionPolicy.continuation(message.content, prior)?.attachments.orEmpty())
+                            .distinctBy { it.id }))
                 message.role == "user" -> MainViewModelAgent.chatText(message)
                 message.clarification != null -> vm.gson.toJson(mapOf(
                     "action" to "ask_user", "reply" to message.content,
@@ -281,14 +285,14 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 imagesById[message.id].orEmpty())
         }
         // A resumed chat still receives the original reference images after a restart/history trim.
-        AgentQuestionPolicy.continuation(history.last().content, history.dropLast(1))?.attachments.orEmpty()
+        AgentQuestionPolicy.continuation(history.last().content, prior)?.attachments.orEmpty()
             .filter { it.isImage }.take(4).mapNotNull(MainViewModelAgent::imageDataUrl).takeIf { it.isNotEmpty() }
             ?.let { original ->
                 imagesById[history.last().id] = (imagesById[history.last().id].orEmpty() + original).distinct().take(4)
             }
         val finalSystem = AgentPromptPolicy.chat(settings.persona)
         val decisionSystem = AgentInteractionProtocol.decisionSystem(settings.persona, "", AgentMode.CHAT)
-        val resume = AgentQuestionPolicy.toolContinuation(history.last().content, history.dropLast(1),
+        val resume = AgentQuestionPolicy.toolContinuation(history.last().content, prior,
             history.last().clarificationAnswer).map { AgentContextMessage(it) }
         val selected = AgentContextBudget.fit(
             AgentContextMessage(ChatMessageDto("system", finalSystem)),
@@ -394,8 +398,10 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 throw AgentExecutionException(e.message ?: "提示词绑定已失效，请重新设置")
             }
             val negativeTargets = if (negativePrompt != null) configuredNegative else emptyList()
-            if (negativeTargets.isNotEmpty()) {
-                val conflicts = AgentNegativePromptPolicy.conflicts(prompt, negativePrompt)
+            if (configuredNegative.isNotEmpty()) {
+                val effectiveNegative = negativePrompt ?: AgentPromptBindings.text(
+                    vm.agentWorkflow ?: throw AgentExecutionException("工作流为空"), configuredNegative)
+                val conflicts = AgentNegativePromptPolicy.conflicts(prompt, effectiveNegative)
                 if (conflicts.isNotEmpty()) {
                     throw AgentExecutionException(
                         "正反向提示词包含相同标签（${conflicts.take(5).joinToString("、")}），" +

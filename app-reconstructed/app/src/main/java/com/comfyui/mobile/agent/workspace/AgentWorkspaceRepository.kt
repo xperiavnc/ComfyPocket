@@ -281,11 +281,12 @@ class AgentWorkspaceRepository(
         }
     }
 
-    suspend fun clearChat(id: String) = locked {
+    suspend fun clearChat(id: String, draftJson: String = "{}") = locked {
+        validObject(draftJson)
         database.withTransaction {
             dao.deleteMessages(id)
             dao.deleteDraftRefs(id)
-            dao.state(id)?.let { dao.putState(it.copy(promptOutputJson = "{}", draftJson = "{}")) }
+            dao.state(id)?.let { dao.putState(it.copy(promptOutputJson = "{}", draftJson = draftJson)) }
             dao.conversation(id)?.let { dao.putConversation(it.copy(lastMessagePreview = "", updatedAt = now())) }
         }
         cleanupUnlocked()

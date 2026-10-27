@@ -97,4 +97,38 @@ class AgentQuestionPolicyTest {
         assertNull(AgentQuestionPolicy.pending(history(old) + AgentChatMessage("u2", "user", "便服")))
         assertNull(AgentQuestionPolicy.pending(listOf(history(old).last().copy(errorMessage = "失败"))))
     }
+
+    @Test fun onlyExplicitFailedContinuationCanReopenTheExactOriginalQuestion() {
+        val question = AgentClarification("哪套？", listOf("便服", "礼服"), sourceRequest = "画星澜")
+        val h = history(question)
+        val failed = listOf(AgentChatMessage("u2", "user", "便服"),
+            AgentChatMessage("a2", "assistant", "", errorMessage = "网络错误", retryClarificationId = "a1"))
+        assertEquals("a1", AgentQuestionPolicy.pending(h + failed)?.id)
+        assertTrue(AgentQuestionPolicy.requestText("礼服", h + failed).contains("画星澜"))
+        assertNull(AgentQuestionPolicy.pending(h + failed.dropLast(1) + failed.last().copy(retryClarificationId = null)))
+        assertNull(AgentQuestionPolicy.pending(h + failed.dropLast(1) + failed.last().copy(errorMessage = null)))
+        assertNull(AgentQuestionPolicy.pending(h + failed.dropLast(1) + failed.last().copy(isThinking = true)))
+        assertNull(AgentQuestionPolicy.pending(h + AgentChatMessage("u3", "user", "另一件事") +
+            AgentChatMessage("a3", "assistant", "完成") + failed))
+        assertNull(AgentQuestionPolicy.continuation("取消本次提问", h + failed))
+        assertNull(AgentQuestionPolicy.continuation("画一只猫", h + failed))
+    }
+
+    @Test fun retriesKeepExactNativeInvocationAndDoNotTreatFailedAnswersAsConfirmedHistory() {
+        val h = history(AgentClarification("背景？", emptyList(), sourceRequest = "原始绘图任务",
+            questions = listOf(questions.last()), toolInvocation = AgentQuestionInvocation(
+                "original-call", AgentInteractionProtocol.ASK, """{"questions":[{"id":"background","question":"背景？"}]}""")))
+        val failed = listOf(AgentChatMessage("u2", "user", "沙漠"),
+            AgentChatMessage("a2", "assistant", "", errorMessage = "503", retryClarificationId = "a1"))
+        val answers = AgentClarificationAnswer("a1", listOf(AgentQuestionAnswer("background", text = "雨夜")))
+        val restored = Gson().fromJson(Gson().toJson(h + failed),
+            object : com.google.gson.reflect.TypeToken<List<AgentChatMessage>>() {}.type) as List<AgentChatMessage>
+        val request = AgentQuestionPolicy.requestText("雨夜", restored, answers)
+        assertTrue(request.contains("原始绘图任务"))
+        assertTrue(request.contains("雨夜"))
+        assertFalse(request.contains("沙漠"))
+        val native = AgentQuestionPolicy.toolContinuation("雨夜", restored, answers)
+        assertEquals("original-call", native.first().tool_calls!!.single().id)
+        assertEquals("original-call", native.last().tool_call_id)
+    }
 }
