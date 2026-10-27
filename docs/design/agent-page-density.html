@@ -1,0 +1,439 @@
+<div id="agent-density-preview" class="viz-carousel viz-dotted-background" aria-label="Agent 页面布局方案" data-previous-label="上一个方案" data-next-label="下一个方案">
+  <section data-variant="生成优先" aria-label="生成优先方案">
+    <div class="ad-stage">
+      <article class="ad-phone ad-generation" aria-label="ComfyPocket Agent 生成优先示例" data-design="generation">
+        <div class="ad-page">
+          <div class="ad-system" aria-label="手机状态栏">
+            <span>14:52</span>
+            <span class="ad-system-icons"><i data-lucide="wifi" aria-hidden="true"></i><i data-lucide="signal" aria-hidden="true"></i><span>87%</span><i data-lucide="battery" aria-hidden="true"></i></span>
+          </div>
+          <header class="ad-header">
+            <div class="ad-heading"><strong>Agent</strong><button type="button" class="ad-session cursor-interaction" data-action="sessions">新会话<i data-lucide="chevron-down" aria-hidden="true"></i></button></div>
+            <div class="ad-header-actions"><button type="button" class="ad-icon cursor-interaction" data-action="page-settings" aria-label="Agent 设置"><i data-lucide="settings" aria-hidden="true"></i></button><button type="button" class="ad-icon cursor-interaction" data-action="menu" aria-label="更多会话操作"><i data-lucide="ellipsis" aria-hidden="true"></i></button></div>
+          </header>
+          <div class="ad-workspace-bar">
+            <div class="ad-segment" role="group" aria-label="工作区">
+              <button type="button" class="cursor-interaction" data-workspace="chat" aria-pressed="false">Chat</button>
+              <button type="button" class="cursor-interaction" data-workspace="draw" aria-pressed="true">绘图</button>
+            </div>
+            <button type="button" class="ad-context cursor-interaction" data-action="context">dsh<i data-lucide="chevron-down" aria-hidden="true"></i></button>
+          </div>
+          <main class="ad-main">
+            <div class="ad-draw-view">
+              <button type="button" class="ad-picture cursor-interaction" data-action="preview" aria-label="放大查看预览示意图">
+                <span class="ad-art" role="img" aria-label="暖色天空与山峦的预览占位图"><span class="ad-sun"></span><span class="ad-mountain ad-far"></span><span class="ad-mountain ad-near"></span><span class="ad-window"></span></span>
+                <span class="ad-picture-label">预览示意</span>
+                <span class="ad-expand"><i data-lucide="maximize-2" aria-hidden="true"></i></span>
+              </button>
+              <section class="ad-job" aria-label="当前生成任务">
+                <div class="ad-job-heading"><span class="ad-status-dot"></span><div class="ad-job-copy"><strong>正在生成</strong><span>K采样器</span></div><strong class="ad-percent">16<span>%</span></strong></div>
+                <div class="ad-progress" role="progressbar" aria-label="生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="16"><span style="width:16%"></span></div>
+              </section>
+              <button type="button" class="ad-settings-row cursor-interaction" data-action="settings"><span class="ad-settings-icon"><i data-lucide="sliders-horizontal" aria-hidden="true"></i></span><span><strong>绘图设置</strong><small>安卓anima · 画风/画师 · 提示词</small></span><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+              <button type="button" class="ad-update-row cursor-interaction" data-action="negative"><i data-lucide="circle-check" aria-hidden="true"></i><span><strong>反向词已更新</strong><small>已写入工作流 · 1 项</small></span><span class="ad-link">查看<i data-lucide="chevron-right" aria-hidden="true"></i></span></button>
+            </div>
+            <div class="ad-chat-view" hidden>
+              <div class="ad-user-message">优化手部细节，避免多指。</div>
+              <div class="ad-agent-message"><span class="ad-avatar"><i data-lucide="bot" aria-hidden="true"></i></span><div><strong>Agent</strong><p>已更新反向词，开始生成。</p><button type="button" class="ad-inline-button cursor-interaction" data-action="negative"><i data-lucide="circle-check" aria-hidden="true"></i>反向词 · 1 项<i data-lucide="chevron-right" aria-hidden="true"></i></button></div></div>
+              <div class="ad-inline-job"><div class="ad-art ad-thumb" role="img" aria-label="预览示意图"><span class="ad-sun"></span><span class="ad-mountain ad-far"></span><span class="ad-mountain ad-near"></span></div><div><strong>正在生成 · 16%</strong><small>K采样器</small><div class="ad-progress" role="progressbar" aria-label="生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="16"><span style="width:16%"></span></div><button type="button" class="ad-text-button cursor-interaction" data-action="preview">查看预览<i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div></div>
+            </div>
+            <div class="ad-local-message" role="status" aria-live="polite"></div>
+          </main>
+          <div class="ad-compose-area">
+            <form class="ad-composer" aria-label="输入下一条消息">
+              <button type="button" class="ad-icon cursor-interaction" data-action="add" aria-label="添加内容"><i data-lucide="plus" aria-hidden="true"></i></button>
+              <label class="ad-input-label"><span class="ad-sr-only">消息</span><input type="text" name="message" placeholder="补充你的想法…" autocomplete="off"></label>
+              <button type="button" class="ad-send cursor-interaction" data-action="send" aria-label="发送消息"><i data-lucide="arrow-up" aria-hidden="true"></i></button>
+            </form>
+          </div>
+          <nav class="ad-bottom-nav" aria-label="主要导航">
+            <button type="button" class="cursor-interaction" data-action="nav" data-label="主页"><i data-lucide="house" aria-hidden="true"></i><span>主页</span></button>
+            <button type="button" class="cursor-interaction" data-action="nav" data-label="控制"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>控制</span></button>
+            <button type="button" class="cursor-interaction ad-nav-active" data-action="nav" data-label="Agent" aria-current="page"><i data-lucide="bot" aria-hidden="true"></i><span>Agent</span></button>
+            <button type="button" class="cursor-interaction" data-action="nav" data-label="应用"><i data-lucide="layout-grid" aria-hidden="true"></i><span>应用</span></button>
+            <button type="button" class="cursor-interaction" data-action="nav" data-label="画廊"><i data-lucide="images" aria-hidden="true"></i><span>画廊</span></button>
+          </nav>
+          <div class="ad-home-indicator" aria-hidden="true"><span></span></div>
+        </div>
+        <div class="ad-overlay" hidden></div>
+      </article>
+    </div>
+  </section>
+  <section data-variant="对话优先" aria-label="对话优先方案" hidden>
+    <div class="ad-stage">
+      <article class="ad-phone ad-conversation" aria-label="ComfyPocket Agent 对话优先示例" data-design="conversation">
+        <div class="ad-page">
+          <div class="ad-system" aria-label="手机状态栏"><span>14:52</span><span class="ad-system-icons"><i data-lucide="wifi" aria-hidden="true"></i><i data-lucide="signal" aria-hidden="true"></i><span>87%</span><i data-lucide="battery" aria-hidden="true"></i></span></div>
+          <header class="ad-header"><div class="ad-heading"><strong>Agent</strong><button type="button" class="ad-session cursor-interaction" data-action="sessions">新会话<i data-lucide="chevron-down" aria-hidden="true"></i></button></div><div class="ad-header-actions"><button type="button" class="ad-icon cursor-interaction" data-action="page-settings" aria-label="Agent 设置"><i data-lucide="settings" aria-hidden="true"></i></button><button type="button" class="ad-icon cursor-interaction" data-action="menu" aria-label="更多会话操作"><i data-lucide="ellipsis" aria-hidden="true"></i></button></div></header>
+          <main class="ad-main ad-conversation-main">
+            <div class="ad-date-divider">当前会话</div>
+            <div class="ad-user-message">优化手部细节，避免多指。</div>
+            <div class="ad-agent-message"><span class="ad-avatar"><i data-lucide="bot" aria-hidden="true"></i></span><div><strong>Agent</strong><p>已更新反向词，开始生成。</p><button type="button" class="ad-inline-button cursor-interaction" data-action="negative"><i data-lucide="circle-check" aria-hidden="true"></i>反向词 · 1 项<i data-lucide="chevron-right" aria-hidden="true"></i></button></div></div>
+            <section class="ad-task-card" aria-label="会话内生成任务">
+              <div class="ad-task-heading"><span><span class="ad-status-dot"></span><strong>正在生成</strong></span><strong>16%</strong></div>
+              <div class="ad-task-content"><div class="ad-art ad-task-art" role="img" aria-label="预览示意图"><span class="ad-sun"></span><span class="ad-mountain ad-far"></span><span class="ad-mountain ad-near"></span><span class="ad-window"></span></div><div class="ad-task-info"><strong>K采样器</strong><small>安卓anima</small><button type="button" class="ad-text-button cursor-interaction" data-action="preview">查看预览<i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div></div>
+              <div class="ad-progress" role="progressbar" aria-label="生成进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="16"><span style="width:16%"></span></div>
+            </section>
+            <div class="ad-local-message" role="status" aria-live="polite"></div>
+          </main>
+          <div class="ad-compose-area">
+            <div class="ad-compose-tools"><div class="ad-segment" role="group" aria-label="输入模式"><button type="button" class="cursor-interaction" data-input-mode="chat" aria-pressed="false">Chat</button><button type="button" class="cursor-interaction" data-input-mode="draw" aria-pressed="true">绘图</button></div><button type="button" class="ad-context cursor-interaction" data-action="context">dsh<i data-lucide="chevron-down" aria-hidden="true"></i></button><button type="button" class="ad-icon cursor-interaction" data-action="settings" aria-label="绘图设置"><i data-lucide="sliders-horizontal" aria-hidden="true"></i></button></div>
+            <form class="ad-composer" aria-label="输入下一条消息"><button type="button" class="ad-icon cursor-interaction" data-action="add" aria-label="添加内容"><i data-lucide="plus" aria-hidden="true"></i></button><label class="ad-input-label"><span class="ad-sr-only">消息</span><input type="text" name="message" placeholder="补充你的想法…" autocomplete="off"></label><button type="button" class="ad-send cursor-interaction" data-action="send" aria-label="发送消息"><i data-lucide="arrow-up" aria-hidden="true"></i></button></form>
+          </div>
+          <nav class="ad-bottom-nav" aria-label="主要导航"><button type="button" class="cursor-interaction" data-action="nav" data-label="主页"><i data-lucide="house" aria-hidden="true"></i><span>主页</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="控制"><i data-lucide="sliders-horizontal" aria-hidden="true"></i><span>控制</span></button><button type="button" class="cursor-interaction ad-nav-active" data-action="nav" data-label="Agent" aria-current="page"><i data-lucide="bot" aria-hidden="true"></i><span>Agent</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="应用"><i data-lucide="layout-grid" aria-hidden="true"></i><span>应用</span></button><button type="button" class="cursor-interaction" data-action="nav" data-label="画廊"><i data-lucide="images" aria-hidden="true"></i><span>画廊</span></button></nav>
+          <div class="ad-home-indicator" aria-hidden="true"><span></span></div>
+        </div>
+        <div class="ad-overlay" hidden></div>
+      </article>
+    </div>
+  </section>
+</div>
+<style>
+  #agent-density-preview { width:100%; }
+  #agent-density-preview .ad-stage { min-height:920px; padding:18px 10px 22px; display:flex; justify-content:center; align-items:flex-start; box-sizing:border-box; }
+  #agent-density-preview .ad-phone {
+    --ad-bg:light-dark(#f4f6fa,#0e1117);
+    --ad-surface:light-dark(#ffffff,#191f2a);
+    --ad-surface-two:light-dark(#e9eef7,#202938);
+    --ad-line:light-dark(#d7dfeb,#2b3545);
+    --ad-text:light-dark(#182337,#edf1f8);
+    --ad-muted:light-dark(#526079,#abb7cc);
+    --ad-accent:light-dark(#285bb0,#8ab0ff);
+    --ad-selected:light-dark(#d9e7ff,#243b60);
+    --ad-send:light-dark(#2c62c3,#8ab0ff);
+    --ad-send-text:light-dark(#ffffff,#14223b);
+    --ad-success:light-dark(#267354,#8bd7b4);
+    --ad-danger:light-dark(#b33039,#ffadb4);
+    --ad-radius:22px;
+    width:min(100%,400px); min-width:0; min-height:880px; border:1px solid var(--ad-line); border-radius:32px;
+    color:var(--ad-text); background:var(--ad-bg); position:relative; overflow:clip; isolation:isolate;
+    box-shadow:0 18px 54px light-dark(#192c4b16,#00000035); font-family:system-ui,"Microsoft YaHei",sans-serif;
+    font-size:14px; line-height:1.5; box-sizing:border-box;
+  }
+  #agent-density-preview .ad-phone * { box-sizing:border-box; }
+  #agent-density-preview .ad-phone [hidden] { display:none !important; }
+  #agent-density-preview .ad-phone button { appearance:none; font:inherit; color:inherit; background:none; border:0; padding:0; display:inline-flex; align-items:center; justify-content:center; gap:6px; min-height:48px; text-align:left; }
+  #agent-density-preview .ad-phone button:focus-visible { outline:2px solid var(--ad-accent); outline-offset:2px; }
+  #agent-density-preview .ad-phone button:hover { filter:brightness(1.08); }
+  #agent-density-preview .ad-phone button:disabled { opacity:.5; }
+  #agent-density-preview .ad-phone svg { width:20px; height:20px; flex:none; stroke-width:1.8; }
+  #agent-density-preview .ad-phone strong { font-weight:500; }
+  #agent-density-preview .ad-page { min-height:880px; display:flex; flex-direction:column; }
+  #agent-density-preview .ad-system { padding:13px 22px 7px; display:flex; justify-content:space-between; align-items:center; font-size:12px; min-height:37px; font-weight:500; }
+  #agent-density-preview .ad-system-icons { display:flex; gap:6px; align-items:center; }
+  #agent-density-preview .ad-system-icons svg { width:14px; height:14px; }
+  #agent-density-preview .ad-header { padding:3px 16px 6px 20px; display:flex; align-items:center; justify-content:space-between; gap:4px; min-height:62px; }
+  #agent-density-preview .ad-header-actions { display:flex; align-items:center; flex:none; }
+  #agent-density-preview .ad-heading { display:flex; align-items:center; min-width:0; gap:12px; }
+  #agent-density-preview .ad-heading > strong { font-size:23px; letter-spacing:-.5px; }
+  #agent-density-preview .ad-session { color:var(--ad-muted); }
+  #agent-density-preview .ad-session svg { width:14px; }
+  #agent-density-preview .ad-icon { width:48px; min-width:48px; border-radius:16px; }
+  #agent-density-preview .ad-workspace-bar { display:flex; align-items:center; justify-content:space-between; padding:0 20px 10px; gap:8px; }
+  #agent-density-preview .ad-segment { display:flex; padding:3px; gap:2px; background:var(--ad-surface); border-radius:15px; min-width:0; }
+  #agent-density-preview .ad-segment button { padding:0 19px; border-radius:12px; min-height:48px; color:var(--ad-muted); }
+  #agent-density-preview .ad-segment button[aria-pressed="true"] { color:var(--ad-text); background:var(--ad-selected); font-weight:500; }
+  #agent-density-preview .ad-context { padding:0 7px; color:var(--ad-muted); min-width:60px; }
+  #agent-density-preview .ad-context svg { width:14px; }
+  #agent-density-preview .ad-main { padding:0 20px; flex:1; min-width:0; }
+  #agent-density-preview .ad-draw-view { display:flex; flex-direction:column; gap:0; }
+  #agent-density-preview .ad-picture { width:100%; aspect-ratio:1.18; position:relative; overflow:hidden; border-radius:var(--ad-radius); min-height:0 !important; display:block !important; }
+  #agent-density-preview .ad-art { position:relative; display:block; width:100%; height:100%; overflow:hidden; background:linear-gradient(175deg,#4a5675 2%,#8a7c95 33%,#dba8a4 67%,#ecc2a5); }
+  #agent-density-preview .ad-art::before { content:""; position:absolute; width:115%; height:60%; top:9%; left:-16%; transform:rotate(-16deg); background:linear-gradient(160deg,transparent 10%,#ffffff25 40%,transparent 58%); }
+  #agent-density-preview .ad-sun { position:absolute; width:23%; aspect-ratio:1; top:23%; left:58%; border-radius:50%; background:#ffe2af; box-shadow:0 0 50px #ffd9ac78; }
+  #agent-density-preview .ad-mountain { display:block; position:absolute; width:160%; height:65%; border-radius:45% 20% 0 0; transform:rotate(-19deg); }
+  #agent-density-preview .ad-far { background:linear-gradient(135deg,#64617a,#a38390); bottom:-28%; left:-25%; }
+  #agent-density-preview .ad-near { background:linear-gradient(135deg,#242f46,#555d78); bottom:-46%; left:-20%; transform:rotate(16deg); }
+  #agent-density-preview .ad-window { position:absolute; inset:0; background:linear-gradient(90deg,transparent 70%,#292e4355 70%,#292e4355 72%,transparent 72%),linear-gradient(0deg,transparent 72%,#292e4355 72%,#292e4355 74%,transparent 74%); }
+  #agent-density-preview .ad-picture-label { position:absolute; left:12px; top:12px; color:#fff6ea; font-size:11px; padding:4px 9px; background:#242c438c; border-radius:8px; }
+  #agent-density-preview .ad-expand { position:absolute; right:8px; bottom:8px; width:40px; height:40px; display:flex; align-items:center; justify-content:center; color:#fff6ea; background:#242c438c; border-radius:12px; }
+  #agent-density-preview .ad-job { padding:16px 1px 17px; }
+  #agent-density-preview .ad-job-heading { display:flex; align-items:center; gap:9px; margin-bottom:13px; }
+  #agent-density-preview .ad-status-dot { width:7px; height:7px; border-radius:50%; display:inline-block; background:var(--ad-accent); flex:none; }
+  #agent-density-preview .ad-job-copy { display:flex; flex-direction:column; gap:1px; flex:1; }
+  #agent-density-preview .ad-job-copy strong { font-size:16px; }
+  #agent-density-preview .ad-job-copy > span { color:var(--ad-muted); font-size:12px; }
+  #agent-density-preview .ad-percent { font-variant-numeric:tabular-nums; font-size:25px; letter-spacing:-1px; }
+  #agent-density-preview .ad-percent > span { font-size:14px; color:var(--ad-muted); margin-left:2px; }
+  #agent-density-preview .ad-progress { width:100%; height:4px; background:var(--ad-line); overflow:hidden; border-radius:4px; }
+  #agent-density-preview .ad-progress > span { display:block; height:100%; background:var(--ad-accent); border-radius:4px; }
+  #agent-density-preview .ad-settings-row { width:100%; justify-content:flex-start !important; background:var(--ad-surface) !important; padding:13px 12px !important; border-radius:16px; gap:11px !important; min-height:72px !important; }
+  #agent-density-preview .ad-settings-icon { display:flex; align-items:center; justify-content:center; width:34px; height:40px; color:var(--ad-muted); flex:none; }
+  #agent-density-preview .ad-settings-row > span:nth-child(2) { min-width:0; display:flex; flex-direction:column; gap:2px; flex:1; }
+  #agent-density-preview .ad-settings-row small { color:var(--ad-muted); font-size:12px; overflow-wrap:anywhere; }
+  #agent-density-preview .ad-settings-row > svg { color:var(--ad-muted); width:16px; }
+  #agent-density-preview .ad-update-row { width:100%; padding:15px 0 !important; gap:9px !important; justify-content:flex-start !important; }
+  #agent-density-preview .ad-update-row > svg { width:18px; color:var(--ad-success); align-self:flex-start; margin-top:3px; }
+  #agent-density-preview .ad-update-row > span:nth-child(2) { display:flex; flex-direction:column; flex:1; min-width:0; gap:2px; }
+  #agent-density-preview .ad-update-row strong { font-size:13px; }
+  #agent-density-preview .ad-update-row small { font-size:12px; color:var(--ad-muted); }
+  #agent-density-preview .ad-link { display:flex; align-items:center; gap:1px; color:var(--ad-accent); font-size:12px; min-height:48px; }
+  #agent-density-preview .ad-link svg { width:14px; }
+  #agent-density-preview .ad-compose-area { padding:8px 16px 14px; }
+  #agent-density-preview .ad-composer { display:flex; align-items:center; gap:4px; background:var(--ad-surface); border:1px solid var(--ad-line); border-radius:21px; padding:5px; margin:0; }
+  #agent-density-preview .ad-composer .ad-icon { color:var(--ad-muted); }
+  #agent-density-preview .ad-input-label { display:block; flex:1; min-width:0; }
+  #agent-density-preview .ad-composer input { background:transparent; color:var(--ad-text); width:100%; min-width:0; padding:10px 0; font:inherit; font-size:16px; border:0; }
+  #agent-density-preview .ad-composer input::placeholder { color:var(--ad-muted); opacity:1; }
+  #agent-density-preview .ad-send { width:48px; min-width:48px; border-radius:16px; background:var(--ad-send) !important; color:var(--ad-send-text) !important; }
+  #agent-density-preview .ad-bottom-nav { border-top:1px solid var(--ad-line); padding:8px 11px 2px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:2px; background:var(--ad-bg); }
+  #agent-density-preview .ad-bottom-nav > button { min-width:0; min-height:59px; flex-direction:column; gap:4px; color:var(--ad-muted); font-size:11px; position:relative; }
+  #agent-density-preview .ad-bottom-nav .ad-nav-active { color:var(--ad-accent); }
+  #agent-density-preview .ad-bottom-nav .ad-nav-active svg { box-shadow:0 0 0 7px var(--ad-selected); border-radius:5px; background:var(--ad-selected); }
+  #agent-density-preview .ad-bottom-nav svg { width:21px; height:21px; }
+  #agent-density-preview .ad-home-indicator { height:17px; display:flex; align-items:center; justify-content:center; }
+  #agent-density-preview .ad-home-indicator > span { display:block; height:4px; width:100px; border-radius:4px; background:var(--ad-text); opacity:.65; }
+  #agent-density-preview .ad-local-message { color:var(--ad-muted); font-size:13px; overflow-wrap:anywhere; padding:8px 0; }
+  #agent-density-preview .ad-local-message:empty { display:none; }
+  #agent-density-preview .ad-user-message { margin:18px 0 28px 35px; padding:13px 16px; background:var(--ad-selected); border-radius:18px 18px 5px 18px; width:fit-content; max-width:calc(100% - 35px); justify-self:end; }
+  #agent-density-preview .ad-agent-message { display:flex; gap:10px; align-items:flex-start; }
+  #agent-density-preview .ad-agent-message > div { flex:1; min-width:0; }
+  #agent-density-preview .ad-avatar { display:flex; width:31px; height:31px; flex:none; align-items:center; justify-content:center; border-radius:11px; color:var(--ad-accent); background:var(--ad-surface-two); }
+  #agent-density-preview .ad-avatar svg { width:18px; }
+  #agent-density-preview .ad-agent-message p { margin:7px 0 2px; color:var(--ad-text); }
+  #agent-density-preview .ad-agent-message strong { font-size:12px; color:var(--ad-muted); }
+  #agent-density-preview .ad-inline-button { color:var(--ad-muted) !important; font-size:12px !important; gap:5px !important; }
+  #agent-density-preview .ad-inline-button svg { width:14px; }
+  #agent-density-preview .ad-inline-button svg:first-child { color:var(--ad-success); }
+  #agent-density-preview .ad-inline-job { margin:20px 0 0 41px; display:flex; gap:14px; align-items:center; padding:12px; border-radius:18px; background:var(--ad-surface); }
+  #agent-density-preview .ad-thumb { width:80px; height:94px; border-radius:12px; flex:none; }
+  #agent-density-preview .ad-inline-job > div:last-child { min-width:0; flex:1; }
+  #agent-density-preview .ad-inline-job small { display:block; color:var(--ad-muted); font-size:12px; margin:4px 0 9px; }
+  #agent-density-preview .ad-text-button { font-size:12px !important; color:var(--ad-accent) !important; }
+  #agent-density-preview .ad-text-button svg { width:14px; }
+  #agent-density-preview .ad-conversation-main { padding-top:9px; }
+  #agent-density-preview .ad-date-divider { text-align:center; color:var(--ad-muted); font-size:11px; padding:9px 0 10px; }
+  #agent-density-preview .ad-conversation .ad-user-message { margin:12px 0 27px auto; }
+  #agent-density-preview .ad-task-card { padding:16px; border:1px solid var(--ad-line); border-radius:var(--ad-radius); margin:20px 0 0 41px; background:var(--ad-surface); }
+  #agent-density-preview .ad-task-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  #agent-density-preview .ad-task-heading > span { display:flex; gap:7px; align-items:center; }
+  #agent-density-preview .ad-task-heading > strong { font-variant-numeric:tabular-nums; }
+  #agent-density-preview .ad-task-content { display:flex; gap:14px; align-items:center; margin-bottom:16px; }
+  #agent-density-preview .ad-task-art { height:124px; width:108px; border-radius:12px; flex:none; }
+  #agent-density-preview .ad-task-info { display:flex; flex-direction:column; min-width:0; align-items:flex-start; }
+  #agent-density-preview .ad-task-info small { color:var(--ad-muted); font-size:12px; margin-top:3px; overflow-wrap:anywhere; }
+  #agent-density-preview .ad-compose-tools { display:flex; gap:8px; align-items:center; padding:0 1px 9px; }
+  #agent-density-preview .ad-compose-tools .ad-segment { background:none; padding:0; }
+  #agent-density-preview .ad-compose-tools .ad-segment button { padding:0 14px; }
+  #agent-density-preview .ad-compose-tools .ad-context { margin-left:auto; }
+  #agent-density-preview .ad-overlay { position:absolute; inset:0; background:#05091399; display:flex; align-items:flex-end; z-index:5; }
+  #agent-density-preview .ad-sheet { width:100%; background:var(--ad-surface); border-radius:26px 26px 0 0; padding:12px 20px 24px; box-shadow:0 -10px 48px #00000025; }
+  #agent-density-preview .ad-handle { width:32px; height:4px; margin:0 auto 8px; background:var(--ad-line); border-radius:4px; }
+  #agent-density-preview .ad-sheet-heading { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-bottom:3px; }
+  #agent-density-preview .ad-sheet-heading h2 { font-size:18px; font-weight:500; margin:0; }
+  #agent-density-preview .ad-sheet-heading .ad-icon { margin-right:-10px; }
+  #agent-density-preview .ad-sheet p { margin:0 0 16px; color:var(--ad-muted); font-size:13px; }
+  #agent-density-preview .ad-detail-list { margin:0 0 14px; }
+  #agent-density-preview .ad-detail-list > div { padding:10px 0; border-bottom:1px solid var(--ad-line); display:flex; gap:12px; justify-content:space-between; align-items:center; }
+  #agent-density-preview .ad-detail-list dt { font-size:13px; color:var(--ad-muted); }
+  #agent-density-preview .ad-detail-list dd { margin:0; font-size:13px; }
+  #agent-density-preview .ad-menu-item { width:100%; justify-content:flex-start !important; gap:11px !important; min-height:56px !important; border-bottom:1px solid var(--ad-line) !important; }
+  #agent-density-preview .ad-menu-item.ad-destructive { color:var(--ad-danger); }
+  #agent-density-preview .ad-sheet label { display:block; margin:12px 0; font-size:13px; }
+  #agent-density-preview .ad-sheet textarea { display:block; width:100%; min-height:100px; margin-top:7px; padding:12px; background:var(--ad-bg); border:1px solid var(--ad-line); border-radius:14px; color:var(--ad-text); resize:vertical; font:inherit; font-size:16px; }
+  #agent-density-preview .ad-primary { width:100%; border-radius:15px; padding:10px 16px !important; background:var(--ad-send) !important; color:var(--ad-send-text) !important; }
+  #agent-density-preview .ad-sheet .ad-sheet-picture { height:300px; border-radius:16px; margin-bottom:12px; }
+  #agent-density-preview .ad-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  @media(max-width:380px) {
+    #agent-density-preview .ad-stage { padding-left:0; padding-right:0; }
+    #agent-density-preview .ad-phone { border-radius:24px; }
+    #agent-density-preview .ad-header { padding-left:16px; padding-right:12px; }
+    #agent-density-preview .ad-main { padding-left:16px; padding-right:16px; }
+    #agent-density-preview .ad-workspace-bar { padding-left:16px; padding-right:16px; }
+    #agent-density-preview .ad-heading { gap:9px; }
+    #agent-density-preview .ad-task-card { margin-left:0; }
+    #agent-density-preview .ad-task-art { width:96px; height:116px; }
+    #agent-density-preview .ad-inline-job { margin-left:0; }
+    #agent-density-preview .ad-sheet { padding-left:16px; padding-right:16px; }
+  }
+</style>
+<script>
+(() => {
+  const root = document.getElementById("agent-density-preview");
+  const phones = Array.from(root.querySelectorAll(".ad-phone"));
+  const translations = [
+    ["bad hands", "手部画得差"],
+    ["deformed hands", "手部变形"],
+    ["extra fingers", "多指"],
+    ["fused fingers", "手指粘连"],
+    ["malformed hand", "手的形状畸形"],
+    ["mutated hands", "手部畸变"]
+  ];
+  const phoneState = new Map();
+  let activeTrigger = null;
+  const esc = (value) => String(value).replace(/[&<>"']/g, (char) => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[char]));
+  const saved = () => {
+    const state = window.openai?.widgetState;
+    return state && typeof state === "object" ? state : {};
+  };
+  const restore = (snapshot) => {
+    const ui = snapshot?.privateContent;
+    if (!ui || typeof ui !== "object") return;
+    phones.forEach((phone) => {
+      const id = phone.dataset.design;
+      const settings = ui[id];
+      if (!settings || typeof settings !== "object") return;
+      const state = phoneState.get(phone);
+      if (typeof settings.message === "string") phone.querySelector('input[name="message"]').value = settings.message.slice(0, 2000);
+      if (typeof settings.prompt === "string") state.prompt = settings.prompt.slice(0, 2000);
+      if (settings.workspace === "chat" || settings.workspace === "draw") applyWorkspace(phone, settings.workspace);
+      if (settings.inputMode === "chat" || settings.inputMode === "draw") applyInputMode(phone, settings.inputMode);
+    });
+  };
+  const remember = () => {
+    const privateContent = {};
+    phones.forEach((phone) => {
+      privateContent[phone.dataset.design] = { ...phoneState.get(phone), message:phone.querySelector('input[name="message"]').value.slice(0,2000) };
+    });
+    if (window.openai?.setWidgetState) window.openai.setWidgetState({ modelContent:{ preview:"Agent 页面密度优化", variants:["生成优先","对话优先"] }, privateContent }).catch(() => {});
+  };
+  const refreshIcons = () => {
+    if (globalThis.lucide) globalThis.lucide.createIcons({ attrs:{ width:20, height:20 } });
+  };
+  function applyWorkspace(phone, workspace) {
+    phoneState.get(phone).workspace = workspace;
+    const draw = phone.querySelector(".ad-draw-view");
+    const chat = phone.querySelector(".ad-chat-view");
+    if (draw) draw.hidden = workspace !== "draw";
+    if (chat) chat.hidden = workspace !== "chat";
+    phone.querySelectorAll("[data-workspace]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.workspace === workspace)));
+  }
+  function applyInputMode(phone, mode) {
+    phoneState.get(phone).inputMode = mode;
+    phone.querySelectorAll("[data-input-mode]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.inputMode === mode)));
+  }
+  function announce(phone, text) {
+    phone.querySelector(".ad-local-message").textContent = text;
+  }
+  function sendMessage(phone) {
+    const input = phone.querySelector('input[name="message"]');
+    const value = input.value.trim();
+    if (!value) { input.focus(); return; }
+    announce(phone, `示例消息已接收：${value.slice(0,200)}`);
+    input.value = "";
+    remember();
+  }
+  function closeSheet(phone) {
+    const overlay = phone.querySelector(".ad-overlay");
+    overlay.hidden = true;
+    overlay.replaceChildren();
+    phone.querySelector(".ad-page").inert = false;
+    if (activeTrigger?.isConnected) activeTrigger.focus({ preventScroll:true });
+    activeTrigger = null;
+  }
+  function showSheet(phone, title, content, kind) {
+    const overlay = phone.querySelector(".ad-overlay");
+    const titleId = `ad-sheet-${phone.dataset.design}`;
+    phone.querySelector(".ad-page").inert = true;
+    overlay.innerHTML = `<section class="ad-sheet" role="dialog" aria-modal="true" aria-labelledby="${titleId}" data-panel="${kind}"><div class="ad-handle" aria-hidden="true"></div><div class="ad-sheet-heading"><h2 id="${titleId}">${esc(title)}</h2><button type="button" class="ad-icon cursor-interaction" data-action="close" aria-label="关闭面板"><i data-lucide="x" aria-hidden="true"></i></button></div>${content}</section>`;
+    overlay.hidden = false;
+    refreshIcons();
+    overlay.querySelector('[data-action="close"]').focus({ preventScroll:true });
+  }
+  function openAction(phone, action) {
+    if (action === "negative") {
+      const items = translations.map(([word, translation]) => `<div><dt>${esc(word)}</dt><dd>${esc(translation)}</dd></div>`).join("");
+      showSheet(phone, "反向词详情", `<p>已写入工作流反向输入 · 1 项<br>中文释义仅供查看</p><dl class="ad-detail-list">${items}</dl>`, action);
+    } else if (action === "settings") {
+      const prompt = phoneState.get(phone).prompt;
+      showSheet(phone, "绘图设置", `<dl class="ad-detail-list"><div><dt>当前配置</dt><dd>安卓anima</dd></div><div><dt>画风 / 画师</dt><dd>沿用当前设置</dd></div></dl><label>提示词<textarea name="prompt">${esc(prompt)}</textarea></label><button type="button" class="ad-primary cursor-interaction" data-action="save-settings">保存设置</button>`, action);
+    } else if (action === "preview") {
+      showSheet(phone, "生成预览", `<div class="ad-art ad-sheet-picture" role="img" aria-label="暖色山峦预览示意图"><span class="ad-sun"></span><span class="ad-mountain ad-far"></span><span class="ad-mountain ad-near"></span><span class="ad-window"></span></div><p>正在生成 · K采样器 · 16%</p>`, action);
+    } else if (action === "sessions") {
+      showSheet(phone, "会话", `<button type="button" class="ad-menu-item cursor-interaction" data-action="close"><i data-lucide="message-circle" aria-hidden="true"></i>新会话 · 当前</button><button type="button" class="ad-menu-item cursor-interaction" data-action="new-session"><i data-lucide="plus" aria-hidden="true"></i>创建新会话</button>`, action);
+    } else if (action === "menu") {
+      showSheet(phone, "会话操作", `<button type="button" class="ad-menu-item cursor-interaction" data-action="sessions"><i data-lucide="messages-square" aria-hidden="true"></i>会话记录</button><button type="button" class="ad-menu-item cursor-interaction" data-action="page-settings"><i data-lucide="settings" aria-hidden="true"></i>Agent 设置</button><button type="button" class="ad-menu-item ad-destructive cursor-interaction" data-action="confirm-clear"><i data-lucide="trash-2" aria-hidden="true"></i>清空当前对话</button>`, action);
+    } else if (action === "confirm-clear") {
+      showSheet(phone, "清空当前对话？", `<p>确认后清空当前会话的消息。</p><button type="button" class="ad-menu-item cursor-interaction" data-action="close">保留对话</button><button type="button" class="ad-menu-item ad-destructive cursor-interaction" data-action="clear"><i data-lucide="trash-2" aria-hidden="true"></i>确认清空</button>`, action);
+    } else if (action === "context") {
+      showSheet(phone, "dsh", `<button type="button" class="ad-menu-item cursor-interaction" data-action="close"><i data-lucide="check" aria-hidden="true"></i>dsh · 当前选择</button>`, action);
+    } else if (action === "add") {
+      showSheet(phone, "添加内容", `<button type="button" class="ad-menu-item cursor-interaction" data-action="settings"><i data-lucide="sliders-horizontal" aria-hidden="true"></i>绘图设置</button><button type="button" class="ad-menu-item cursor-interaction" data-action="negative"><i data-lucide="list" aria-hidden="true"></i>反向词详情</button>`, action);
+    }
+  }
+  phones.forEach((phone) => {
+    phoneState.set(phone, { workspace:"draw", inputMode:"draw", prompt:"优化手部细节，手指自然。" });
+    phone.addEventListener("click", (event) => {
+      const button = event.target.closest("button");
+      if (!button || !phone.contains(button)) return;
+      if (button.dataset.workspace) {
+        applyWorkspace(phone, button.dataset.workspace); remember(); return;
+      }
+      if (button.dataset.inputMode) {
+        applyInputMode(phone, button.dataset.inputMode); remember(); return;
+      }
+      const action = button.dataset.action;
+      if (!action) return;
+      if (action === "send") { sendMessage(phone); return; }
+      if (action === "close") { closeSheet(phone); return; }
+      if (action === "page-settings") {
+        if (!phone.querySelector(".ad-overlay").hidden) closeSheet(phone);
+        announce(phone, "已选择 Agent 设置（页面跳转示意）。"); return;
+      }
+      if (action === "save-settings") {
+        phoneState.get(phone).prompt = phone.querySelector('textarea[name="prompt"]').value.slice(0,2000);
+        closeSheet(phone); announce(phone, "绘图设置已保存。"); remember(); return;
+      }
+      if (action === "new-session") {
+        phone.querySelector('input[name="message"]').value = "";
+        closeSheet(phone); announce(phone, "已创建新的示例会话。"); remember(); return;
+      }
+      if (action === "clear") {
+        closeSheet(phone);
+        phone.querySelectorAll(".ad-user-message,.ad-agent-message").forEach((message) => message.hidden = true);
+        announce(phone, "当前示例对话已清空。");
+        remember(); return;
+      }
+      if (action === "nav") { announce(phone, `已选择“${button.dataset.label}”（页面跳转示意）。`); return; }
+      if (!phone.querySelector(".ad-overlay").hidden) {
+        openAction(phone, action);
+      } else {
+        activeTrigger = button;
+        openAction(phone, action);
+      }
+    });
+    phone.querySelector(".ad-composer").addEventListener("submit", (event) => {
+      event.preventDefault();
+      sendMessage(phone);
+    });
+    phone.querySelector('input[name="message"]').addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        sendMessage(phone);
+      }
+    });
+    phone.querySelector('input[name="message"]').addEventListener("change", remember);
+    phone.querySelector(".ad-overlay").addEventListener("click", (event) => {
+      if (event.target === event.currentTarget) closeSheet(phone);
+    });
+    phone.addEventListener("keydown", (event) => {
+      const overlay = phone.querySelector(".ad-overlay");
+      if (overlay.hidden) return;
+      if (event.key === "Escape") { event.preventDefault(); closeSheet(phone); }
+      if (event.key === "Tab") {
+        const nodes = Array.from(overlay.querySelectorAll("button:not([disabled]),textarea,input,select"));
+        const first = nodes[0], last = nodes[nodes.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    });
+  });
+  restore(saved());
+  window.addEventListener("openai:set_globals", (event) => {
+    if (event.detail?.globals?.widgetState) restore(event.detail.globals.widgetState);
+  });
+  const design = { appearance:"system", radius:22 };
+  function updateDesign() {
+    phones.forEach((phone) => {
+      phone.style.setProperty("--ad-radius", `${design.radius}px`);
+      phone.style.colorScheme = design.appearance === "system" ? "light dark" : design.appearance;
+    });
+  }
+  updateDesign();
+  if (globalThis.Tweak) {
+    const tweak = new Tweak({ container:root, onChange:updateDesign });
+    tweak.addSelect(design, "appearance", { label:"外观", options:[{label:"跟随系统",value:"system"},{label:"深色",value:"dark"},{label:"浅色",value:"light"}] });
+    tweak.addSlider(design, "radius", { label:"内容圆角", min:12, max:28, step:2, unit:"px" });
+  }
+})();
+</script>

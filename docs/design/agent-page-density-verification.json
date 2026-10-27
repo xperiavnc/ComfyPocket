@@ -1,0 +1,253 @@
+{
+  "executed_at": "2026-10-27T15:49:31.465690+08:00",
+  "command": [
+    "npx.cmd",
+    "--yes",
+    "--package",
+    "@playwright/cli",
+    "playwright-cli",
+    "-s=agent-density",
+    "run-code",
+    "--filename",
+    "C:\\Users\\x\\.codex\\visualizations\\2026\\10\\27\\01a17c38-accc-7c70-bfc9-c1b6ba29f551\\validate-preview.js"
+  ],
+  "cwd": "C:\\Users\\x\\Documents\\ChatGPT\\Android\\output\\playwright",
+  "exit_status": 0,
+  "stdout": "### Result\n{\"minimumTargetCssPx\":48,\"layouts\":[{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"dark\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"generation\",\"theme\":\"light\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"dark\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":320,\"width\":320,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":360,\"width\":360,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16},{\"variant\":\"conversation\",\"theme\":\"light\",\"requestedWidth\":400,\"width\":400,\"height\":882,\"smallTargets\":[],\"overflow\":[],\"outside\":[],\"composerAboveNavigation\":true,\"visibleButtonCount\":16}],\"interactions\":[{\"variant\":\"generation\",\"action\":\"negative details + 6 translations + inert + label + Escape + focus return\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"open/edit/save drawing settings\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"mode switch + image preview\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"send button + Enter + visible local status update\",\"status\":\"PASS\"},{\"variant\":\"generation\",\"action\":\"clear confirmation + cancel preserves + confirm clears local sample\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"negative details + 6 translations + inert + label + Escape + focus return\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"open/edit/save drawing settings\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"mode switch + image preview\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"send button + Enter + visible local status update\",\"status\":\"PASS\"},{\"variant\":\"conversation\",\"action\":\"clear confirmation + cancel preserves + confirm clears local sample\",\"status\":\"PASS\"}],\"runtimeErrors\":[],\"sameCanvas\":{\"width\":400,\"heights\":[882,882,882,882],\"status\":\"PASS\"},\"status\":\"PASS\"}\n### Ran Playwright code\n```js\nawait (async (page) => {\n  const errors = [];\n  const onError = (error) => errors.push(error.message);\n  page.on(\"pageerror\", onError);\n  const frame = page.frames().find((item) => item.parentFrame());\n  const root = frame.locator(\"#agent-density-preview\");\n  const results = { minimumTargetCssPx:48, layouts:[], interactions:[], runtimeErrors:errors };\n  const assert = (condition, message) => { if (!condition) throw new Error(message); };\n  const inspect = async (phone, variant, theme, requestedWidth) => {\n    const result = await phone.evaluate((element) => {\n      const rect = element.getBoundingClientRect();\n      const buttons = Array.from(element.querySelectorAll(\"button\")).filter((button) => button.getClientRects().length);\n      const smallTargets = buttons.map((button) => {\n        const bounds = button.getBoundingClientRect();\n        return { label:button.getAttribute(\"aria-label\") || button.textContent.trim(), width:bounds.width, height:bounds.height };\n      }).filter((button) => button.width < 48 || button.height < 48);\n      const structuralSelectors = [\".ad-page\",\".ad-header\",\".ad-workspace-bar\",\".ad-main\",\".ad-settings-row\",\".ad-composer\",\".ad-bottom-nav\",\".ad-compose-tools\",\".ad-task-card\"];\n      const overflow = structuralSelectors.flatMap((selector) => Array.from(element.querySelectorAll(selector)).filter((node) => node.getClientRects().length && node.scrollWidth > node.clientWidth + 2).map(() => selector));\n      const outside = buttons.map((button) => {\n        const bounds = button.getBoundingClientRect();\n        return { label:button.getAttribute(\"aria-label\") || button.textContent.trim(), left:bounds.left, right:bounds.right, top:bounds.top, bottom:bounds.bottom };\n      }).filter((button) => button.left < rect.left - 1 || button.right > rect.right + 1 || button.top < rect.top - 1 || button.bottom > rect.bottom + 1);\n      const composer = element.querySelector(\".ad-composer\").getBoundingClientRect();\n      const nav = element.querySelector(\".ad-bottom-nav\").getBoundingClientRect();\n      return { width:rect.width, height:rect.height, smallTargets, overflow, outside, composerAboveNavigation:composer.bottom <= nav.top, visibleButtonCount:buttons.length };\n    });\n    const item = { variant, theme, requestedWidth, ...result };\n    results.layouts.push(item);\n    assert(Math.abs(result.width-requestedWidth)<1, `Viewport had not settled: ${JSON.stringify(item)}`);\n    assert(!result.smallTargets.length, `Small touch targets: ${JSON.stringify(item)}`);\n    assert(!result.overflow.length, `Horizontal overflow: ${JSON.stringify(item)}`);\n    assert(!result.outside.length, `Controls outside phone: ${JSON.stringify(item)}`);\n    assert(result.composerAboveNavigation, `Composer/nav overlap: ${JSON.stringify(item)}`);\n  };\n  for (const variant of [\"generation\",\"conversation\"]) {\n    if (variant === \"conversation\") await root.getByRole(\"button\", { name:\"下一个方案\", exact:true }).click();\n    const phone = frame.locator(`[data-design=\"${variant}\"]`);\n    await phone.waitFor({ state:\"visible\" });\n    for (const theme of [\"dark\",\"light\"]) {\n      await page.emulateMedia({ colorScheme:theme });\n      for (const [viewportWidth, requestedWidth] of [[352,320],[392,360],[768,400]]) {\n        await page.setViewportSize({ width:viewportWidth, height:1100 });\n        await frame.waitForFunction((width) => window.innerWidth === width, viewportWidth - 32);\n        await inspect(phone, variant, theme, requestedWidth);\n        if (viewportWidth === 768) await phone.screenshot({ path:`agent-${variant}-${theme}.png` });\n      }\n    }\n    await page.emulateMedia({ colorScheme:\"dark\" });\n    await page.setViewportSize({ width:768, height:1100 });\n    const negativeTrigger = phone.locator('[data-action=\"negative\"]').filter({ visible:true }).first();\n    await negativeTrigger.click();\n    const dialog = phone.locator('[role=\"dialog\"]');\n    assert(await dialog.isVisible(), `${variant}: missing negative detail`);\n    assert(await dialog.locator(\"dt\").count() === 6, `${variant}: translations lost`);\n    const modalState = await phone.evaluate((element) => {\n      const modal = element.querySelector('[role=\"dialog\"]');\n      const phoneRect = element.getBoundingClientRect(), modalRect = modal.getBoundingClientRect();\n      return {\n        inert:element.querySelector(\".ad-page\").inert,\n        named:!!document.getElementById(modal.getAttribute(\"aria-labelledby\")),\n        fits:modalRect.top >= phoneRect.top && modalRect.bottom <= phoneRect.bottom + 1\n      };\n    });\n    assert(modalState.inert && modalState.named && modalState.fits, `${variant}: modal invalid`);\n    await phone.screenshot({ path:`agent-${variant}-details-dark.png` });\n    await page.keyboard.press(\"Escape\");\n    assert(!await dialog.count(), `${variant}: Escape failed to close details`);\n    assert(await negativeTrigger.evaluate((button) => document.activeElement === button), `${variant}: focus not restored`);\n    results.interactions.push({ variant, action:\"negative details + 6 translations + inert + label + Escape + focus return\", status:\"PASS\" });\n    await phone.locator('[data-action=\"settings\"]').filter({ visible:true }).first().click();\n    await phone.locator('textarea[name=\"prompt\"]').fill(\"手指自然，保持原有构图。\");\n    await phone.getByRole(\"button\", { name:\"保存设置\", exact:true }).click();\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"已保存\"), `${variant}: settings not saved`);\n    results.interactions.push({ variant, action:\"open/edit/save drawing settings\", status:\"PASS\" });\n    if (variant === \"generation\") {\n      await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).click();\n      assert(await phone.locator(\".ad-chat-view\").isVisible(), \"Chat workspace not visible\");\n      await phone.getByRole(\"button\", { name:\"绘图\", exact:true }).click();\n      assert(await phone.locator(\".ad-draw-view\").isVisible(), \"Drawing workspace not restored\");\n      await phone.getByRole(\"button\", { name:\"放大查看预览示意图\", exact:true }).click();\n    } else {\n      await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).click();\n      assert(await phone.getByRole(\"button\", { name:\"Chat\", exact:true }).getAttribute(\"aria-pressed\") === \"true\", \"Input mode did not change\");\n      await phone.getByRole(\"button\", { name:\"绘图\", exact:true }).click();\n      await phone.getByRole(\"button\", { name:\"查看预览\", exact:true }).click();\n    }\n    assert(await phone.locator('[data-panel=\"preview\"]').isVisible(), `${variant}: preview did not open`);\n    await phone.getByRole(\"button\", { name:\"关闭面板\", exact:true }).click();\n    results.interactions.push({ variant, action:\"mode switch + image preview\", status:\"PASS\" });\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).fill(\"保留构图，调整手部细节。\");\n    await phone.getByRole(\"button\", { name:\"发送消息\", exact:true }).click();\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"保留构图\"), `${variant}: send did not update visible state`);\n    assert(await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).inputValue() === \"\", `${variant}: message input not cleared`);\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).fill(\"回车发送验证\");\n    await phone.getByRole(\"textbox\", { name:\"消息\", exact:true }).press(\"Enter\");\n    assert((await phone.locator(\".ad-local-message\").textContent()).includes(\"回车发送验证\"), `${variant}: Enter did not send`);\n    results.interactions.push({ variant, action:\"send button + Enter + visible local status update\", status:\"PASS\" });\n    await phone.getByRole(\"button\", { name:\"更多会话操作\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"清空当前对话\", exact:true }).click();\n    assert(await phone.getByRole(\"button\", { name:\"确认清空\", exact:true }).isVisible(), `${variant}: clear lacks confirmation`);\n    await phone.getByRole(\"button\", { name:\"保留对话\", exact:true }).click();\n    assert(await phone.locator(\".ad-user-message\").first().evaluate((node) => !node.hidden), `${variant}: cancel clear removed messages`);\n    await phone.getByRole(\"button\", { name:\"更多会话操作\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"清空当前对话\", exact:true }).click();\n    await phone.getByRole(\"button\", { name:\"确认清空\", exact:true }).click();\n    assert(await phone.locator(\".ad-user-message\").first().evaluate((node) => node.hidden), `${variant}: confirm clear did not clear messages`);\n    results.interactions.push({ variant, action:\"clear confirmation + cancel preserves + confirm clears local sample\", status:\"PASS\" });\n  }\n  const heights = results.layouts.filter((item) => item.width === 400).map((item) => item.height);\n  assert(Math.max(...heights)-Math.min(...heights) < 1, `Variants use different canvas heights: ${JSON.stringify(heights)}`);\n  assert(!errors.length, `Runtime errors: ${JSON.stringify(errors)}`);\n  results.sameCanvas = { width:400, heights, status:\"PASS\" };\n  results.status = \"PASS\";\n  await page.reload();\n  await page.emulateMedia({ colorScheme:\"dark\" });\n  page.off(\"pageerror\", onError);\n  return results;\n}\n)(page);\n```\n",
+  "stderr": "",
+  "fragment_sha256": "dc8d1951bdc83ea569d9a0b883e9e796adc5e8d1dda7ff107c3eb9c96023044e",
+  "results": {
+    "minimumTargetCssPx": 48,
+    "layouts": [
+      {
+        "variant": "generation",
+        "theme": "dark",
+        "requestedWidth": 320,
+        "width": 320,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "generation",
+        "theme": "dark",
+        "requestedWidth": 360,
+        "width": 360,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "generation",
+        "theme": "dark",
+        "requestedWidth": 400,
+        "width": 400,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "generation",
+        "theme": "light",
+        "requestedWidth": 320,
+        "width": 320,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "generation",
+        "theme": "light",
+        "requestedWidth": 360,
+        "width": 360,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "generation",
+        "theme": "light",
+        "requestedWidth": 400,
+        "width": 400,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "conversation",
+        "theme": "dark",
+        "requestedWidth": 320,
+        "width": 320,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "conversation",
+        "theme": "dark",
+        "requestedWidth": 360,
+        "width": 360,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "conversation",
+        "theme": "dark",
+        "requestedWidth": 400,
+        "width": 400,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "conversation",
+        "theme": "light",
+        "requestedWidth": 320,
+        "width": 320,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "conversation",
+        "theme": "light",
+        "requestedWidth": 360,
+        "width": 360,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      },
+      {
+        "variant": "conversation",
+        "theme": "light",
+        "requestedWidth": 400,
+        "width": 400,
+        "height": 882,
+        "smallTargets": [],
+        "overflow": [],
+        "outside": [],
+        "composerAboveNavigation": true,
+        "visibleButtonCount": 16
+      }
+    ],
+    "interactions": [
+      {
+        "variant": "generation",
+        "action": "negative details + 6 translations + inert + label + Escape + focus return",
+        "status": "PASS"
+      },
+      {
+        "variant": "generation",
+        "action": "open/edit/save drawing settings",
+        "status": "PASS"
+      },
+      {
+        "variant": "generation",
+        "action": "mode switch + image preview",
+        "status": "PASS"
+      },
+      {
+        "variant": "generation",
+        "action": "send button + Enter + visible local status update",
+        "status": "PASS"
+      },
+      {
+        "variant": "generation",
+        "action": "clear confirmation + cancel preserves + confirm clears local sample",
+        "status": "PASS"
+      },
+      {
+        "variant": "conversation",
+        "action": "negative details + 6 translations + inert + label + Escape + focus return",
+        "status": "PASS"
+      },
+      {
+        "variant": "conversation",
+        "action": "open/edit/save drawing settings",
+        "status": "PASS"
+      },
+      {
+        "variant": "conversation",
+        "action": "mode switch + image preview",
+        "status": "PASS"
+      },
+      {
+        "variant": "conversation",
+        "action": "send button + Enter + visible local status update",
+        "status": "PASS"
+      },
+      {
+        "variant": "conversation",
+        "action": "clear confirmation + cancel preserves + confirm clears local sample",
+        "status": "PASS"
+      }
+    ],
+    "runtimeErrors": [],
+    "sameCanvas": {
+      "width": 400,
+      "heights": [
+        882,
+        882,
+        882,
+        882
+      ],
+      "status": "PASS"
+    },
+    "status": "PASS"
+  },
+  "syntax_check": {
+    "command": [
+      "node",
+      "--check"
+    ],
+    "input": "inline script from agent-page-density.html",
+    "exit_status": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "check_script_sha256": "aa448a2f16e299d746ae6d04c350291ab47e06d2bb2f5068e39389a9f327bf4a",
+  "scope": "HTML prototype only; CSS px are not Android dp; native app and target-user validation pending",
+  "recorded_script_copy": "docs/design/agent-page-density.check.js",
+  "screenshots": [
+    "agent-generation-dark.png",
+    "agent-generation-light.png",
+    "agent-conversation-dark.png",
+    "agent-conversation-light.png",
+    "agent-generation-details-dark.png",
+    "agent-conversation-details-dark.png"
+  ]
+}
