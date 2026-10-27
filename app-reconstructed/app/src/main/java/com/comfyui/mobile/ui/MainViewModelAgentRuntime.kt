@@ -397,6 +397,11 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             } catch (e: IllegalArgumentException) {
                 throw AgentExecutionException(e.message ?: "提示词绑定已失效，请重新设置")
             }
+            val positiveTargets = AgentPromptBindings.positiveTargets(
+                vm.agentWorkflow.orEmpty(), vm._agentPositiveBinding.value, target)
+            if (configuredNegative.any { it in positiveTargets }) {
+                throw AgentExecutionException("正反向提示词绑定了同一字段，请分别设置")
+            }
             val negativeTargets = if (negativePrompt != null) configuredNegative else emptyList()
             if (configuredNegative.isNotEmpty()) {
                 val effectiveNegative = negativePrompt ?: AgentPromptBindings.text(
@@ -409,11 +414,11 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     )
                 }
             }
-            val snapshot = workflowSnapshot(listOf(target) + negativeTargets)
+            val snapshot = workflowSnapshot(positiveTargets + negativeTargets)
             tools.inspectWorkflow.execute(snapshot).getOrElse {
                 throw AgentExecutionException("工作流检查失败：${it.message}")
             }
-            val changes = mutableListOf(AgentFieldChange(target.first, target.second, prompt))
+            val changes = positiveTargets.mapTo(mutableListOf()) { (id, key) -> AgentFieldChange(id, key, prompt) }
             negativeTargets.forEach { (id, key) -> changes.add(AgentFieldChange(id, key, negativePrompt!!)) }
             uploadedImage?.let { (node, value) -> changes.add(AgentFieldChange(node.nodeId, node.key, value)) }
             val patch = tools.patchWorkflow.execute(AgentPatchRequest(snapshot, changes)).getOrElse {

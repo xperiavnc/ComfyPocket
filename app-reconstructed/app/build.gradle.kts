@@ -14,8 +14,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 52
-        versionName = "0.0.50-agent-fixes"
+        versionCode = 53
+        versionName = "0.0.51-agent-workflow-fixes"
     }
 
     buildFeatures {

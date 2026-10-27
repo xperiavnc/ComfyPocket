@@ -1162,7 +1162,9 @@ object MainViewModelAgent {
         expectedVersion: Long = vm.agentSession.contextVersion()
     ): Boolean {
         if (vm.agentSession.contextVersion() != expectedVersion) return false
-        val ticket = vm.agentWorkflowLoadVersion.incrementAndGet()
+        // A generation belongs to the workspace/context, not to an individual read.
+        // Preloading and preparing the same template must not invalidate one another.
+        val ticket = vm.agentWorkflowLoadVersion.get()
         fun valid() = vm.agentSession.contextVersion() == expectedVersion &&
             vm.agentWorkflowLoadVersion.get() == ticket
         val source = vm._agentWorkflowSource.value

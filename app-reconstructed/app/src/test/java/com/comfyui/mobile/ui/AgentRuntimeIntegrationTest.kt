@@ -1545,6 +1545,64 @@ class AgentRuntimeIntegrationTest {
         vm.agentWorkspace.saveConfiguration()
     }
 
+    private fun sdxlWorkflow() {
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
+            """{"1":{"class_type":"CLIPTextEncodeSDXL","inputs":{"text_g":"old subject g","text_l":"old subject l","width":1024,"height":1024}},"2":{"class_type":"CLIPTextEncode","inputs":{"text":"quality branch"}},"3":{"class_type":"ConditioningCombine","inputs":{"conditioning_1":["1",0],"conditioning_2":["2",0]}},"4":{"class_type":"KSampler","inputs":{"positive":["3",0]}}}""")
+    }
+
+    @Test fun reviewAutomaticSdxlPositiveUpdatesBothEncodersWithoutTouchingOtherBranches() {
+        sdxlWorkflow()
+        responses += success("""{"action":"draw","reply":"好","prompt":"cat, rain","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画雨中的猫")
+        awaitDone()
+        val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        val inputs = graph["1"].asJsonObject["inputs"].asJsonObject
+        assertEquals("cat, rain", inputs["text_g"].asString)
+        assertEquals("cat, rain", inputs["text_l"].asString)
+        assertEquals("quality branch", graph["2"].asJsonObject["inputs"].asJsonObject["text"].asString)
+        assertEquals(1024, inputs["width"].asInt)
+    }
+
+    @Test fun reviewExplicitSdxlPositiveStillUpdatesOnlyTheChosenField() {
+        sdxlWorkflow()
+        installBinding(false, AgentPromptBinding(PromptBindingMode.EXPLICIT, "1", "text_g"))
+        responses += success("""{"action":"draw","reply":"好","prompt":"cat","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        val inputs = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject["1"]
+            .asJsonObject["inputs"].asJsonObject
+        assertEquals("cat", inputs["text_g"].asString)
+        assertEquals("old subject l", inputs["text_l"].asString)
+    }
+
+    @Test fun reviewAutomaticSdxlDoesNotReplaceALinkedCompanionInput() {
+        sdxlWorkflow()
+        val file = File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json")
+        file.writeText(file.readText().replace("\"text_l\":\"old subject l\"", "\"text_l\":[\"2\",0]"))
+        responses += success("""{"action":"draw","reply":"好","prompt":"cat","negative_prompt":"","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        val inputs = graph["1"].asJsonObject["inputs"].asJsonObject
+        assertEquals("cat", inputs["text_g"].asString)
+        assertEquals("[\"2\",0]", inputs["text_l"].toString())
+        assertEquals("quality branch", graph["2"].asJsonObject["inputs"].asJsonObject["text"].asString)
+    }
+
+    @Test fun reviewNegativeBindingOverlappingTheSdxlCompanionStopsBeforePatch() {
+        sdxlWorkflow()
+        installBinding(true, AgentPromptBinding(PromptBindingMode.EXPLICIT, "1", "text_l"))
+        responses += success("""{"action":"draw","reply":"好","prompt":"cat","negative_prompt":"blurry","should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(promptBodies.isEmpty())
+        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("同一字段"))
+        val inputs = (vm.agentWorkflow!!["1"] as Map<*, *>)["inputs"] as Map<*, *>
+        assertEquals("old subject g", inputs["text_g"])
+        assertEquals("old subject l", inputs["text_l"])
+    }
+
     @Test fun explicitNegativeFieldIsUsedByReferenceAndRealSubmission() {
         File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
             """{"1":{"class_type":"CLIPTextEncode","inputs":{"text":"before"}},"9":{"class_type":"CustomText","inputs":{"avoid":"fixture_embedding, blurry","unrelated":"keep"}}}""")

@@ -136,7 +136,9 @@ Bridge **不依赖 Lora Manager**，也不打包进 APK。更新时替换完整�
 流式回复按单条消息保存，长历史分页；任务结果按提交时的服务器与会话归档，
 提交状态不明时保留记录并等待核对。设置中的 `.cui.bak` 已支持会话及附件导出、
 校验和确认替换，旧备份不清除会话。本版继续使用现有 Agent 页面，
-项目 / 多会话管理入口在 P2 / P3 实施。详见 [工作区计划](app-reconstructed/AGENT_WORKSPACE_PLAN.md)。
+P2 独立会话管理已实现；P3 项目管理及 P4 真机完整验收仍待推进。`0.0.51` 继续修复
+模板并发加载、SDXL 双文本写入和清空聊天后的迟到历史分页。详见
+[Agent 文档](app-reconstructed/AGENT.md) 与 [工作区计划](app-reconstructed/AGENT_WORKSPACE_PLAN.md)。
 
 ### 模型中心与在线集市
 

@@ -64,6 +64,7 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
     @Volatile private var lastFailure: Throwable? = null
     private val failedWrites = ArrayDeque<suspend () -> Unit>()
     private val draftRevision = AtomicLong()
+    private val messageRevision = AtomicLong()
     private val persistedConversations = ConcurrentHashMap.newKeySet<String>()
     private val checkpoints = ConcurrentHashMap<String, Long>()
     private var conversationObserver: Job? = null
@@ -634,7 +635,9 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
 
     fun clearChat() {
         val row = active ?: return
+        messageRevision.incrementAndGet()
         savedMessages = emptyList()
+        firstSequence = 0
         draftRevision.incrementAndGet()
         val cleared = AgentInputDraft(attachmentGeneration = draft.value.attachmentGeneration + 1)
         draft.value = cleared
@@ -652,13 +655,14 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         val row = active ?: return
         val before = firstSequence
         val loadTicket = ticket.get()
+        val revision = messageRevision.get()
         if (!usesRoom || !hasEarlier.value) return
         hasEarlier.value = false
         vm.viewModelScope.launch {
             val page = serial { repository.messagePage(row.id, before).let { rows ->
                 rows to display(rows.map { vm.gson.fromJson(it.payloadJson, AgentChatMessage::class.java) })
             } }
-            if (active?.id != row.id || loadTicket != ticket.get()) return@launch
+            if (active?.id != row.id || loadTicket != ticket.get() || revision != messageRevision.get()) return@launch
             firstSequence = page.first.firstOrNull()?.sequence ?: 0
             vm._agentMessages.value = (page.second + vm._agentMessages.value).distinctBy { it.id }
             savedMessages = vm._agentMessages.value

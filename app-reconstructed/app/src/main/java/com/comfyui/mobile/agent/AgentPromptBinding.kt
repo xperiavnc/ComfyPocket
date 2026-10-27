@@ -69,6 +69,20 @@ data class AgentPromptOutput(
 
 /** Resolve both directions against the same snapshot; explicit invalid bindings fail visibly. */
 object AgentPromptBindings {
+    /** AUTO updates both literal inputs of the selected SDXL encoder, not other style branches. */
+    fun positiveTargets(
+        graph: Map<String, Any>,
+        binding: AgentPromptBinding,
+        primary: Pair<String, String>
+    ): List<Pair<String, String>> {
+        if (binding.mode == PromptBindingMode.EXPLICIT) return listOf(primary)
+        val node = graph[primary.first] as? Map<*, *>
+        val keys = listOf("text_g", "text_l")
+        if (node?.get("class_type") != "CLIPTextEncodeSDXL" || primary.second !in keys) return listOf(primary)
+        val inputs = node["inputs"] as? Map<*, *>
+        return (listOf(primary) + keys.filter { inputs?.get(it) is String }.map { primary.first to it }).distinct()
+    }
+
     fun negativeTargets(
         graph: Map<String, Any>,
         binding: AgentPromptBinding,

@@ -12,6 +12,7 @@ import java.io.File
 import java.time.Duration
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.Executors
 import kotlinx.coroutines.*
 import okhttp3.mockwebserver.Dispatcher
 import okhttp3.mockwebserver.MockResponse
@@ -335,6 +336,51 @@ class AgentWorkspaceIntegrationTest {
         assertNotEquals(a, vm.agentWorkspace.conversationId)
     }
 
+    private fun queuedWorkflowReads(check: (List<Deferred<Boolean>>, () -> Unit) -> Unit) {
+        val file = File(MainViewModelWorkflow.savedWorkflowsDir(vm), "concurrent-agent.json").apply {
+            parentFile!!.mkdirs()
+            writeText("""{"1":{"class_type":"CLIPTextEncode","inputs":{"text":"original"}}}""")
+        }
+        vm._agentWorkflowSource.value = MainViewModel.AGENT_WF_SAVED
+        vm._agentWorkflowId.value = file.name
+        vm.agentWorkflow = null
+        Executors.newSingleThreadExecutor().asCoroutineDispatcher().use { dispatcher ->
+            val scope = CoroutineScope(SupervisorJob() + dispatcher)
+            try {
+                val version = vm.agentSession.contextVersion()
+                val reads = List(2) {
+                    scope.async { MainViewModelAgent.ensureAgentWorkflowLoaded(vm, expectedVersion = version) }
+                }
+                // FIFO barrier: both synchronous file reads have reached their paused Main commit.
+                runBlocking { withContext(dispatcher) { } }
+                assertTrue(reads.none { it.isCompleted })
+                check(reads) { pump { reads.all { it.isCompleted } } }
+            } finally {
+                scope.cancel()
+            }
+        }
+    }
+
+    @Test fun reviewConcurrentReadsOfTheSameTemplateBothRemainValid() = queuedWorkflowReads { reads, finish ->
+        finish()
+        assertEquals(listOf(true, true), runBlocking { reads.awaitAll() })
+        assertEquals("original", ((vm.agentWorkflow!!["1"] as Map<*, *>)["inputs"] as Map<*, *>)["text"])
+    }
+
+    @Test fun reviewQueuedTemplateReadsStayInvalidAfterContextChanges() = queuedWorkflowReads { reads, finish ->
+        MainViewModelAgent.invalidateContext(vm)
+        finish()
+        assertEquals(listOf(false, false), runBlocking { reads.awaitAll() })
+        assertNull(vm.agentWorkflow)
+    }
+
+    @Test fun reviewExplicitWorkspaceInvalidationStillRejectsQueuedReads() = queuedWorkflowReads { reads, finish ->
+        vm.agentWorkflowLoadVersion.incrementAndGet()
+        finish()
+        assertEquals(listOf(false, false), runBlocking { reads.awaitAll() })
+        assertNull(vm.agentWorkflow)
+    }
+
     @Test fun modelSelectorOwnerExpiresAcrossSessionSwitchOrTemplateChange() {
         message("a", "A")
         val a = vm.agentWorkspace.conversationId!!
@@ -552,6 +598,29 @@ class AgentWorkspaceIntegrationTest {
         pump { vm.agentMessages.value.size == 235 }
         assertEquals((0..234).map { "m-$it" }, vm.agentMessages.value.map { it.id })
         assertFalse(vm.agentHasEarlierMessages.value)
+    }
+
+    @Test fun reviewClearingChatDiscardsAnEarlierPageAlreadyReadInTheBackground() {
+        val id = vm.agentWorkspace.conversationId!!
+        repeat(235) { message("old-$it", "old message $it") }
+        flush()
+        stop()
+        start()
+        assertEquals(200, vm.agentMessages.value.size)
+        assertTrue(vm.agentHasEarlierMessages.value)
+        vm.loadEarlierAgentMessages()
+        // The storage worker drains without Main; leave the old page's UI callback queued.
+        runBlocking { vm.agentWorkspace.flush() }
+        vm.clearAgentChat()
+        message("new", "cleared conversation, new message")
+        flush()
+        assertEquals(listOf("new"), vm.agentMessages.value.map { it.id })
+        assertEquals(listOf("new"), vm.agentWorkspace.cachedMessages().map { it.id })
+        assertFalse(vm.agentHasEarlierMessages.value)
+        assertEquals(listOf("new"), database { repo, _ -> repo.messages(id) }.map { it.id })
+        stop()
+        start()
+        assertEquals(listOf("new"), vm.agentMessages.value.map { it.id })
     }
 
     @Test fun draftSelectionScrollAndImportedAttachmentSurviveRestart() {
