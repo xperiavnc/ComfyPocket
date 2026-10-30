@@ -11,10 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import top.yukonga.miuix.kmp.icon.extended.Delete
+import top.yukonga.miuix.kmp.icon.extended.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -40,7 +39,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
-/** Layout: [Chat|绘图 toggle] ........ [model ▾][🗑] */
+/** Keep only frequent controls visible; low-frequency actions live in the workbench sheet. */
 @Composable
 fun AgentCapsuleBar(
     modelDisplayName: String,
@@ -49,7 +48,7 @@ fun AgentCapsuleBar(
     modifier: Modifier = Modifier,
     onModelSwitchClick: () -> Unit,
     onInteractionModeChange: (String) -> Unit,
-    onResetChatClick: () -> Unit
+    onWorkbenchActionsClick: () -> Unit
     ) {
     val haptics = rememberAppHaptics()
 
@@ -88,17 +87,17 @@ fun AgentCapsuleBar(
             }
             Box(
                 modifier = Modifier
-                    .size(CapsuleHeight)
+                    .size(40.dp)
                     .clip(CircleShape)
-                    .background(DangerRed.copy(alpha = 0.14f))
-                    .clickable { haptics.tick(); onResetChatClick() },
+                    .background(MiuixTheme.colorScheme.surfaceContainerHighest)
+                    .clickable { haptics.tick(); onWorkbenchActionsClick() },
                 contentAlignment = Alignment.Center
     ) {
                 Icon(
-                    MiuixIcons.Delete,
-                    contentDescription = "重置对话",
-                    modifier = Modifier.size(16.dp),
-                    tint = DangerRed
+                    MiuixIcons.Settings,
+                    contentDescription = "绘图参数与操作",
+                    modifier = Modifier.size(18.dp),
+                    tint = MiuixTheme.colorScheme.onSurface
     )
             }
         }
@@ -107,8 +106,6 @@ fun AgentCapsuleBar(
 
 private val CapsuleHeight = 30.dp
 private val SegmentWidth = 56.dp
-/** Mid-saturation red: readable on light and dark surfaces. */
-private val DangerRed = Color(0xFFEF5350)
 
 /** Sliding segmented switch: tap a side or swipe horizontally. */
 @Composable

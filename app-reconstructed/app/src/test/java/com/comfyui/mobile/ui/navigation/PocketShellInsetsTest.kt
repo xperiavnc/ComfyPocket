@@ -84,10 +84,12 @@ class PocketShellInsetsTest {
             compose.waitForIdle()
             compose.onNodeWithTag("pocket-tab-2").performClick(); compose.waitForIdle()
             applyInsets(controller.get(), side = 32)
+            compose.onNodeWithTag("agent-workbench-preview").assertIsDisplayed()
             val normal = compose.onNodeWithTag("pocket-content").fetchSemanticsNode().boundsInRoot
             val fullHeight = compose.onNodeWithTag("pocket-shell").fetchSemanticsNode().boundsInRoot.bottom
             assertTrue("Horizontal system inset must not cover content", normal.left >= 32)
             applyInsets(controller.get(), ime = 600, side = 32)
+            compose.onNodeWithTag("agent-workbench-preview").assertDoesNotExist()
             compose.onNodeWithTag("pocket-navigation").assertDoesNotExist()
             compose.onNode(hasSetTextAction()).performTextInput("键盘避让，尚未发送")
             val content = compose.onNodeWithTag("pocket-content").fetchSemanticsNode().boundsInRoot
@@ -96,6 +98,7 @@ class PocketShellInsetsTest {
             assertTrue("Input remains near the visible bottom, not padded twice", content.bottom - send.bottom < 100f)
             assertTrue(send.bottom <= content.bottom)
             applyInsets(controller.get(), side = 32)
+            compose.onNodeWithTag("agent-workbench-preview").assertIsDisplayed()
             compose.onNodeWithTag("pocket-navigation").assertIsDisplayed()
             compose.onNode(hasSetTextAction()).assertTextContains("键盘避让，尚未发送")
             assertFalse(controller.get().isFinishing)

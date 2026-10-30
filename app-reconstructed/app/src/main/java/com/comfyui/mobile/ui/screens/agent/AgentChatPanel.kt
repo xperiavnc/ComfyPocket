@@ -81,6 +81,8 @@ fun AgentChatPanel(
     onPickFiles: () -> Unit = {},
     onRemoveAttachment: (String) -> Unit = {},
     onStop: () -> Unit = {},
+    framed: Boolean = true,
+    toolbar: (@Composable () -> Unit)? = null,
     onAnswerQuestions: ((String, List<com.comfyui.mobile.model.AgentQuestionAnswer>) -> Boolean)? = null,
     onSendMessage: (String) -> Unit
     ) {
@@ -95,15 +97,15 @@ fun AgentChatPanel(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = sidePad, vertical = 6.dp)
-            .border(
+            .then(if (framed) Modifier.border(
                 width = 1.dp,
                 color = scheme.outline.copy(alpha = 0.26f),
                 shape = RoundedCornerShape(PanelCorner)
-            ),
-        cornerRadius = PanelCorner,
+            ) else Modifier),
+        cornerRadius = if (framed) PanelCorner else 0.dp,
         colors = cardColors
     ) {
-        Column(modifier = Modifier.fillMaxSize().padding(PanelPadding)) {
+        Column(modifier = Modifier.fillMaxSize().padding(if (framed) PanelPadding else 0.dp)) {
             if (statusMessage.isNotBlank()) Text(
                 text = statusMessage,
                 style = MiuixTheme.textStyles.footnote1,
@@ -116,8 +118,7 @@ fun AgentChatPanel(
                     .weight(1f)
                     .fillMaxWidth()
                     .testTag("agent-chat-list")
-                    // Concentric with the card: 28dp corner - 12dp content padding.
-                    .clip(RoundedCornerShape(PanelCorner - PanelPadding))
+                    .clip(RoundedCornerShape(if (framed) PanelCorner - PanelPadding else 16.dp))
                     .overScrollVertical(),
                 contentPadding = PaddingValues(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -144,6 +145,7 @@ fun AgentChatPanel(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+            toolbar?.invoke()
             if (attachments.isNotEmpty()) {
                 AgentAttachmentStrip(
                     attachments = attachments,
@@ -185,6 +187,7 @@ fun AgentChatPanel(
                     onValueChange = onInputChange,
                     modifier = Modifier
                         .weight(1f)
+                        .testTag("agent-chat-input")
                         .heightIn(min = ChatButtonSize)
                         .clip(RoundedCornerShape(ChatButtonSize / 2))
                         .background(scheme.surface)

@@ -27,10 +27,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -75,7 +74,9 @@ fun AgentImagePreviewCard(
     wfLabel: String,
     cardColors: CardColors,
     sidePad: Dp,
+    pagerState: PagerState,
     modifier: Modifier = Modifier,
+    showControls: Boolean = true,
     onImageClick: (index: Int) -> Unit,
     onClearMediaListClick: () -> Unit,
     onWorkflowClick: () -> Unit,
@@ -83,7 +84,6 @@ fun AgentImagePreviewCard(
     onPromptClick: () -> Unit
     ) {
     val scheme = MiuixTheme.colorScheme
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { mediaList.size })
     val overlayOn = status.showOverlay
     // Keep last overlay payload so exit fade still draws "完成" (no empty flash).
     var heldOverlayStatus by remember { mutableStateOf(status) }
@@ -102,12 +102,6 @@ fun AgentImagePreviewCard(
     ),
         label = "pulse_alpha"
     )
-
-    LaunchedEffect(mediaList.firstOrNull()?.let { "${it.subfolder}|${it.filename}|${it.timestamp}" }) {
-        if (mediaList.isNotEmpty() && pagerState.currentPage != 0) {
-            pagerState.animateScrollToPage(0)
-        }
-    }
 
     Card(
         modifier = modifier
@@ -267,7 +261,7 @@ fun AgentImagePreviewCard(
                         .padding(10.dp)
                         .clip(RoundedCornerShape(50))
                         .background(scheme.surface.copy(alpha = 0.78f))
-                        .clickable(onClick = onClearMediaListClick)
+                        .then(if (showControls) Modifier.clickable(onClick = onClearMediaListClick) else Modifier)
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -315,7 +309,7 @@ fun AgentImagePreviewCard(
                 }
             }
 
-            Row(
+            if (showControls) Row(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
@@ -363,7 +357,7 @@ private fun defaultTitle(phase: AgentCardPhase): String = when (phase) {
 }
 
 @Composable
-private fun AgentStatusProgressBar(
+internal fun AgentStatusProgressBar(
     progress: Float?,
     modifier: Modifier = Modifier
     ) {

@@ -1,7 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import com.comfyui.mobile.model.CharacterLore
-import com.comfyui.mobile.ui.screens.agent.AgentImagePreviewCard
+import com.comfyui.mobile.ui.screens.agent.AgentWorkspaceLayout
 import com.comfyui.mobile.ui.screens.agent.AgentCardStatusFactory
 import com.comfyui.mobile.ui.screens.agent.AgentCapsuleBar
 import com.comfyui.mobile.ui.screens.agent.AgentPromptBindingPanel
@@ -168,6 +168,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     var showImageViewer by remember { mutableStateOf(false) }
     var fullScreenMediaIndex by remember { mutableStateOf(0) }
     var showClearMediaConfirmDialog by remember { mutableStateOf(false) }
+    var showWorkbenchActions by remember { mutableStateOf(false) }
+    var showResetChatConfirm by remember { mutableStateOf(false) }
     var showCloudModelBrowser by remember { mutableStateOf(false) }
     var cloudModelInitialType by remember { mutableStateOf("CHECKPOINT") }
     var cloudModelTargetNodeId by remember { mutableStateOf<String?>(null) }
@@ -182,6 +184,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         showManageAuxNodesDialog = false
         showImageViewer = false
         showClearMediaConfirmDialog = false
+        showWorkbenchActions = false
+        showResetChatConfirm = false
         showCloudModelBrowser = false
     }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = messages.lastIndex.coerceAtLeast(0))
@@ -337,66 +341,24 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     )
         }
     ) { innerPadding ->
-        Column(
+        AgentWorkspaceLayout(
+            sessionTitle = activeConversation?.title ?: "正在读取会话…",
+            mediaList = displayMediaList,
+            previewUrl = { viewModel.previewUrl(it) },
+            status = cardStatus,
+            wfLabel = wfLabel,
+            cardColors = cardColors,
+            sidePad = sidePad,
+            onOpenSessions = { navController.navigate("agent_sessions") },
+            onImageClick = { index -> fullScreenMediaIndex = index; showImageViewer = true },
             modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .padding(top = innerPadding.calculateTopPadding())
                 .imePadding()
                 .padding(bottom = bottomPad)
-    ) {
-            Row(
-                Modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
-                    .clip(RoundedCornerShape(14.dp)).background(scheme.surfaceContainer)
-                    .testTag("agent-open-sessions")
-                    .clickable { navController.navigate("agent_sessions") }
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(activeConversation?.title ?: "正在读取会话…", maxLines = 1,
-                        overflow = TextOverflow.Ellipsis, style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium))
-                }
-                Text("会话", style = MiuixTheme.textStyles.footnote1, color = scheme.primary)
-            }
-            AgentImagePreviewCard(
-                mediaList = displayMediaList,
-                previewUrl = { viewModel.previewUrl(it) },
-                status = cardStatus,
-                wfLabel = wfLabel,
-                cardColors = cardColors,
-                sidePad = sidePad,
-                modifier = Modifier.weight(0.54f),
-                onImageClick = { index ->
-                    fullScreenMediaIndex = index
-                    showImageViewer = true
-                },
-                onClearMediaListClick = {
-                    showClearMediaConfirmDialog = true
-                },
-                onWorkflowClick = {
-                    workflowSheetLevel = 1
-                    showWorkflowSheet = true
-                },
-                onStyleParamsClick = { showStyleParamsDialog = true },
-                onPromptClick = { showPromptDialog = true }
-    )
-
+     ) {
             val modelDisplayName = currentLlmProfile?.displayName ?: llmModel.ifBlank { "大模型" }
-
-            AgentCapsuleBar(
-                modelDisplayName = modelDisplayName,
-                interactionMode = agentInteractionMode,
-                sidePad = sidePad,
-                onModelSwitchClick = { showModelSwitchDialog = true },
-                onInteractionModeChange = { mode ->
-                    viewModel.setAgentInteractionMode(mode)
-                },
-                onResetChatClick = {
-                    viewModel.clearAgentChat()
-                    AppToast.show(context, "已重置对话")
-                }
-    )
 
             AgentChatPanel(
                 messages = messages,
@@ -412,10 +374,21 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 },
                 hasEarlier = hasEarlier,
                 onLoadEarlier = { viewModel.loadEarlierAgentMessages() },
-                cardColors = cardColors,
+                cardColors = CardDefaults.defaultColors(color = scheme.background, contentColor = scheme.onSurface),
                 sidePad = sidePad,
                 listState = listState,
-                modifier = Modifier.weight(0.46f),
+                modifier = Modifier.weight(1f),
+                framed = false,
+                toolbar = {
+                    AgentCapsuleBar(
+                        modelDisplayName = modelDisplayName,
+                        interactionMode = agentInteractionMode,
+                        sidePad = 0.dp,
+                        onModelSwitchClick = { showModelSwitchDialog = true },
+                        onInteractionModeChange = { viewModel.setAgentInteractionMode(it) },
+                        onWorkbenchActionsClick = { showWorkbenchActions = true }
+                    )
+                },
                 attachments = agentAttachments,
                 onPickImages = {
                     pickerOwner = viewModel.captureAgentAttachmentOwner()
@@ -438,6 +411,42 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                     viewModel.sendAgentMessage(text)
                 }
     )
+        }
+    }
+
+    OverlayDialog(show = showWorkbenchActions, title = "绘图参数与操作",
+        onDismissRequest = { showWorkbenchActions = false }) {
+        Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton("工作流 · $wfLabel", modifier = Modifier.fillMaxWidth(), onClick = {
+                showWorkbenchActions = false; workflowSheetLevel = 1; showWorkflowSheet = true
+            })
+            TextButton("画风 / 画师与辅助参数", modifier = Modifier.fillMaxWidth(), onClick = {
+                showWorkbenchActions = false; showStyleParamsDialog = true
+            })
+            TextButton("正向 / 反向提示词", modifier = Modifier.fillMaxWidth(), onClick = {
+                showWorkbenchActions = false; showPromptDialog = true
+            })
+            TextButton("清空预览记录", modifier = Modifier.fillMaxWidth(), onClick = {
+                showWorkbenchActions = false; showClearMediaConfirmDialog = true
+            })
+            TextButton("重置当前对话", modifier = Modifier.fillMaxWidth(), onClick = {
+                showWorkbenchActions = false; showResetChatConfirm = true
+            })
+        }
+    }
+    OverlayDialog(show = showResetChatConfirm, title = "重置当前对话？",
+        onDismissRequest = { showResetChatConfirm = false }) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("清空当前对话内容和本轮提示词，保留其他会话。")
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton("取消", modifier = Modifier.weight(1f), onClick = { showResetChatConfirm = false })
+                TextButton("确认重置", modifier = Modifier.weight(1f), onClick = {
+                    showResetChatConfirm = false
+                    viewModel.clearAgentChat()
+                    AppToast.show(context, "已重置对话")
+                })
+            }
         }
     }
 

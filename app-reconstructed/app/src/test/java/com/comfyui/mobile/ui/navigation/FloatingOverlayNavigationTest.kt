@@ -44,12 +44,18 @@ class FloatingOverlayNavigationTest {
         app.getSharedPreferences("civitai_market", Context.MODE_PRIVATE).edit().putString("mode", "BRIDGE").commit()
     }
 
+    private fun openWorkbenchAction(label: String) {
+        compose.onNodeWithContentDescription("绘图参数与操作").performTouchInput { click() }
+        compose.onNodeWithText(label, substring = false).performTouchInput { click() }
+        compose.waitForIdle()
+    }
+
     @Test fun styleDialogFooterReceivesPhysicalTapInsteadOfTheFloatingTabs() {
         val controller = Robolectric.buildActivity(MainActivity::class.java).setup().visible()
         try {
             compose.waitForIdle()
             compose.onNodeWithTag("pocket-tab-2").performClick()
-            compose.onNodeWithText("画风/画师").performClick()
+            openWorkbenchAction("画风 / 画师与辅助参数")
             compose.onNodeWithText("画风与辅助参数").assertIsDisplayed()
             compose.onNodeWithText("关闭").performScrollTo().performTouchInput { click() }
             compose.waitForIdle()
@@ -67,7 +73,7 @@ class FloatingOverlayNavigationTest {
             val output = AgentPromptOutput(positive = "blue sky, cloud, ".repeat(50),
                 negative = "blurry, low quality, ".repeat(50))
             compose.runOnIdle { ViewModelProvider(controller.get())[MainViewModel::class.java]._agentPromptOutput.value = output }
-            compose.onNodeWithText("提示词", substring = false).performClick()
+            openWorkbenchAction("正向 / 反向提示词")
             compose.onNodeWithText("出图提示词").assertIsDisplayed()
             compose.onNodeWithText("复制两组").performTouchInput { click() }
             compose.waitForIdle()
@@ -110,7 +116,7 @@ class FloatingOverlayNavigationTest {
             for (style in BottomBarStyle.entries) {
                 compose.runOnIdle { vm.setBottomBarStyle(style) }
                 compose.onNodeWithTag("pocket-tab-2").performClick()
-                compose.onNodeWithText("画风/画师").performClick()
+                openWorkbenchAction("画风 / 画师与辅助参数")
                 compose.onNodeWithContentDescription("切换画师节点").performClick()
                 compose.onNodeWithText("选择画师节点").assertIsDisplayed()
                 compose.runOnIdle {
@@ -143,7 +149,7 @@ class FloatingOverlayNavigationTest {
         try {
             compose.waitForIdle()
             compose.onNodeWithTag("pocket-tab-2").performClick()
-            compose.onNodeWithText("画风/画师").performClick()
+            openWorkbenchAction("画风 / 画师与辅助参数")
             val windowBottom = compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom
             fun insets(ime: Int) {
                 val value = WindowInsetsCompat.Builder()
