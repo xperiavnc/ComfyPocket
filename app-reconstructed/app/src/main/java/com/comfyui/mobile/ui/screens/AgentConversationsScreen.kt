@@ -3,6 +3,9 @@ package com.comfyui.mobile.ui.screens
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -24,6 +29,7 @@ import com.comfyui.mobile.ui.AgentStorageStatus
 import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.ui.components.DialogFormColumn
 import com.comfyui.mobile.ui.components.rememberDialogDismiss
+import com.comfyui.mobile.ui.screens.agent.agentControlSurface
 import java.text.DateFormat
 import java.util.Date
 import top.yukonga.miuix.kmp.basic.*
@@ -142,10 +148,16 @@ internal fun AgentConversationWorkspace(
                     }
                 }
                 items(shown, key = { it.id }) { row ->
+                    val interactions = remember { MutableInteractionSource() }
+                    val rowColor by animateColorAsState(
+                        if (row.id == selectedId) scheme.secondaryContainer else scheme.surfaceContainer,
+                        tween(160), label = "agentSessionSelection"
+                    )
                     Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                            .background(if (row.id == selectedId) scheme.secondaryContainer else scheme.surfaceContainer)
-                            .combinedClickable(enabled = writable,
+                        modifier = Modifier.animateItem().fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                            .background(rowColor).agentControlSurface(interactions)
+                            .semantics { this.selected = row.id == selectedId }
+                            .combinedClickable(enabled = writable, interactionSource = interactions, indication = null,
                                 onClick = { if (selected != null) selectedId = row.id else onOpen(row.id) },
                                 onLongClick = { selectedId = row.id })
                             .testTag("agent-session-${row.id}").padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),

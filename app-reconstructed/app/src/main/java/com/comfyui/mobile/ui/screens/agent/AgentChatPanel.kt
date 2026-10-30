@@ -4,7 +4,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.clickable
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -90,6 +98,8 @@ fun AgentChatPanel(
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
     val focusScope = rememberCoroutineScope()
     var attachMenuOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(busy, inputEnabled) { if (busy || !inputEnabled) attachMenuOpen = false }
+    BackHandler(enabled = attachMenuOpen) { attachMenuOpen = false }
 
     val scheme = MiuixTheme.colorScheme
 
@@ -110,7 +120,8 @@ fun AgentChatPanel(
                 text = statusMessage,
                 style = MiuixTheme.textStyles.footnote1,
                 color = scheme.onSurfaceVariantSummary,
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onStatusClick).padding(bottom = 8.dp)
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .agentControlFeedback("会话存储状态", onClick = onStatusClick).padding(bottom = 8.dp)
             )
             LazyColumn(
                 state = listState,
@@ -125,7 +136,8 @@ fun AgentChatPanel(
     ) {
                 if (hasEarlier) item(key = "earlier") {
                     Text("加载更早消息", color = scheme.primary,
-                        modifier = Modifier.fillMaxWidth().clickable(onClick = onLoadEarlier).padding(10.dp))
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                            .agentControlFeedback("加载更早消息", onClick = onLoadEarlier).padding(10.dp))
                 }
                 val pendingClarificationId = com.comfyui.mobile.agent.AgentQuestionPolicy.pending(messages)?.id
                 items(messages, key = { it.id }) { msg ->
@@ -153,13 +165,21 @@ fun AgentChatPanel(
                     modifier = Modifier.padding(bottom = 6.dp)
     )
             }
-            if (attachMenuOpen && !busy && inputEnabled) {
+            AnimatedVisibility(
+                visible = attachMenuOpen && !busy && inputEnabled,
+                enter = expandVertically(tween(180), expandFrom = Alignment.Bottom) + fadeIn(tween(120)),
+                exit = shrinkVertically(tween(180), shrinkTowards = Alignment.Bottom) + fadeOut(tween(100))
+            ) {
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-                    AttachMenuChip("图片") { attachMenuOpen = false; haptics.tick(); onPickImages() }
-                    AttachMenuChip("文档") { attachMenuOpen = false; haptics.tick(); onPickFiles() }
+                    AttachMenuChip("图片", enabled = attachMenuOpen && !busy && inputEnabled) {
+                        attachMenuOpen = false; haptics.tick(); onPickImages()
+                    }
+                    AttachMenuChip("文档", enabled = attachMenuOpen && !busy && inputEnabled) {
+                        attachMenuOpen = false; haptics.tick(); onPickFiles()
+                    }
                 }
             }
             val canSend = inputEnabled && !busy && (input.text.isNotBlank() || attachments.isNotEmpty())
@@ -169,7 +189,8 @@ fun AgentChatPanel(
                 verticalAlignment = Alignment.Bottom,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-                val plusRotation by animateFloatAsState(if (attachMenuOpen) 45f else 0f, label = "attachPlus")
+                val plusRotation by animateFloatAsState(if (attachMenuOpen) 45f else 0f,
+                    tween(180), label = "attachPlus")
                 ChatRoundButton(
                     filled = false,
                     enabled = inputEnabled && !busy,
@@ -261,22 +282,22 @@ private fun ChatRoundButton(
     val scheme = MiuixTheme.colorScheme
     // One step off the chat card (highest) so stadium chips read clearly in light and dark.
     val capsule = scheme.surface
-    val bg = when {
+    val bg by animateColorAsState(when {
         filled && enabled -> scheme.primary
         enabled -> capsule
         else -> capsule.copy(alpha = 0.55f)
-    }
-    val tint = when {
+    }, tween(140), label = "agentChatButtonBackground")
+    val tint by animateColorAsState(when {
         filled && enabled -> scheme.onPrimary
         enabled -> scheme.onSurface
         else -> scheme.onSurface.copy(alpha = 0.38f)
-    }
+    }, tween(140), label = "agentChatButtonTint")
     Box(
         modifier = Modifier
             .size(ChatButtonSize)
             .clip(CircleShape)
             .background(bg)
-            .clickable(enabled = enabled, onClick = onClick),
+            .agentControlFeedback("执行操作", enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         content(tint)
@@ -284,13 +305,13 @@ private fun ChatRoundButton(
 }
 
 @Composable
-private fun AttachMenuChip(label: String, onClick: () -> Unit) {
+private fun AttachMenuChip(label: String, enabled: Boolean, onClick: () -> Unit) {
     val scheme = MiuixTheme.colorScheme
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
             .background(scheme.surface)
-            .clickable(onClick = onClick)
+            .agentControlFeedback("添加$label", enabled = enabled, onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Text(text = label, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurface)
@@ -342,7 +363,7 @@ fun AgentAttachmentStrip(
                             .size(18.dp)
                             .clip(RoundedCornerShape(9.dp))
                             .background(Color.Black.copy(alpha = 0.55f))
-                            .clickable { onRemove(att.id) },
+                            .agentControlFeedback("移除附件") { onRemove(att.id) },
                         contentAlignment = Alignment.Center
     ) {
                         Icon(MiuixIcons.Close, contentDescription = "移除附件", modifier = Modifier.size(12.dp), tint = Color.White)

@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.Spring
@@ -14,7 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import top.yukonga.miuix.kmp.icon.extended.Settings
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -90,7 +92,7 @@ fun AgentCapsuleBar(
                     .size(40.dp)
                     .clip(CircleShape)
                     .background(MiuixTheme.colorScheme.surfaceContainerHighest)
-                    .clickable { haptics.tick(); onWorkbenchActionsClick() },
+                     .agentControlFeedback("绘图参数与操作") { haptics.tick(); onWorkbenchActionsClick() },
                 contentAlignment = Alignment.Center
     ) {
                 Icon(
@@ -104,7 +106,7 @@ fun AgentCapsuleBar(
     }
 }
 
-private val CapsuleHeight = 30.dp
+private val CapsuleHeight = 40.dp
 private val SegmentWidth = 56.dp
 
 /** Sliding segmented switch: tap a side or swipe horizontally. */
@@ -114,7 +116,7 @@ private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
     val isDraw = mode != MainViewModel.AGENT_MODE_CHAT
     val thumbOffset by animateDpAsState(
         targetValue = if (isDraw) SegmentWidth else 0.dp,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow),
+        animationSpec = spring(dampingRatio = 1f, stiffness = Spring.StiffnessMediumLow),
         label = "modeThumb"
     )
     val density = LocalDensity.current
@@ -124,10 +126,12 @@ private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
             .size(width = SegmentWidth * 2, height = CapsuleHeight)
             .clip(RoundedCornerShape(50))
             .background(scheme.surfaceContainerHighest)
+             .selectableGroup()
             .pointerInput(mode) {
                 var total = 0f
                 detectHorizontalDragGestures(
                     onDragStart = { total = 0f },
+                    onDragCancel = { total = 0f },
                     onDragEnd = {
                         when {
                             total > swipeThreshold -> onModeChange(MainViewModel.AGENT_MODE_DRAW)
@@ -149,16 +153,20 @@ private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
         Row(modifier = Modifier.fillMaxSize()) {
             listOf(MainViewModel.AGENT_MODE_CHAT, MainViewModel.AGENT_MODE_DRAW).forEach { m ->
                 val selected = (m == MainViewModel.AGENT_MODE_DRAW) == isDraw
+                val textColor by animateColorAsState(
+                    if (selected) scheme.onPrimary else scheme.onSurface.copy(alpha = 0.72f),
+                    tween(160), label = "agentModeText"
+                )
                 Box(
                     modifier = Modifier
                         .size(width = SegmentWidth, height = CapsuleHeight)
                         .clip(RoundedCornerShape(50))
-                        .clickable { onModeChange(m) },
+                        .agentControlFeedback(agentModeLabel(m), selected = selected) { onModeChange(m) },
                     contentAlignment = Alignment.Center
     ) {
                     Text(
                         text = agentModeLabel(m),
-                        color = if (selected) scheme.onPrimary else scheme.onSurface.copy(alpha = 0.72f),
+                        color = textColor,
                         style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold),
                         maxLines = 1
     )
@@ -184,7 +192,7 @@ fun AgentCapsule(
             .widthIn(min = 52.dp)
             .clip(RoundedCornerShape(50))
             .background(scheme.surfaceContainerHighest)
-            .clickable(onClick = onClick)
+            .agentControlFeedback("切换模型与 API", onClick = onClick)
             .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
