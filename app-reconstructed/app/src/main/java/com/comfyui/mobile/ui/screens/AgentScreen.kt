@@ -4,6 +4,7 @@ import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.ui.screens.agent.AgentWorkspaceLayout
 import com.comfyui.mobile.ui.screens.agent.AgentActionDialog
 import com.comfyui.mobile.ui.screens.agent.agentControlFeedback
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,6 +31,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,12 +39,14 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -71,6 +75,7 @@ import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -79,6 +84,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.MediaType
@@ -145,6 +151,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val scrollBehavior = MiuixScrollBehavior()
 
     val storageStatus by viewModel.agentStorageStatus.collectAsState()
+    val conversations by viewModel.agentConversations.collectAsState()
+    val conversationDeletion by viewModel.agentConversationDeleteInfo.collectAsState()
     val activeConversation by viewModel.activeAgentConversation.collectAsState()
     val draft by viewModel.agentInputDraft.collectAsState()
     val hasEarlier by viewModel.agentHasEarlierMessages.collectAsState()
@@ -178,6 +186,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     var showClearMediaConfirmDialog by remember { mutableStateOf(false) }
     var showWorkbenchActions by remember { mutableStateOf(false) }
     var showResetChatConfirm by remember { mutableStateOf(false) }
+    var showConversationDrawer by rememberSaveable { mutableStateOf(false) }
     var showCloudModelBrowser by remember { mutableStateOf(false) }
     var cloudModelInitialType by remember { mutableStateOf("CHECKPOINT") }
     var cloudModelTargetNodeId by remember { mutableStateOf<String?>(null) }
@@ -333,92 +342,141 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     // Reading raw asPaddingValues here would lift the input twice.
     val bottomPad = floatingNavClearance
 
-    Scaffold(
-        containerColor = scheme.background,
-        topBar = {
-            TopAppBar(
-                title = "Agent",
-                largeTitle = "Agent",
-                color = scheme.background,
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    IconButton(onClick = { navController.navigate("agent_settings") }) {
-                        Icon(MiuixIcons.Settings, contentDescription = "Agent 设置")
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = scheme.background,
+            topBar = {
+                TopAppBar(
+                    title = "Agent",
+                    largeTitle = "Agent",
+                    color = scheme.background,
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        IconButton(onClick = { navController.navigate("agent_settings") }) {
+                            Icon(MiuixIcons.Settings, contentDescription = "Agent 设置")
+                        }
                     }
-                }
-    )
-        }
-    ) { innerPadding ->
-        AgentWorkspaceLayout(
-            sessionTitle = activeConversation?.title ?: "正在读取会话…",
-            mediaList = displayMediaList,
-            previewUrl = { viewModel.previewUrl(it) },
-            status = cardStatus,
-            wfLabel = wfLabel,
-            cardColors = cardColors,
-            sidePad = sidePad,
-            onOpenSessions = { navController.navigate("agent_sessions") { launchSingleTop = true } },
-            onImageClick = { index -> fullScreenMediaIndex = index; showImageViewer = true },
-            modifier = Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection)
-                .padding(top = innerPadding.calculateTopPadding())
-                .imePadding()
-                .padding(bottom = bottomPad)
-     ) {
-            val modelDisplayName = currentLlmProfile?.displayName ?: llmModel.ifBlank { "大模型" }
-
-            AgentChatPanel(
-                messages = messages,
-                input = input,
-                onInputChange = { value -> viewModel.updateAgentDraft(draft.copy(
-                    text = value.text, selectionStart = value.selection.start, selectionEnd = value.selection.end)) },
-                busy = busy,
-                inputEnabled = storageStatus.writable,
-                statusMessage = storageStatus.message.ifBlank { viewModel.agentReferenceWarning().orEmpty() },
-                onStatusClick = {
-                    if (storageStatus.mode == AgentStorageMode.ROOM) viewModel.useCurrentAgentConfiguration()
-                    else viewModel.retryAgentStorage()
-                },
-                hasEarlier = hasEarlier,
-                onLoadEarlier = { viewModel.loadEarlierAgentMessages() },
-                cardColors = CardDefaults.defaultColors(color = scheme.background, contentColor = scheme.onSurface),
+                )
+            }
+        ) { innerPadding ->
+            AgentWorkspaceLayout(
+                sessionTitle = activeConversation?.title ?: "正在读取会话…",
+                mediaList = displayMediaList,
+                previewUrl = { viewModel.previewUrl(it) },
+                status = cardStatus,
+                wfLabel = wfLabel,
+                cardColors = cardColors,
                 sidePad = sidePad,
-                listState = listState,
-                modifier = Modifier.weight(1f),
-                framed = false,
-                toolbar = {
-                    AgentCapsuleBar(
-                        modelDisplayName = modelDisplayName,
-                        interactionMode = agentInteractionMode,
-                        sidePad = 0.dp,
-                        onModelSwitchClick = { showModelSwitchDialog = true },
-                        onInteractionModeChange = { viewModel.setAgentInteractionMode(it) },
-                        onWorkbenchActionsClick = { showWorkbenchActions = true }
+                onOpenSessions = { showConversationDrawer = true },
+                onImageClick = { index -> fullScreenMediaIndex = index; showImageViewer = true },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection)
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .imePadding()
+                    .padding(bottom = bottomPad)
+            ) {
+                val modelDisplayName = currentLlmProfile?.displayName ?: llmModel.ifBlank { "大模型" }
+
+                AgentChatPanel(
+                    messages = messages,
+                    input = input,
+                    onInputChange = { value -> viewModel.updateAgentDraft(draft.copy(
+                        text = value.text, selectionStart = value.selection.start, selectionEnd = value.selection.end)) },
+                    busy = busy,
+                    inputEnabled = storageStatus.writable,
+                    statusMessage = storageStatus.message.ifBlank { viewModel.agentReferenceWarning().orEmpty() },
+                    onStatusClick = {
+                        if (storageStatus.mode == AgentStorageMode.ROOM) viewModel.useCurrentAgentConfiguration()
+                        else viewModel.retryAgentStorage()
+                    },
+                    hasEarlier = hasEarlier,
+                    onLoadEarlier = { viewModel.loadEarlierAgentMessages() },
+                    cardColors = CardDefaults.defaultColors(color = scheme.background, contentColor = scheme.onSurface),
+                    sidePad = sidePad,
+                    listState = listState,
+                    modifier = Modifier.weight(1f),
+                    framed = false,
+                    toolbar = {
+                        AgentCapsuleBar(
+                            modelDisplayName = modelDisplayName,
+                            interactionMode = agentInteractionMode,
+                            sidePad = 0.dp,
+                            onModelSwitchClick = { showModelSwitchDialog = true },
+                            onInteractionModeChange = { viewModel.setAgentInteractionMode(it) },
+                            onWorkbenchActionsClick = { showWorkbenchActions = true }
+                        )
+                    },
+                    attachments = agentAttachments,
+                    onPickImages = {
+                        pickerOwner = viewModel.captureAgentAttachmentOwner()
+                        agentImagePickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onPickFiles = {
+                        pickerOwner = viewModel.captureAgentAttachmentOwner()
+                        agentFilePickerLauncher.launch(
+                            arrayOf("text/*", "application/json", "application/xml", "application/x-yaml")
+                        )
+                    },
+                    onRemoveAttachment = { viewModel.removeAgentAttachment(it) },
+                    onStop = { viewModel.stopAgentGeneration() },
+                    onAnswerQuestions = { messageId, answers ->
+                        viewModel.answerAgentQuestions(messageId, answers)
+                    },
+                    onSendMessage = { text ->
+                        viewModel.sendAgentMessage(text)
+                    }
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showConversationDrawer,
+            enter = fadeIn(tween(180)) + slideInHorizontally(tween(240)) { -it / 4 },
+            exit = fadeOut(tween(140)) + slideOutHorizontally(tween(180)) { -it / 4 },
+            modifier = Modifier.fillMaxSize().zIndex(2f)
+        ) {
+            Box(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.32f))
+                        .clickable { showConversationDrawer = false }
+                        .testTag("agent-conversation-drawer-scrim")
+                )
+                Box(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.9f)
+                        .widthIn(max = 380.dp)
+                        .clip(RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp))
+                        .background(scheme.background)
+                        .testTag("agent-conversation-drawer")
+                ) {
+                    AgentConversationWorkspace(
+                        conversations = conversations,
+                        activeId = activeConversation?.id,
+                        status = storageStatus,
+                        deletion = conversationDeletion,
+                        onBack = { showConversationDrawer = false },
+                        onOpen = { id ->
+                            viewModel.openAgentConversation(id) { showConversationDrawer = false }
+                        },
+                        onNew = { title ->
+                            viewModel.newAgentConversation(title) { showConversationDrawer = false }
+                        },
+                        onRename = viewModel::renameAgentConversation,
+                        onRequestDelete = viewModel::requestDeleteAgentConversation,
+                        onDismissDelete = viewModel::dismissDeleteAgentConversation,
+                        onDelete = viewModel::deleteAgentConversation,
+                        onRetry = viewModel::retryAgentStorage,
+                        onDeleteMany = viewModel::deleteAgentConversations,
+                        drawer = true
                     )
-                },
-                attachments = agentAttachments,
-                onPickImages = {
-                    pickerOwner = viewModel.captureAgentAttachmentOwner()
-                    agentImagePickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                },
-                onPickFiles = {
-                    pickerOwner = viewModel.captureAgentAttachmentOwner()
-                    agentFilePickerLauncher.launch(
-                        arrayOf("text/*", "application/json", "application/xml", "application/x-yaml")
-                    )
-                },
-                onRemoveAttachment = { viewModel.removeAgentAttachment(it) },
-                onStop = { viewModel.stopAgentGeneration() },
-                onAnswerQuestions = { messageId, answers ->
-                    viewModel.answerAgentQuestions(messageId, answers)
-                },
-                onSendMessage = { text ->
-                    viewModel.sendAgentMessage(text)
                 }
-    )
+            }
         }
     }
 

@@ -2789,6 +2789,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun requestDeleteAgentConversation(id: String) = agentWorkspace.requestDelete(id)
     fun dismissDeleteAgentConversation() = agentWorkspace.dismissDelete()
     fun deleteAgentConversation(id: String) = agentWorkspace.deleteConversation(id)
+    fun deleteAgentConversations(ids: List<String>) = agentWorkspace.deleteConversations(ids)
     fun retryAgentStorage() = agentWorkspace.retry()
     fun agentReferenceWarning() = agentWorkspace.referenceWarning()
     fun useCurrentAgentConfiguration() = agentWorkspace.useCurrentConfiguration()

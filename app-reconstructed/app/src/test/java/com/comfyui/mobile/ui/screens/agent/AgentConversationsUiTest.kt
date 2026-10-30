@@ -177,6 +177,81 @@ class AgentConversationsUiTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun longPressCanSelectMultipleConversationsAndToggleOneOff() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(true, manageSystemBars = false) {
+                        Scaffold {
+                            AgentConversationWorkspace(
+                                conversations = rows,
+                                activeId = "s0",
+                                status = AgentStorageStatus(AgentStorageMode.ROOM),
+                                deletion = null,
+                                onBack = {},
+                                onOpen = {},
+                                onNew = {},
+                                onRename = { _, _ -> },
+                                onRequestDelete = {},
+                                onDismissDelete = {},
+                                onDelete = {},
+                                onRetry = {}
+                            )
+                        }
+                    }
+                }
+            } })
+            compose.onNodeWithTag("agent-session-s0").performTouchInput { longClick() }
+            compose.onNodeWithTag("agent-session-s1").performTouchInput { longClick() }
+            compose.onAllNodesWithText("已选择 2 个会话", substring = false).assertCountEquals(2)
+            compose.onNodeWithTag("agent-session-s0").assertIsSelected()
+            compose.onNodeWithTag("agent-session-s1").assertIsSelected()
+            compose.onNodeWithTag("agent-session-s0").performClick()
+            compose.onAllNodesWithText("已选择 1 个会话", substring = false).assertCountEquals(2)
+            compose.onNodeWithTag("agent-session-s0").assertIsNotSelected()
+            compose.onNodeWithTag("agent-session-s1").assertIsSelected()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun multiSelectionDeleteUsesBatchCallback() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        var deletedIds: List<String>? = null
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(true, manageSystemBars = false) {
+                        Scaffold {
+                            AgentConversationWorkspace(
+                                conversations = rows,
+                                activeId = "s0",
+                                status = AgentStorageStatus(AgentStorageMode.ROOM),
+                                deletion = null,
+                                onBack = {},
+                                onOpen = {},
+                                onNew = {},
+                                onRename = { _, _ -> },
+                                onRequestDelete = {},
+                                onDismissDelete = {},
+                                onDelete = {},
+                                onRetry = {},
+                                onDeleteMany = { deletedIds = it }
+                            )
+                        }
+                    }
+                }
+            } })
+            compose.onNodeWithTag("agent-session-s0").performTouchInput { longClick() }
+            compose.onNodeWithTag("agent-session-s1").performTouchInput { longClick() }
+            compose.onNodeWithText("删除", substring = false).performClick()
+            compose.onNodeWithText("删除 2 个会话？").assertExists()
+            compose.onNodeWithText("确认删除").performClick()
+            compose.waitForIdle()
+            assertEquals(listOf("s0", "s1"), deletedIds)
+            compose.onNodeWithText("已选择 2 个会话").assertDoesNotExist()
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test
     @Config(qualifiers = "w320dp-h640dp-mdpi")
     fun narrowLightEmptyAndSearchStatesKeepCreationAndCancelReachable() {

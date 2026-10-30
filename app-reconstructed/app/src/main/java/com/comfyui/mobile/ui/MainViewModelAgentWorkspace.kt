@@ -432,6 +432,56 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         }
     }
 
+    fun deleteConversations(ids: List<String>) {
+        val uniqueIds = ids.asSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
+            .toList()
+        if (uniqueIds.isEmpty() || !requireWritable()) return
+        val scope = MainViewModelAgent.scope(vm)
+        val deletingActive = active?.id in uniqueIds
+        if (deletingActive && !beginSwitch()) return
+        val operation = if (deletingActive) ticket.incrementAndGet() else ticket.get()
+        mutableDeleteInfo.value = null
+        if (deletingActive) mutableStatus.value = AgentStorageStatus(AgentStorageMode.LOADING, "正在删除会话")
+        vm.viewModelScope.launch {
+            try {
+                val result = serial {
+                    lastFailure?.let { throw it }
+                    val existing = uniqueIds.filter { id ->
+                        repository.conversation(id)?.scope == scope
+                    }
+                    existing.forEach { id ->
+                        repository.deleteConversation(id)
+                        deletedConversations.add(id)
+                        transientRows.remove(id)
+                        transientStates.remove(id)
+                        attachmentGenerations.remove(id)
+                        persistedConversations.remove(id)
+                        links.replaceAll { _, link ->
+                            if (link.conversationId == id) {
+                                link.copy(conversationId = null, detachedAt = System.currentTimeMillis())
+                            } else link
+                        }
+                    }
+                    reconcileTasks()
+                    val next = if (deletingActive) repository.primaryConversation(scope) else active
+                    next to existing.size
+                }
+                if (ticket.get() != operation || MainViewModelAgent.scope(vm) != scope) return@launch
+                if (deletingActive) reload(result.first)
+                vm.showToast("已删除 ${result.second} 个会话")
+            } catch (e: Exception) {
+                if (ticket.get() != operation || MainViewModelAgent.scope(vm) != scope) return@launch
+                if (deletingActive) mutableStatus.value = AgentStorageStatus(
+                    if (lastFailure == null) AgentStorageMode.ROOM else AgentStorageMode.BLOCKED,
+                    if (lastFailure == null) "" else "有尚未保存的会话，请先重试", active?.id)
+                vm.showToast("会话删除失败，请重试")
+            }
+        }
+    }
+
     private fun apply(loaded: Loaded, loadTicket: Long) {
         val workflow = JsonParser.parseString(loaded.state.workflowStateJson).asJsonObject
         fun text(key: String) = workflow[key]?.takeUnless { it.isJsonNull }?.asString.orEmpty()

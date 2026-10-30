@@ -1,5 +1,6 @@
 package com.comfyui.mobile.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -36,6 +37,7 @@ import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.More
+import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -54,7 +56,8 @@ fun AgentConversationsScreen(navController: NavController, viewModel: MainViewMo
         onRequestDelete = viewModel::requestDeleteAgentConversation,
         onDismissDelete = viewModel::dismissDeleteAgentConversation,
         onDelete = viewModel::deleteAgentConversation,
-        onRetry = viewModel::retryAgentStorage
+        onRetry = viewModel::retryAgentStorage,
+        onDeleteMany = viewModel::deleteAgentConversations
     )
 }
 
@@ -72,14 +75,19 @@ internal fun AgentConversationWorkspace(
     onRequestDelete: (String) -> Unit,
     onDismissDelete: () -> Unit,
     onDelete: (String) -> Unit,
-    onRetry: () -> Unit
+    onRetry: () -> Unit,
+    onDeleteMany: (List<String>) -> Unit = {},
+    drawer: Boolean = false
 ) {
     val scheme = MiuixTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
-    var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedIds by rememberSaveable { mutableStateOf<List<String>>(emptyList()) }
     var menuId by rememberSaveable { mutableStateOf<String?>(null) }
     var namingId by rememberSaveable { mutableStateOf<String?>(null) }
-    val selected = conversations.firstOrNull { it.id == selectedId }
+    var batchDeleteIds by remember { mutableStateOf<List<String>?>(null) }
+    val selectionMode = selectedIds.isNotEmpty()
+    val selectedIdsState = rememberUpdatedState(selectedIds)
+    val selected = conversations.firstOrNull { it.id == selectedIds.singleOrNull() }
     val writable = status.mode == AgentStorageMode.ROOM
     val shown = remember(conversations, query) {
         val search = query.trim()
@@ -88,23 +96,45 @@ internal fun AgentConversationWorkspace(
     }
     val dateFormat = remember { DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT) }
     LaunchedEffect(conversations) {
-        if (selectedId != null && selected == null) selectedId = null
+        val validIds = conversations.mapTo(hashSetOf()) { it.id }
+        val validSelected = selectedIds.filter { it in validIds }
+        if (validSelected != selectedIds) selectedIds = validSelected
+        batchDeleteIds?.let { ids ->
+            val validBatch = ids.filter { it in validIds }
+            batchDeleteIds = validBatch.takeIf { it.isNotEmpty() }
+        }
     }
-    PredictiveBackHandler(enabled = selected != null && menuId == null && namingId == null && deletion == null) {
-        progress -> progress.collect { }; selectedId = null
+    PredictiveBackHandler(enabled = selectionMode && menuId == null && namingId == null &&
+        deletion == null && batchDeleteIds == null) {
+        progress -> progress.collect { }; selectedIds = emptyList()
+    }
+    BackHandler(enabled = drawer && !selectionMode && menuId == null && namingId == null &&
+        deletion == null && batchDeleteIds == null) {
+        onBack()
+    }
+    fun toggleSelection(id: String) {
+        val current = selectedIdsState.value
+        selectedIds = if (id in current) {
+            current.filterNot { it == id }
+        } else {
+            current + id
+        }
     }
     Scaffold(containerColor = scheme.background, topBar = {
         TopAppBar(
-            title = if (selected == null) "会话" else "已选择 1 个会话",
+            title = if (!selectionMode) "会话" else "已选择 ${selectedIds.size} 个会话",
             navigationIcon = {
-                IconButton(onClick = { if (selected != null) selectedId = null else onBack() }) {
-                    Icon(MiuixIcons.Back, if (selected == null) "返回 Agent" else "退出会话选择")
+                IconButton(onClick = { if (selectionMode) selectedIds = emptyList() else onBack() }) {
+                    Icon(MiuixIcons.Back, if (!selectionMode) "返回 Agent" else "退出会话选择")
                 }
             },
             actions = {
-                if (selected == null) TextButton("新建", enabled = writable,
+                if (!selectionMode) TextButton("新建", enabled = writable,
                     onClick = { namingId = "new" }, modifier = Modifier.testTag("agent-session-new"))
-                else TextButton("删除", enabled = writable, onClick = { onRequestDelete(selected.id) })
+                else TextButton("删除", enabled = writable, onClick = {
+                    if (selectedIds.size == 1) onRequestDelete(selectedIds.single())
+                    else batchDeleteIds = selectedIds.toList()
+                })
             }
         )
     }) { padding ->
@@ -149,17 +179,18 @@ internal fun AgentConversationWorkspace(
                 }
                 items(shown, key = { it.id }) { row ->
                     val interactions = remember { MutableInteractionSource() }
+                    val rowSelected = row.id in selectedIds
                     val rowColor by animateColorAsState(
-                        if (row.id == selectedId) scheme.secondaryContainer else scheme.surfaceContainer,
+                        if (rowSelected) scheme.secondaryContainer else scheme.surfaceContainer,
                         tween(160), label = "agentSessionSelection"
                     )
                     Row(
                         modifier = Modifier.animateItem().fillMaxWidth().clip(RoundedCornerShape(18.dp))
                             .background(rowColor).agentControlSurface(interactions)
-                            .semantics { this.selected = row.id == selectedId }
+                            .semantics { this.selected = rowSelected }
                             .combinedClickable(enabled = writable, interactionSource = interactions, indication = null,
-                                onClick = { if (selected != null) selectedId = row.id else onOpen(row.id) },
-                                onLongClick = { selectedId = row.id })
+                                onClick = { if (selectionMode) toggleSelection(row.id) else onOpen(row.id) },
+                                onLongClick = { toggleSelection(row.id) })
                             .testTag("agent-session-${row.id}").padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -175,9 +206,17 @@ internal fun AgentConversationWorkspace(
                                 append(" · ").append(dateFormat.format(Date(row.updatedAt)))
                             }, style = MiuixTheme.textStyles.footnote2, color = scheme.primary)
                         }
-                        IconButton(enabled = writable, modifier = Modifier.size(48.dp).testTag("agent-session-more-${row.id}"),
-                            onClick = { menuId = row.id }) {
-                            Icon(MiuixIcons.More, "会话更多操作", Modifier.size(22.dp))
+                        if (selectionMode) {
+                            Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+                                if (rowSelected) {
+                                    Icon(MiuixIcons.Ok, "已选择", Modifier.size(22.dp), tint = scheme.primary)
+                                }
+                            }
+                        } else {
+                            IconButton(enabled = writable, modifier = Modifier.size(48.dp).testTag("agent-session-more-${row.id}"),
+                                onClick = { menuId = row.id }) {
+                                Icon(MiuixIcons.More, "会话更多操作", Modifier.size(22.dp))
+                            }
                         }
                     }
                 }
@@ -196,6 +235,30 @@ internal fun AgentConversationWorkspace(
                 TextButton("重命名", enabled = writable, onClick = { next = "rename"; close() })
                 TextButton("删除会话", enabled = writable, onClick = { next = "delete"; close() })
                 TextButton("取消", onClick = close)
+            }
+        }
+    }
+    batchDeleteIds?.let { ids ->
+        key(ids.joinToString("|")) {
+            var confirmed by remember { mutableStateOf(false) }
+            SessionDialog("删除 ${ids.size} 个会话？", onClosed = {
+                batchDeleteIds = null
+                if (confirmed) {
+                    selectedIds = emptyList()
+                    onDeleteMany(ids)
+                }
+            }) { close ->
+                Text("将删除所选会话的聊天记录、草稿及附件引用。共享附件和相册原文件保留。",
+                    style = MiuixTheme.textStyles.body2)
+                Text(ids.mapNotNull { id -> conversations.firstOrNull { it.id == id }?.title }
+                    .joinToString("\n").ifBlank { "所选会话已变更，请刷新后重试。" },
+                    maxLines = 6, overflow = TextOverflow.Ellipsis,
+                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton("取消", onClick = close, modifier = Modifier.weight(1f))
+                    TextButton("确认删除", enabled = writable, modifier = Modifier.weight(1f),
+                        onClick = { confirmed = true; close() })
+                }
             }
         }
     }
@@ -229,7 +292,10 @@ internal fun AgentConversationWorkspace(
         key(info.conversation.id) {
             var confirmed by remember { mutableStateOf(false) }
             SessionDialog("删除会话？", onClosed = {
-                if (confirmed) onDelete(info.conversation.id) else onDismissDelete()
+                if (confirmed) {
+                    selectedIds = emptyList()
+                    onDelete(info.conversation.id)
+                } else onDismissDelete()
             }) { close ->
                 Text(info.conversation.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold))
