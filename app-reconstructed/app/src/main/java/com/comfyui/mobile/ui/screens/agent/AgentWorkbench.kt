@@ -9,9 +9,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.foundation.background
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.WindowInsets
@@ -32,7 +30,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -84,21 +82,16 @@ fun AgentWorkspaceLayout(
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
-                    .clip(RoundedCornerShape(18.dp)).background(scheme.surfaceContainer)
+                    .clip(RoundedCornerShape(14.dp)).background(scheme.surfaceContainer)
                     .testTag("agent-open-sessions")
-                    .agentControlFeedback("管理会话", onClick = onOpenSessions)
-                    .heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 8.dp),
+                    .clickable(role = Role.Button, onClick = onOpenSessions)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.AutoMirrored.Filled.List, contentDescription = null,
-                    modifier = Modifier.size(20.dp), tint = scheme.onSurfaceVariantSummary)
                 Text(sessionTitle, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium))
-                Text("会话管理", style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
-                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null,
-                    modifier = Modifier.size(16.dp).graphicsLayer { rotationZ = -90f },
-                    tint = scheme.onSurfaceVariantSummary)
+                Text("会话", style = MiuixTheme.textStyles.footnote1, color = scheme.primary)
             }
             AgentWorkbench(
                 mediaList = mediaList, previewUrl = previewUrl, status = status, wfLabel = wfLabel,
@@ -135,25 +128,19 @@ fun AgentWorkbench(
         if (mediaList.isNotEmpty() && pagerState.currentPage != 0) pagerState.scrollToPage(0)
     }
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, tween(220), label = "workbenchChevron")
-    val headerInteractions = remember { MutableInteractionSource() }
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
             .clip(RoundedCornerShape(22.dp)).background(scheme.surfaceContainer)
             .testTag("agent-workbench")
     ) {
-        // One rounded header owns the feedback. The thumbnail remains an independent action.
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp))
-            .testTag("agent-workbench-header").agentControlSurface(headerInteractions)
-            .padding(start = 12.dp),
-            verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             val media = mediaList.firstOrNull()
             val url = media?.let(previewUrl).orEmpty()
             Box(
                 Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
                     .background(scheme.surfaceContainerHighest)
-                    .then(if (media != null && !status.showOverlay) Modifier.agentControlFeedback(
-                        onClickLabel = "全屏查看最新生成",
-                        interactionSource = headerInteractions, drawFeedback = false
+                    .then(if (media != null && !status.showOverlay) Modifier.clickable(
+                        role = Role.Button, onClickLabel = "全屏查看最新生成"
                     ) { onImageClick(0) } else Modifier)
                     .testTag("agent-workbench-thumbnail"),
                 contentAlignment = Alignment.Center
@@ -162,11 +149,10 @@ fun AgentWorkbench(
                 else Icon(MiuixIcons.Image, contentDescription = null, tint = scheme.onSurfaceVariantSummary)
             }
             Row(
-                Modifier.weight(1f).heightIn(min = 64.dp)
+                Modifier.weight(1f).height(64.dp)
                     .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
                     .testTag("agent-workbench-toggle")
-                    .agentControlFeedback(if (expanded) "收起工作台" else "展开工作台",
-                        interactionSource = headerInteractions, drawFeedback = false) {
+                    .clickable(role = Role.Button, onClickLabel = if (expanded) "收起工作台" else "展开工作台") {
                         onExpandedChange(!expanded)
                     }.padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -191,8 +177,8 @@ fun AgentWorkbench(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("agent-workbench-progress"))
         AnimatedVisibility(
             visible = expanded,
-            enter = expandVertically(tween(220), expandFrom = Alignment.Top) + fadeIn(tween(160)),
-            exit = shrinkVertically(tween(220), shrinkTowards = Alignment.Top) + fadeOut(tween(140))
+            enter = expandVertically(tween(220)) + fadeIn(tween(160)),
+            exit = shrinkVertically(tween(220)) + fadeOut(tween(140))
         ) {
             AgentImagePreviewCard(
                 mediaList = mediaList, previewUrl = previewUrl, status = status,

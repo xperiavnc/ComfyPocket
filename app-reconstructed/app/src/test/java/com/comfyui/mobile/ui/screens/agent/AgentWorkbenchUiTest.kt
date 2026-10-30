@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -14,9 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.LocalSaveableStateRegistry
 import androidx.compose.runtime.saveable.SaveableStateRegistry
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.text.input.TextFieldValue
@@ -45,7 +42,6 @@ import org.robolectric.annotation.GraphicsMode
 import org.robolectric.annotation.LooperMode
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Scaffold
-import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.squircle.LocalSquircleEnabled
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -62,8 +58,6 @@ class AgentWorkbenchUiTest {
     private var parameters = 0
     private var selectedModel = 0
     private var sent: String? = null
-    private val busy = mutableStateOf(false)
-    private var pickedImages = 0
     private lateinit var listState: LazyListState
     private val mode = mutableStateOf(MainViewModel.AGENT_MODE_DRAW)
     private val results = mutableStateOf<List<MediaOutput>>(emptyList())
@@ -115,8 +109,7 @@ class AgentWorkbenchUiTest {
                         AgentChatPanel(
                             messages = (0..23).map { AgentChatMessage("m$it", if (it % 2 == 0) "user" else "assistant",
                                 if (it % 2 == 0) "换成雨天街景，保留之前的角色和构图。$it" else "保留角色与服装，只调整环境和光线。$it") },
-                            input = input.value, onInputChange = { input.value = it }, busy = busy.value,
-                            onPickImages = { pickedImages++ },
+                            input = input.value, onInputChange = { input.value = it }, busy = false,
                             cardColors = CardDefaults.defaultColors(MiuixTheme.colorScheme.background),
                             sidePad = 16.dp, listState = listState, modifier = Modifier.weight(1f), framed = false,
                             toolbar = {
@@ -244,169 +237,5 @@ class AgentWorkbenchUiTest {
             assertEquals("窄屏输入", sent)
             capture(controller.get(), "compact-320-light")
         } finally { controller.pause().stop().destroy() }
-    }
-
-    @Test fun thumbnailTouchDoesNotCollapseAndBusyThumbnailDoesNotToggleEither() {
-        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        try {
-            install(controller.get())
-            compose.onNodeWithTag("agent-workbench-thumbnail").performTouchInput { click() }
-            assertEquals(0, openedImage)
-            compose.onNodeWithTag("agent-workbench-preview").assertIsDisplayed()
-            compose.runOnIdle { openedImage = null; status.value = AgentCardStatus(showOverlay = true) }
-            compose.onNodeWithTag("agent-workbench-thumbnail").performTouchInput { click() }
-            assertNull(openedImage)
-            compose.onNodeWithTag("agent-workbench-preview").assertIsDisplayed()
-            compose.onNodeWithTag("agent-open-sessions").assertHasClickAction().performTouchInput { click() }
-            assertEquals(1, sessions)
-            compose.onNodeWithText("会话管理").assertIsDisplayed()
-        } finally { controller.pause().stop().destroy() }
-    }
-
-    @Test fun canceledHeaderPressReturnsToRestWithoutTogglingAndFeedbackCoversWholeHeader() {
-        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        fun frame(): Bitmap {
-            val view = controller.get().window.decorView
-            return Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { bitmap ->
-                compose.runOnIdle { view.draw(Canvas(bitmap)) }
-            }
-        }
-        try {
-            install(controller.get())
-            compose.waitForIdle()
-            compose.waitUntil(5000) { loadedImages.get() > 0 }
-            compose.waitForIdle()
-            val bounds = compose.onNodeWithTag("agent-workbench-header").fetchSemanticsNode().boundsInRoot
-            val resting = frame()
-            compose.mainClock.autoAdvance = false
-            compose.onNodeWithTag("agent-workbench-toggle").performTouchInput { down(center) }
-            compose.mainClock.advanceTimeBy(120)
-            compose.waitForIdle()
-            val pressed = frame()
-            val y = bounds.center.y.toInt()
-            val left = (bounds.left + 4).toInt()
-            val right = (bounds.right - 4).toInt()
-            assertNotEquals("Feedback must include the blank area left of the thumbnail",
-                resting.getPixel(left, y), pressed.getPixel(left, y))
-            assertNotEquals("Feedback must reach the right edge without a rectangle seam",
-                resting.getPixel(right, y), pressed.getPixel(right, y))
-            compose.onNodeWithTag("agent-workbench-toggle").performTouchInput { cancel() }
-            compose.mainClock.advanceTimeBy(240)
-            compose.waitForIdle()
-            val released = frame()
-            assertEquals(resting.getPixel(left, y), released.getPixel(left, y))
-            assertEquals(resting.getPixel(right, y), released.getPixel(right, y))
-            compose.onNodeWithTag("agent-workbench-toggle").assert(SemanticsMatcher.expectValue(
-                androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "已展开"))
-            File("build/reports/agent-workbench/header-pressed-dark.png").apply { parentFile!!.mkdirs() }
-                .outputStream().use { assertTrue(pressed.compress(Bitmap.CompressFormat.PNG, 100, it)) }
-            resting.recycle(); pressed.recycle(); released.recycle()
-        } finally { compose.mainClock.autoAdvance = true; controller.pause().stop().destroy() }
-    }
-
-    @Test fun rapidCollapseReversalKeepsDraftAndSettlesInLatestState() {
-        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        try {
-            install(controller.get())
-            compose.mainClock.autoAdvance = false
-            repeat(6) {
-                compose.onNodeWithTag("agent-workbench-toggle").performClick()
-                compose.mainClock.advanceTimeBy(48)
-            }
-            compose.mainClock.advanceTimeBy(400)
-            compose.mainClock.autoAdvance = true
-            compose.onNodeWithTag("agent-workbench-preview").assertIsDisplayed()
-            compose.onNodeWithTag("agent-chat-input").assertTextEquals("保留当前草稿")
-            compose.onNodeWithTag("agent-workbench-toggle").performClick()
-            compose.onNodeWithTag("agent-workbench-preview").assertDoesNotExist()
-            compose.onNodeWithTag("agent-chat-input").assertIsDisplayed()
-        } finally { compose.mainClock.autoAdvance = true; controller.pause().stop().destroy() }
-    }
-
-    @Test fun modeSelectionIsExclusiveAndCanceledSwipeDoesNotChangeIt() {
-        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        try {
-            install(controller.get())
-            compose.onNodeWithText("绘图").assertIsSelected()
-            compose.onNodeWithText("Chat").assertIsNotSelected().performTouchInput { click() }
-            compose.onNodeWithText("Chat").assertIsSelected()
-            compose.onNodeWithText("绘图").assertIsNotSelected()
-            compose.onNodeWithText("Chat").performTouchInput {
-                down(center); moveTo(center + Offset(30f, 0f)); cancel()
-            }
-            compose.onNodeWithText("Chat").assertIsSelected()
-            compose.onNodeWithText("绘图").performTouchInput { click() }
-            compose.onNodeWithText("绘图").assertIsSelected()
-            compose.onNodeWithText("Chat").assertIsNotSelected()
-        } finally { controller.pause().stop().destroy() }
-    }
-
-    @Test fun attachmentMenuAnimatesBothWaysAndBusyStateDoesNotResurrectIt() {
-        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        try {
-            install(controller.get())
-            compose.onNodeWithContentDescription("添加附件").performTouchInput { click() }
-            compose.onNodeWithText("图片").assertIsDisplayed()
-            compose.onNodeWithText("文档").assertIsDisplayed()
-            compose.mainClock.autoAdvance = false
-            compose.onNodeWithContentDescription("收起附件菜单").performClick()
-            compose.mainClock.advanceTimeBy(48)
-            compose.onNodeWithText("图片").assertIsNotEnabled()
-            compose.mainClock.advanceTimeBy(240)
-            compose.mainClock.autoAdvance = true
-            compose.onNodeWithText("图片").assertDoesNotExist()
-            compose.onNodeWithContentDescription("添加附件").performClick()
-            compose.onNodeWithText("图片").performTouchInput { click() }
-            assertEquals(1, pickedImages)
-            compose.onNodeWithText("图片").assertDoesNotExist()
-            compose.onNodeWithContentDescription("添加附件").performClick()
-            compose.runOnIdle { controller.get().onBackPressedDispatcher.onBackPressed() }
-            compose.onNodeWithText("图片").assertDoesNotExist()
-            assertFalse(controller.get().isFinishing)
-            compose.onNodeWithContentDescription("添加附件").performClick()
-            compose.runOnIdle { busy.value = true }
-            compose.onNodeWithText("图片").assertDoesNotExist()
-            compose.runOnIdle { busy.value = false }
-            compose.onNodeWithText("图片").assertDoesNotExist()
-        } finally { compose.mainClock.autoAdvance = true; controller.pause().stop().destroy() }
-    }
-
-    @Test fun actionDialogWaitsForExitAndExecutesOnlyFirstChosenAction() {
-        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
-        var first = 0
-        var second = 0
-        var finished = 0
-        var pickSecond: (() -> Unit)? = null
-        val open = mutableStateOf(true)
-        try {
-            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
-                CompositionLocalProvider(LocalSquircleEnabled provides false) {
-                    ComfyControllerTheme(true, manageSystemBars = false) {
-                        Scaffold {
-                            if (open.value) AgentActionDialog("过渡验证", onClosed = { open.value = false; finished++ }) { _, closeThen ->
-                                pickSecond = { closeThen { second++ } }
-                                Text("执行下一步", Modifier.testTag("agent-dialog-action").clickable { closeThen { first++ } })
-                            }
-                        }
-                    }
-                }
-            } })
-            compose.waitForIdle()
-            compose.mainClock.autoAdvance = false
-            compose.onNodeWithTag("agent-dialog-action").performTouchInput { click() }
-            compose.runOnIdle { pickSecond?.invoke() }
-            assertEquals(0, first)
-            assertEquals(0, second)
-            assertEquals(0, finished)
-            compose.runOnIdle { controller.get().onBackPressedDispatcher.onBackPressed() }
-            assertFalse(controller.get().isFinishing)
-            compose.mainClock.advanceTimeBy(1600)
-            compose.mainClock.autoAdvance = true
-            compose.waitForIdle()
-            assertEquals(1, first)
-            assertEquals(0, second)
-            assertEquals(1, finished)
-            compose.onNodeWithText("过渡验证").assertDoesNotExist()
-        } finally { compose.mainClock.autoAdvance = true; controller.pause().stop().destroy() }
     }
 }

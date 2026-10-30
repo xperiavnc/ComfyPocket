@@ -60,6 +60,7 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Report
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 /**
  * Agent image preview card — one frosted center overlay for all busy/complete phases.
@@ -91,16 +92,16 @@ fun AgentImagePreviewCard(
     }
     val canOpenImage = mediaList.isNotEmpty() && !overlayOn
 
-    // Idle previews do not need an infinite animation running off-screen.
-    val pulseAlpha = if (overlayOn && status.phase != AgentCardPhase.BriefComplete) {
-        val transition = rememberInfiniteTransition(label = "agent_card_pulse")
-        val alpha by transition.animateFloat(
-            initialValue = 0.55f, targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Reverse),
-            label = "pulse_alpha"
-        )
-        alpha
-    } else 1f
+    val infiniteTransition = rememberInfiniteTransition(label = "agent_card_pulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.55f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+    ),
+        label = "pulse_alpha"
+    )
 
     Card(
         modifier = modifier
@@ -112,7 +113,10 @@ fun AgentImagePreviewCard(
                 shape = RoundedCornerShape(28.dp)
             ),
         cornerRadius = 28.dp,
-        colors = cardColors
+        colors = cardColors,
+        onClick = { },
+        pressFeedbackType = PressFeedbackType.Tilt,
+        showIndication = true
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             if (mediaList.isNotEmpty()) {
@@ -141,7 +145,7 @@ fun AgentImagePreviewCard(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .then(
-                                    if (canOpenImage) Modifier.agentControlFeedback("全屏查看生成图片") { onImageClick(page) }
+                                    if (canOpenImage) Modifier.clickable { onImageClick(page) }
                                     else Modifier
                                 ),
                             contentScale = ContentScale.Crop
@@ -195,8 +199,7 @@ fun AgentImagePreviewCard(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .clickable(interactionSource = null, indication = null,
-                                onClick = { /* block open while overlay without visual button feedback */ })
+                            .clickable(onClick = { /* block open while overlay */ })
     ) {
                         if (mediaList.isNotEmpty()) {
                             Box(
@@ -258,7 +261,7 @@ fun AgentImagePreviewCard(
                         .padding(10.dp)
                         .clip(RoundedCornerShape(50))
                         .background(scheme.surface.copy(alpha = 0.78f))
-                        .then(if (showControls) Modifier.agentControlFeedback("清空预览记录", onClick = onClearMediaListClick) else Modifier)
+                        .then(if (showControls) Modifier.clickable(onClick = onClearMediaListClick) else Modifier)
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
@@ -389,14 +392,12 @@ internal fun AgentStatusProgressBar(
                 .clip(RoundedCornerShape(99.dp))
                 .background(scheme.surface.copy(alpha = 0.35f))
     ) {
-            // Reset only when the segment is fully clipped, never snap visibly across the track.
-            val segment = maxWidth * 0.34f
-            val travel = maxWidth + segment
+            val travel = (maxWidth * 0.66f).coerceAtLeast(0.dp)
             Box(
                 modifier = Modifier
                     .fillMaxWidth(0.34f)
                     .height(h)
-                    .graphicsLayer { translationX = with(density) { (travel * shift - segment).toPx() } }
+                    .graphicsLayer { translationX = with(density) { (travel * shift).toPx() } }
                     .clip(RoundedCornerShape(99.dp))
                     .background(scheme.primary)
     )

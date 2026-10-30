@@ -2,17 +2,6 @@ package com.comfyui.mobile.ui.screens
 
 import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.ui.screens.agent.AgentWorkspaceLayout
-import com.comfyui.mobile.ui.screens.agent.AgentActionDialog
-import com.comfyui.mobile.ui.screens.agent.agentControlFeedback
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.ui.semantics.Role
 import com.comfyui.mobile.ui.screens.agent.AgentCardStatusFactory
 import com.comfyui.mobile.ui.screens.agent.AgentCapsuleBar
 import com.comfyui.mobile.ui.screens.agent.AgentPromptBindingPanel
@@ -30,6 +19,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -104,7 +94,9 @@ import top.yukonga.miuix.kmp.icon.extended.Edit
 import top.yukonga.miuix.kmp.icon.extended.File
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import com.comfyui.mobile.ui.components.DialogFormColumn
 @Composable
 fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
@@ -357,7 +349,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             wfLabel = wfLabel,
             cardColors = cardColors,
             sidePad = sidePad,
-            onOpenSessions = { navController.navigate("agent_sessions") { launchSingleTop = true } },
+            onOpenSessions = { navController.navigate("agent_sessions") },
             onImageClick = { index -> fullScreenMediaIndex = index; showImageViewer = true },
             modifier = Modifier
                 .fillMaxSize()
@@ -422,47 +414,47 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         }
     }
 
-    if (showWorkbenchActions) AgentActionDialog(title = "绘图参数与操作",
-        onClosed = { showWorkbenchActions = false }) { _, closeThen ->
+    OverlayDialog(show = showWorkbenchActions, title = "绘图参数与操作",
+        onDismissRequest = { showWorkbenchActions = false }) {
         Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
             TextButton("工作流 · $wfLabel", modifier = Modifier.fillMaxWidth(), onClick = {
-                closeThen { workflowSheetLevel = 1; showWorkflowSheet = true }
+                showWorkbenchActions = false; workflowSheetLevel = 1; showWorkflowSheet = true
             })
             TextButton("画风 / 画师与辅助参数", modifier = Modifier.fillMaxWidth(), onClick = {
-                closeThen { showStyleParamsDialog = true }
+                showWorkbenchActions = false; showStyleParamsDialog = true
             })
             TextButton("正向 / 反向提示词", modifier = Modifier.fillMaxWidth(), onClick = {
-                closeThen { showPromptDialog = true }
+                showWorkbenchActions = false; showPromptDialog = true
             })
             TextButton("清空预览记录", modifier = Modifier.fillMaxWidth(), onClick = {
-                closeThen { showClearMediaConfirmDialog = true }
+                showWorkbenchActions = false; showClearMediaConfirmDialog = true
             })
             TextButton("重置当前对话", modifier = Modifier.fillMaxWidth(), onClick = {
-                closeThen { showResetChatConfirm = true }
+                showWorkbenchActions = false; showResetChatConfirm = true
             })
         }
     }
-    if (showResetChatConfirm) AgentActionDialog(title = "重置当前对话？",
-        onClosed = { showResetChatConfirm = false }) { close, closeThen ->
+    OverlayDialog(show = showResetChatConfirm, title = "重置当前对话？",
+        onDismissRequest = { showResetChatConfirm = false }) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("清空当前对话内容和本轮提示词，保留其他会话。")
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                TextButton("取消", modifier = Modifier.weight(1f), onClick = close)
+                TextButton("取消", modifier = Modifier.weight(1f), onClick = { showResetChatConfirm = false })
                 TextButton("确认重置", modifier = Modifier.weight(1f), onClick = {
-                    closeThen {
-                        viewModel.clearAgentChat()
-                        AppToast.show(context, "已重置对话")
-                    }
+                    showResetChatConfirm = false
+                    viewModel.clearAgentChat()
+                    AppToast.show(context, "已重置对话")
                 })
             }
         }
     }
 
-    if (showModelSwitchDialog) AgentActionDialog(
+    OverlayDialog(
+        show = showModelSwitchDialog,
         title = "切换模型与 API",
-        onClosed = { showModelSwitchDialog = false }
-    ) { close, closeThen ->
+        onDismissRequest = { showModelSwitchDialog = false }
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -475,10 +467,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                 items(llmProfiles, key = { it.id }) { item ->
                     val isChosen = item.id == currentLlmProfileId
-                    val selectionColor by animateColorAsState(
-                        if (isChosen) scheme.secondaryContainer.copy(alpha = 0.7f) else scheme.surfaceContainerHigh,
-                        tween(160), label = "agentModelSelection"
-                    )
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -490,12 +478,21 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                         RoundedCornerShape(16.dp)
     )
                                 } else Modifier
-                            ).clip(RoundedCornerShape(16.dp))
-                            .agentControlFeedback("选择 ${item.displayName}", selected = isChosen, role = Role.RadioButton) {
-                                closeThen { viewModel.selectLlmProfile(item.id) }
-                            },
+                            ),
                         cornerRadius = 16.dp,
-                        colors = CardDefaults.defaultColors(color = selectionColor)
+                        colors = CardDefaults.defaultColors(
+                            color = if (isChosen) {
+                                scheme.secondaryContainer.copy(alpha = 0.7f)
+                            } else {
+                                scheme.surfaceContainerHigh
+                            }
+    ),
+                        pressFeedbackType = PressFeedbackType.Tilt,
+                        showIndication = true,
+                        onClick = {
+                            viewModel.selectLlmProfile(item.id)
+                            showModelSwitchDialog = false
+                        }
     ) {
                         Row(
                             modifier = Modifier
@@ -546,38 +543,34 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                     modifier = Modifier.weight(1f),
                     text = "管理",
                     onClick = {
-                        closeThen { navController.navigate("agent_settings") { launchSingleTop = true } }
+                        showModelSwitchDialog = false
+                        navController.navigate("agent_settings")
                     }
     )
                 TextButton(
                     modifier = Modifier.weight(0.7f),
                     text = "关闭",
-                    onClick = close
+                    onClick = { showModelSwitchDialog = false }
     )
             }
         }
     }
 
-    if (showWorkflowSheet) AgentActionDialog(
+    OverlayDialog(
+        show = showWorkflowSheet,
         title = if (workflowSheetLevel == 1) "选择工作流" else "设置正向 / 反向节点",
-        onClosed = {
+        onDismissRequest = {
             showWorkflowSheet = false
             workflowSheetLevel = 1
         }
-    ) { close, _ ->
+    ) {
         val textNodes = remember(editableNodes) {
             editableNodes
                 .filterIsInstance<EditableNode.TextInput>()
                 .filter { it.options.isNullOrEmpty() }
         }
 
-        AnimatedContent(targetState = workflowSheetLevel, label = "agentWorkflowStep",
-            transitionSpec = {
-                val direction = if (targetState > initialState) 1 else -1
-                (fadeIn(tween(160)) + slideInHorizontally(tween(200)) { it / 12 * direction }) togetherWith
-                    (fadeOut(tween(120)) + slideOutHorizontally(tween(200)) { -it / 12 * direction })
-            }) { level ->
-        if (level == 1) {
+        if (workflowSheetLevel == 1) {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (workflowLabel.isNotBlank()) {
                     Card(
@@ -608,7 +601,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(50))
                                     .background(scheme.primaryContainer)
-                                    .agentControlFeedback("设置提示词节点") { workflowSheetLevel = 2 }
+                                    .clickable { workflowSheetLevel = 2 }
                                     .padding(horizontal = 10.dp, vertical = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -661,12 +654,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                         } else {
                                             Modifier
                                         }
-                                    ).clip(RoundedCornerShape(16.dp))
-                                    .agentControlFeedback("选择工作流 $label", selected = current, role = Role.RadioButton) {
-                                        viewModel.setAgentDefaultWorkflow(
-                                            source = MainViewModel.AGENT_WF_SAVED, id = file.name, label = label)
-                                        workflowSheetLevel = 2
-                                    },
+                                    ),
                                 cornerRadius = 16.dp,
                                 colors = CardDefaults.defaultColors(
                                     color = if (current) {
@@ -674,7 +662,17 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                     } else {
                                         scheme.secondaryContainer
                                     }
+    ),
+                                pressFeedbackType = PressFeedbackType.Tilt,
+                                showIndication = true,
+                                onClick = {
+                                    viewModel.setAgentDefaultWorkflow(
+                                        source = MainViewModel.AGENT_WF_SAVED,
+                                        id = file.name,
+                                        label = label
     )
+                                    workflowSheetLevel = 2
+                                }
     ) {
                                 Row(
                                     modifier = Modifier
@@ -720,7 +718,10 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 Spacer(modifier = Modifier.height(6.dp))
                 TextButton(
                     text = "关闭",
-                    onClick = close,
+                    onClick = {
+                        showWorkflowSheet = false
+                        workflowSheetLevel = 1
+                    },
                     modifier = Modifier.fillMaxWidth()
     )
             }
@@ -729,23 +730,26 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 AgentPromptBindingPanel(positiveBinding, negativeBinding, textNodes, viewModel::setAgentPromptBinding)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(text = "返回工作流", modifier = Modifier.weight(1f), onClick = { workflowSheetLevel = 1 })
-                    TextButton(text = "完成", modifier = Modifier.weight(1f), onClick = close)
+                    TextButton(text = "完成", modifier = Modifier.weight(1f), onClick = {
+                        showWorkflowSheet = false
+                        workflowSheetLevel = 1
+                    })
                 }
             }
         }
-        }
     }
 
-    if (showPromptDialog) AgentActionDialog(
+    OverlayDialog(
+        show = showPromptDialog,
         title = "出图提示词",
-        onClosed = { showPromptDialog = false }
-    ) { close, _ ->
+        onDismissRequest = { showPromptDialog = false }
+    ) {
         AgentOutputPromptPanel(promptOutput) { label, text ->
             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText(label, text))
             AppToast.show(context, "已复制$label")
         }
-        TextButton(text = "关闭", onClick = close)
+        TextButton(text = "关闭", onClick = { showPromptDialog = false })
     }
 
     if (showImageViewer && displayMediaList.isNotEmpty()) {
@@ -759,10 +763,11 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     }
 
     if (showClearMediaConfirmDialog) {
-        AgentActionDialog(
+        OverlayDialog(
+            show = true,
             title = "清空生图记录",
-            onClosed = { showClearMediaConfirmDialog = false }
-    ) { close, closeThen ->
+            onDismissRequest = { showClearMediaConfirmDialog = false }
+    ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -780,12 +785,13 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     ) {
                     TextButton(
                         text = "取消",
-                        onClick = close,
+                        onClick = { showClearMediaConfirmDialog = false },
                         modifier = Modifier.weight(1f),
                     )
                     Button(
                         onClick = {
-                            closeThen { viewModel.clearAgentLatestGenerationList() }
+                            viewModel.clearAgentLatestGenerationList()
+                            showClearMediaConfirmDialog = false
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColorsPrimary()
@@ -927,10 +933,11 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     )
 
     // 画师节点选择弹窗
-    if (showSelectArtistNodeDialog) AgentActionDialog(
+    OverlayDialog(
+        show = showSelectArtistNodeDialog,
         title = "选择画师节点",
-        onClosed = { showSelectArtistNodeDialog = false }
-    ) { close, closeThen ->
+        onDismissRequest = { showSelectArtistNodeDialog = false }
+    ) {
         val textNodes = remember(editableNodes, targetNodeId) {
             editableNodes
                 .filterIsInstance<EditableNode.TextInput>()
@@ -962,7 +969,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             color = if (isChosen) scheme.secondaryContainer.copy(alpha = 0.7f) else scheme.surfaceContainerHigh
     ),
                         onClick = {
-                            closeThen { viewModel.setAgentArtistNodeId("") }
+                            viewModel.setAgentArtistNodeId("")
+                            showSelectArtistNodeDialog = false
                         }
     ) {
                         Row(
@@ -988,7 +996,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             color = if (isChosen) scheme.secondaryContainer.copy(alpha = 0.7f) else scheme.surfaceContainerHigh
     ),
                         onClick = {
-                            closeThen { viewModel.setAgentArtistNodeId(node.nodeId) }
+                            viewModel.setAgentArtistNodeId(node.nodeId)
+                            showSelectArtistNodeDialog = false
                         }
     ) {
                         Row(
@@ -1027,17 +1036,18 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             Spacer(modifier = Modifier.height(4.dp))
             TextButton(
                 text = "关闭",
-                onClick = close,
+                onClick = { showSelectArtistNodeDialog = false },
                 modifier = Modifier.fillMaxWidth()
     )
         }
     }
 
     // 管理辅助显示节点弹窗
-    if (showManageAuxNodesDialog) AgentActionDialog(
+    OverlayDialog(
+        show = showManageAuxNodesDialog,
         title = "管理辅助显示节点",
-        onClosed = { showManageAuxNodesDialog = false }
-    ) { close, _ ->
+        onDismissRequest = { showManageAuxNodesDialog = false }
+    ) {
         val allNodes = remember(editableNodes, targetNodeId) {
             editableNodes.filter { it.nodeId != targetNodeId }
         }
@@ -1113,7 +1123,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             Spacer(modifier = Modifier.height(4.dp))
             TextButton(
                 text = "完成",
-                onClick = close,
+                onClick = { showManageAuxNodesDialog = false },
                 modifier = Modifier.fillMaxWidth()
     )
         }
