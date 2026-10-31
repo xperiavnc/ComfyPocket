@@ -1221,7 +1221,8 @@ object MainViewModelAgent {
         val messages = mutableListOf<com.comfyui.mobile.network.ChatMessageDto>()
         messages.add(com.comfyui.mobile.network.ChatMessageDto("system", systemPrompt))
 
-        val recentHistory = validHistory.takeLast(if (settings.generationLimits.contextTokens == null) 4 else 200)
+        // AgentContextBudget.fit() trims in aligned chunks; pre-trimming here would defeat that.
+        val recentHistory = validHistory.takeLast(200)
         val lastAssistantIdx = recentHistory.indexOfLast { it.role == "assistant" }
         for ((idx, hist) in recentHistory.withIndex()) {
             if (hist.role == "user") {

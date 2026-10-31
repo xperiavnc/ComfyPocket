@@ -51,6 +51,9 @@ object AgentContextBudget {
             value.message.tool_calls?.let { com.google.gson.Gson().toJson(it) }.orEmpty())
             .toByteArray(Charsets.UTF_8).size + 16 + value.images.size * 4096
 
+    /** History is trimmed in steps of this many turns to keep the cached prompt prefix stable. */
+    const val HISTORY_CHUNK = 4
+
     fun fit(
         system: AgentContextMessage,
         history: List<AgentContextMessage>,
@@ -83,7 +86,17 @@ object AgentContextBudget {
             budget -= cost
             count += turn.size
         }
-        val kept = selected.asReversed().flatten()
+        // Snap the first kept turn to a multiple of HISTORY_CHUNK so the oldest retained turns (right
+        // after the system message) stay the same for several turns: a one-turn sliding window would
+        // change the cached prefix on every request. We only ever keep fewer turns than the greedy
+        // pick (never more than fits or than the legacy cap), and only when at least half survive.
+        val greedy = selected.size
+        // Chunk scales with the window (at most HISTORY_CHUNK) so at least half of it always survives.
+        val chunk = ((greedy + 1) / 2).coerceIn(1, HISTORY_CHUNK)
+        val start = ((turns.size - greedy + chunk - 1) / chunk) * chunk
+        val aligned = turns.size - start
+        val keepTurns = if (aligned in 1..greedy) aligned else greedy
+        val kept = turns.takeLast(keepTurns).flatten()
         val result = listOf(system) + kept + current
         return AgentContextSelection(result, history.size - kept.size, result.sumOf(::estimate) + reservedInputTokens)
     }

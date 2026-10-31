@@ -80,4 +80,17 @@ class AgentContextBudgetTest {
                 reservedInputTokens = 500)
         }
     }
+
+    @Test fun historyWindowMovesInChunksNotOneTurnAtATime() {
+        // With a budget that fits about six turns, the oldest kept message must stay put for
+        // several consecutive requests so the cached prefix after the system message survives.
+        val firsts = (8..16).map { turns ->
+            val history = (1..turns).flatMap { listOf(message("user", "u$it " + "x".repeat(200)), message("assistant", "a$it")) }
+            val fitted = AgentContextBudget.fit(message("system", "rules"), history, listOf(message("user", "current")),
+                AgentGenerationLimits(1024, 128), 4)
+            fitted.messages[1].message.content
+        }
+        val changes = firsts.zipWithNext().count { (a, b) -> a != b }
+        assertTrue("window slid on every turn: $firsts", changes <= firsts.size / 2)
+    }
 }

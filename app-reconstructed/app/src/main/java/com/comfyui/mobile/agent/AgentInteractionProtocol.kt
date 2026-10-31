@@ -65,21 +65,23 @@ object AgentInteractionProtocol {
     /** Users asked for questions rather than silent guesses whenever instructions disagree. */
     const val CONFLICT_CHECK = "【冲突必问】出现下列任一情况就调用 ask_user_question，不要自行取舍：本轮要求与导入规则、角色档案、已登记服装、画风/辅助参数或上一轮提示词相矛盾；同一句里的要求互相冲突；指代不清（哪个角色、哪套衣服、改哪一张）；缺少会明显改变画面的关键信息。每题给 2–4 个具体选项并说明区别，一次最多 4 题。只有用户明确说“你决定/随便/按默认”或差异无关紧要时才 continue_task。"
 
+    /** The decision step is appended to the shared transcript, so its whole text is extra input. */
+    @Suppress("UNUSED_PARAMETER")
     fun contextReserve(finalSystem: String, decisionSystem: String): Int =
-        (decisionSystem.toByteArray(Charsets.UTF_8).size - finalSystem.toByteArray(Charsets.UTF_8).size).coerceAtLeast(0) +
+        decisionSystem.toByteArray(Charsets.UTF_8).size +
             com.google.gson.Gson().toJson(decisionTools).toByteArray(Charsets.UTF_8).size + 2048
 
+    /**
+     * Step instruction appended after the current request. Persona, rules and character facts already
+     * live in the shared system message, so they are not repeated here (and the prefix stays cacheable).
+     */
+    @Suppress("UNUSED_PARAMETER")
     fun decisionSystem(persona: String, facts: String, mode: AgentMode): String = buildString {
         appendLine("【应用决策协议】")
         appendLine("本步骤选择一个工具动作：ask_user_question 提问并等待用户；continue_task 继续到正式答复或提示词编写。字段按工具定义填写。")
         appendLine("当前模式：${if (mode == AgentMode.DRAW) "绘图" else "聊天，不执行出图"}。本步骤不输出最终 prompt/negative_prompt。")
         appendLine(CONFLICT_CHECK)
-        if (persona.isNotBlank()) {
-            appendLine(AgentPromptPolicy.RULE_PRIORITY)
-            appendLine("【用户导入的对话规则】")
-            appendLine(persona)
-        }
-        if (facts.isNotBlank()) appendLine(facts)
+        if (persona.isNotBlank()) appendLine("系统消息中的用户导入规则与角色档案同样适用于本步骤。")
         append("【本步骤最终动作】调用 ask_user_question 或 continue_task 二选一；正式答复和提示词由下一步骤输出。")
     }
 

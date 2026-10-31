@@ -54,12 +54,12 @@ class AgentInteractionLoopTest {
         val compose = fixture.requests.last()
         assertFalse(compose.deciding)
         assertEquals("auto", compose.toolChoice)
-        assertEquals(listOf(AgentInteractionProtocol.ASK), compose.tools!!.map { it.function.name })
-        assertEquals("assistant", compose.messages[2].role)
-        assertEquals("decision reasoning", compose.messages[2].reasoning_content)
-        assertEquals("tool", compose.messages[3].role)
-        assertEquals("call-1", compose.messages[3].tool_call_id)
-        assertTrue(compose.messages[3].content!!.contains("compose_result"))
+        assertEquals(listOf(AgentInteractionProtocol.ASK, AgentInteractionProtocol.CONTINUE), compose.tools!!.map { it.function.name })
+        assertEquals("assistant", compose.messages[3].role)
+        assertEquals("decision reasoning", compose.messages[3].reasoning_content)
+        assertEquals("tool", compose.messages[4].role)
+        assertEquals("call-1", compose.messages[4].tool_call_id)
+        assertTrue(compose.messages[4].content!!.contains("compose_result"))
         assertTrue(result.output!!.reasoning!!.contains("compose reasoning"))
         assertNull(result.question)
     }
@@ -79,7 +79,7 @@ class AgentInteractionLoopTest {
         assertNotNull(fixture.requests[0].tools)
         assertNull(fixture.requests[1].toolChoice)
         assertNull(fixture.requests[1].tools)
-        assertTrue(fixture.requests[1].messages.first().content!!.contains("接口兼容动作协议"))
+        assertTrue(fixture.requests[1].messages.any { it.content.orEmpty().contains("接口兼容动作协议") })
         assertTrue(fixture.requests[1].messages.last().content!!.contains("结构化动作兼容重试"))
         assertFalse(fixture.requests[1].messages.any { it.content.orEmpty().contains("猜测") })
         assertNull(fixture.requests[2].tools)
@@ -140,7 +140,7 @@ class AgentInteractionLoopTest {
         val compose = fixture.requests.last()
         assertFalse(compose.deciding)
         // Compose still offers the question tool and never replays the failed decision text.
-        assertEquals(listOf(AgentInteractionProtocol.ASK), compose.tools!!.map { it.function.name })
+        assertEquals(listOf(AgentInteractionProtocol.ASK, AgentInteractionProtocol.CONTINUE), compose.tools!!.map { it.function.name })
         assertTrue(compose.messages.last().content!!.contains("按用户本轮原任务直接完成"))
         assertEquals(AgentInteractionLoop.FALLBACK_SUMMARY, result.plan!!.summary)
     }
@@ -197,7 +197,7 @@ class AgentInteractionLoopTest {
         assertEquals(3, fixture.requests.size)
         assertNotNull(fixture.requests.first().tools)
         assertTrue(fixture.requests.drop(1).all { it.tools == null && it.toolChoice == null })
-        assertTrue(fixture.requests[1].messages.first().content!!.contains("接口兼容动作协议"))
+        assertTrue(fixture.requests[1].messages.any { it.content.orEmpty().contains("接口兼容动作协议") })
         assertTrue(cached >= 1)
     }
 
@@ -262,9 +262,10 @@ class AgentInteractionLoopTest {
     @Test fun customRulesCannotTurnTheDecisionStageIntoTwoPromptFields() {
         val system = AgentInteractionProtocol.decisionSystem("USER_DIALOGUE_RULES_854", "真实档案", AgentMode.DRAW)
         assertTrue(system.endsWith("正式答复和提示词由下一步骤输出。"))
-        assertTrue(system.contains("真实档案"))
+        assertFalse(system.contains("真实档案"))
+        assertTrue(system.contains("角色档案同样适用于本步骤"))
         assertTrue(system.contains("【应用决策协议】"))
-        assertTrue(system.contains("【用户导入的对话规则】\nUSER_DIALOGUE_RULES_854"))
+        assertFalse(system.contains("USER_DIALOGUE_RULES_854"))
         assertTrue(system.contains("ask_user_question"))
         assertTrue(system.contains("continue_task"))
         assertFalse(system.contains("默认必须保留的绘画词"))
@@ -272,5 +273,27 @@ class AgentInteractionLoopTest {
         val empty = AgentInteractionProtocol.decisionSystem("", "", AgentMode.CHAT)
         assertFalse(empty.contains("【用户导入的对话规则】"))
         assertFalse(empty.contains("你是 ComfyPocket"))
+    }
+
+    @Test fun decisionAndComposeShareOnePrefixAndToolList() = runBlocking {
+        val fixture = Fixture(ready(), LlmCompletionOutput("正式答复"))
+        AgentInteractionLoop(fixture).run(messages, "decision")
+        val (decision, compose) = fixture.requests
+        // Prompt caches match on an exact prefix: system + history + step instruction must be resent verbatim.
+        assertEquals(decision.messages, compose.messages.take(decision.messages.size))
+        assertEquals(messages, decision.messages.take(messages.size))
+        assertEquals(decision.tools, compose.tools)
+        assertTrue(compose.messages.last().content!!.contains("【当前步骤：编写结果】"))
+        assertEquals("final contract", compose.messages.first().content)
+    }
+
+    @Test fun repairRoundsOnlyAppendToTheTranscript() = runBlocking {
+        val fixture = Fixture(ready(), LlmCompletionOutput("bad"), LlmCompletionOutput("good"))
+        AgentInteractionLoop(fixture).run(messages, "decision", validate = { if (it == "bad") "无法解析" else null })
+        assertEquals(3, fixture.requests.size)
+        for (i in 1 until fixture.requests.size) {
+            val before = fixture.requests[i - 1].messages
+            assertEquals(before, fixture.requests[i].messages.take(before.size))
+        }
     }
 }

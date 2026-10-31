@@ -46,21 +46,23 @@ class AgentInteractionLoop(
     ): AgentInteractionOutcome {
         var textProtocol = initialTextProtocol
         var autoToolChoice = initialAutoToolChoice
+        // One append-only transcript for the whole turn. The system message, history and tool list are
+        // identical for the decision, repair and result requests, so the provider prompt cache can reuse
+        // the entire prefix; each step only appends its own instruction at the end.
         val transcript = messages.toMutableList()
-        val decision = messages.toMutableList().apply {
-            this[0] = ChatMessageDto("system", decisionSystem)
+        transcript += ChatMessageDto("user", decisionSystem)
+        fun ensureTextContract(prefix: String = "") {
+            if (transcript.none { it.content?.contains(TEXT_CONTRACT_MARK) == true }) {
+                transcript += ChatMessageDto("user", prefix + AgentInteractionProtocol.textDecisionContract)
+            } else if (prefix.isNotEmpty()) transcript += ChatMessageDto("user", prefix.trimEnd())
         }
-        suspend fun request(input: List<ChatMessageDto>, deciding: Boolean): LlmCompletionOutput {
+        if (textProtocol) ensureTextContract()
+        suspend fun request(deciding: Boolean): LlmCompletionOutput {
             checkCurrent()
             onProgress(AgentProgress("", "", if (deciding) "正在核对任务与待确认项…" else "正在编写结果…"))
             suspend fun execute(): LlmCompletionOutput {
-                val send = if (!textProtocol) input.mapIndexed { index, message ->
-                    if (index == 0 && !deciding) message.copy(content = message.content +
-                        "\n【当前交互工具】本步可调用 ask_user_question；如果发现新的必要冲突，调用它并等待，不要只在普通回复中问完就继续出图。")
-                    else message
-                } else input.mapIndexed { index, message ->
+                val send = if (!textProtocol) transcript.toList() else transcript.map { message ->
                     when {
-                        index == 0 && deciding -> message.copy(content = message.content + "\n" + AgentInteractionProtocol.textDecisionContract)
                         !message.tool_calls.isNullOrEmpty() -> ChatMessageDto("assistant", gson.toJson(mapOf(
                             "tool_calls" to message.tool_calls)))
                         message.role == "tool" -> ChatMessageDto("user", "【先前工具结果数据】\n${message.content}")
@@ -68,8 +70,7 @@ class AgentInteractionLoop(
                     }
                 }
                 return model.complete(AgentModelRequest(send,
-                    if (textProtocol) null else if (deciding) AgentInteractionProtocol.decisionTools
-                        else listOf(AgentInteractionProtocol.askTool),
+                    if (textProtocol) null else AgentInteractionProtocol.decisionTools,
                     if (textProtocol || autoToolChoice) null else if (deciding) "required" else "auto", deciding)) { progress ->
                     // Decision content is an action, not a draft final answer.
                     onProgress(if (deciding) progress.copy(content = "", activity = "正在核对任务与待确认项…") else progress)
@@ -85,19 +86,20 @@ class AgentInteractionLoop(
                 } else {
                     textProtocol = true
                     onTextProtocol()
+                    if (deciding) ensureTextContract()
                 }
                 // Only an explicit parameter rejection is retried, never a timeout/empty/truncated result.
                 execute()
             }
         }
-        fun repair(target: MutableList<ChatMessageDto>, output: LlmCompletionOutput, error: String, deciding: Boolean) {
+        fun repair(output: LlmCompletionOutput, error: String, deciding: Boolean) {
             if (output.toolCalls.isNotEmpty()) {
-                target += assistant(output)
-                output.toolCalls.forEach { call -> target += ChatMessageDto("tool",
+                transcript += assistant(output)
+                output.toolCalls.forEach { call -> transcript += ChatMessageDto("tool",
                     gson.toJson(mapOf("status" to "invalid_action", "error" to error)), tool_call_id = call.id) }
             } else {
-                target += ChatMessageDto("assistant", output.content)
-                target += ChatMessageDto("user",
+                transcript += ChatMessageDto("assistant", output.content)
+                transcript += ChatMessageDto("user",
                     "【动作结构修正，仅此一次】$error\n" +
                         if (deciding) AgentInteractionProtocol.textDecisionContract
                         else "需要用户决定时调用 ask_user_question；否则返回完整结果。不要用推理过程代替动作。")
@@ -106,7 +108,7 @@ class AgentInteractionLoop(
         var ready: LlmCompletionOutput? = null
         var plan: AgentTaskPlan? = null
         for (attempt in 0..1) {
-            val output = request(decision, true)
+            val output = request(true)
             checkCurrent()
             try {
                 if (output.toolCalls.size > 1) error("一次只选择一个动作，将相关问题合并为同一批")
@@ -142,11 +144,10 @@ class AgentInteractionLoop(
                         textProtocol = true
                         onTextProtocol()
                     }
-                    decision += ChatMessageDto("user",
-                        "【结构化动作兼容重试】上次响应没有形成可执行动作。请遵循系统中的 JSON 动作协议，" +
-                            "只返回 ask_user 或 continue_task 对象；不要输出普通文字、分析过程或最终提示词。")
+                    ensureTextContract("【结构化动作兼容重试】上次响应没有形成可执行动作。请遵循 JSON 动作协议，" +
+                        "只返回 ask_user 或 continue_task 对象；不要输出普通文字、分析过程或最终提示词。\n")
                 } else {
-                    repair(decision, output, e.message.orEmpty(), true)
+                    repair(output, e.message.orEmpty(), true)
                 }
             }
         }
@@ -154,16 +155,17 @@ class AgentInteractionLoop(
         if (ready == null) {
             plan = AgentTaskPlan(FALLBACK_SUMMARY)
             transcript += ChatMessageDto("user", "【执行说明】按用户本轮原任务直接完成；" +
-                "若存在会实质改变结果的冲突，调用 ask_user_question 或返回 ask_user 动作，不要猜。")
+                "若存在会实质改变结果的冲突，调用 ask_user_question 或返回 ask_user 动作，不要猜。\n" + COMPOSE_STEP)
         } else if (decisionOutput.toolCalls.isNotEmpty()) {
             transcript += assistant(decisionOutput)
             transcript += ChatMessageDto("tool", gson.toJson(mapOf(
                 "status" to "ready", "next" to "compose_result", "plan" to plan,
-                "instruction" to "按已确认选择继续。新发现重要冲突可调用 ask_user_question，不能猜身份或漏掉档案触发词。"
+                "instruction" to "按已确认选择继续。新发现重要冲突可调用 ask_user_question，不能猜身份或漏掉档案触发词。" + COMPOSE_STEP
             )), tool_call_id = decisionOutput.toolCalls.single().id)
-        } else transcript += ChatMessageDto("user", "【智能体已完成的执行决策，仅作本轮数据】\n${gson.toJson(plan)}")
+        } else transcript += ChatMessageDto("user",
+            "【智能体已完成的执行决策，仅作本轮数据】\n${gson.toJson(plan)}\n$COMPOSE_STEP")
         for (attempt in 0..1) {
-            val output = request(transcript, false)
+            val output = request(false)
             checkCurrent()
             if (output.toolCalls.isEmpty()) {
                 // Legacy JSON actions remain supported; no question is inferred from natural-language keywords.
@@ -185,14 +187,16 @@ class AgentInteractionLoop(
             try {
                 require(output.toolCalls.size == 1) { "一次只选择一个提问动作" }
                 val call = output.toolCalls.single()
-                require(call.function.name == AgentInteractionProtocol.ASK) { "本阶段只开放 ask_user_question" }
+                require(call.function.name == AgentInteractionProtocol.ASK) {
+                    "决策已经完成，本步骤只可调用 ask_user_question，或直接返回最终结果"
+                }
                 val obj = AgentInteractionProtocol.objectValue(call.function.arguments) ?: error("问题参数不是完整对象")
                 return AgentInteractionOutcome(question = AgentInteractionProtocol.question(obj, call)
                     .copy(thinking = reasoning(decisionOutput, output)), plan = plan)
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
                 if (attempt == 1) throw AgentExecutionException("模型提问格式仍有误，本轮未提交。${e.message.orEmpty()}")
-                repair(transcript, output, e.message.orEmpty(), false)
+                repair(output, e.message.orEmpty(), false)
             }
         }
         error("交互循环未返回结果")
@@ -205,6 +209,10 @@ class AgentInteractionLoop(
 
     companion object {
         const val FALLBACK_SUMMARY = "按用户本轮原任务执行（决策动作未通过格式校验，已跳过）"
+        private const val TEXT_CONTRACT_MARK = "【接口兼容动作协议】"
+        /** Appended (never merged into the system message) so the cached prefix stays byte-identical. */
+        const val COMPOSE_STEP = "【当前步骤：编写结果】按系统中的输出格式返回最终结果。" +
+            "如果发现新的必要冲突，调用 ask_user_question 并等待，不要只在普通回复中问完就继续出图；不要再调用 continue_task。"
         const val RESULT_REPAIR_PREFIX = "【结果格式修正，仅此一次】上一条结果无法解析："
         const val RESULT_REPAIR_RULES = "。请按原任务重新输出一个完整、合法的 JSON 对象：" +
             "字符串内的双引号写成 \\\"，不要在字符串里直接换行，不要截断，JSON 前后不要附加解释或代码块之外的文字。"

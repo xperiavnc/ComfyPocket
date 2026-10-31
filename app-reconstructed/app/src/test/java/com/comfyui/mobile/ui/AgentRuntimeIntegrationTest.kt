@@ -111,8 +111,7 @@ class AgentRuntimeIntegrationTest {
         val fallback = JsonParser.parseString(decisionBodies.last()).asJsonObject
         assertFalse(fallback.has("tool_choice"))
         assertFalse(fallback.has("tools"))
-        assertTrue(fallback["messages"].asJsonArray.first().asJsonObject["content"].asString
-            .contains("接口兼容动作协议"))
+        assertTrue(fallback["messages"].asJsonArray.any { it.toString().contains("接口兼容动作协议") })
         assertTrue(fallback["messages"].asJsonArray.last().asJsonObject["content"].asString
             .contains("结构化动作兼容重试"))
     }
@@ -344,7 +343,7 @@ class AgentRuntimeIntegrationTest {
         awaitDone()
         assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
         val lastRequest = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
-            .last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asString
+            .last { isTaskMessage(it) }.asJsonObject["content"].asString
         assertTrue(lastRequest.contains("FOLLOWUP_DOCUMENT_613"))
         assertTrue(lastRequest.contains("画星澜，背景稍后确认"))
         assertTrue(lastRequest.contains("晨光"))
@@ -430,7 +429,8 @@ class AgentRuntimeIntegrationTest {
                     val body = request.body.readUtf8()
                     val json = JsonParser.parseString(body).asJsonObject
                     val deciding = json["tool_choice"]?.asString == "required" ||
-                        json["messages"].asJsonArray.first().asJsonObject["content"].asString.contains("【应用决策协议】")
+                        json["messages"].asJsonArray.map { it.toString() }.let { all ->
+                            all.indexOfLast { "【应用决策协议】" in it } > all.indexOfLast { "【当前步骤：编写结果】" in it } }
                     if (deciding) decisionBodies += body else llmBodies += body
                     if (deciding && automaticDecisions)
                         nativeAction("continue_task", """{"summary":"本地模拟模型决定继续，后续响应由测试指定。"}""", "call-ready")
@@ -533,7 +533,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals(2, llmBodies.size)
         assertEquals(1, promptBodies.size)
         assertEquals("portrait, formal_token, dress, suzuran_token", graphText())
-        val answerContext = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
+        val answerContext = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { isTaskMessage(it) }
             .asJsonObject["content"].asString
         assertTrue(answerContext.contains("\"id\":\"suzuran-outfit\""))
         assertTrue(answerContext.contains("\"option_ids\":[\"formal\"]"))
@@ -657,7 +657,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals("portrait, xl_token, casual_token", graphText())
         assertEquals("one", vm.agentMessages.value.last().characterSelections!!.single().outfitId)
         val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
-            .last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asString
+            .last { isTaskMessage(it) }.asJsonObject["content"].asString
         assertTrue(current.contains(task))
         assertTrue(current.contains("常服"))
         assertFalse(current.contains("礼服"))
@@ -719,7 +719,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
         assertEquals(2, llmBodies.size)
         assertEquals(1, promptBodies.size)
-        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
+        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { isTaskMessage(it) }
             .asJsonObject["content"].asString
         assertTrue(current.contains("画星澜，保留蓝色外套"))
         assertTrue(current.contains("全身"))
@@ -743,7 +743,7 @@ class AgentRuntimeIntegrationTest {
         responses += success("""{"action":"draw","reply":"好","prompt":"blue coat, full body, rain, neon lighting","should_draw":true}""")
         vm.answerAgentQuestions(vm.agentMessages.value.last().id, listOf(AgentQuestionAnswer("light", text = "霓虹光")))
         awaitDone()
-        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
+        val current = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { isTaskMessage(it) }
             .asJsonObject["content"].asString
         for (term in listOf("画星澜，保留蓝色外套", "全身", "帽子；手套", "雨夜街道", "霓虹光")) assertTrue(current.contains(term))
         assertEquals(3, llmBodies.size)
@@ -793,7 +793,7 @@ class AgentRuntimeIntegrationTest {
         responses += success("""{"action":"draw","reply":"改做新任务","prompt":"dog","should_draw":true}""")
         vm.sendAgentMessage("画一只狗")
         awaitDone()
-        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"]
+        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { isTaskMessage(it) }.asJsonObject["content"]
         assertTrue(last.isJsonPrimitive)
         assertTrue(last.asString.contains("画一只狗"))
         assertFalse(last.asString.contains("蓝色外套"))
@@ -839,7 +839,7 @@ class AgentRuntimeIntegrationTest {
         assertEquals(1, promptBodies.size)
         val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
         assertEquals("uploaded.png", graph["2"].asJsonObject["inputs"].asJsonObject["image"].asString)
-        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asJsonArray
+        val last = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray.last { isTaskMessage(it) }.asJsonObject["content"].asJsonArray
         assertTrue(last[0].asJsonObject["text"].asString.contains("参考这张图画星澜"))
         assertEquals("image_url", last[1].asJsonObject["type"].asString)
         println("ASK_RESTART phase=${vm.agentSessionState.value.turn!!.phase} uploads=${uploadBodies.size} submissions=${promptBodies.size}")
@@ -1491,7 +1491,7 @@ class AgentRuntimeIntegrationTest {
         val prompt = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
         assertEquals("cat", prompt["1"].asJsonObject["inputs"].asJsonObject["text"].asString)
         assertEquals("uploaded.png", prompt["2"].asJsonObject["inputs"].asJsonObject["image"].asString)
-        val content = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray.last { it.asJsonObject["role"].asString == "user" }
+        val content = JsonParser.parseString(llmBodies.single()).asJsonObject["messages"].asJsonArray.last { isTaskMessage(it) }
             .asJsonObject["content"].asJsonArray
         assertEquals("image_url", content[1].asJsonObject["type"].asString)
         assertFalse(File(app.cacheDir, "agent_upload_${vm.agentSessionState.value.turn!!.id}").exists())
@@ -1520,12 +1520,12 @@ class AgentRuntimeIntegrationTest {
         assertEquals(1, promptBodies.size)
         assertTrue(tagRequests.isEmpty())
         val body = JsonParser.parseString(llmBodies.single()).asJsonObject
-        assertEquals(listOf("ask_user_question"),
+        assertEquals(listOf("ask_user_question", "continue_task"),
             body["tools"].asJsonArray.map { it.asJsonObject["function"].asJsonObject["name"].asString })
         val messages = body["messages"].asJsonArray
         assertTrue(messages.any { it.asJsonObject["content"].asString.contains("离线词库候选") })
         assertTrue(messages.any { it.asJsonObject["content"].asString.contains("blue hair") })
-        assertTrue(messages.last { it.asJsonObject["role"].asString == "user" }.asJsonObject["content"].asString.startsWith("画蓝发人物"))
+        assertTrue(messages.last { isTaskMessage(it) }.asJsonObject["content"].asString.startsWith("画蓝发人物"))
         assertTrue(vm.agentMessages.value.last().localTagReport!!.entries.any { it.name == "blue hair" })
         assertEquals("blue hair, my_trigger", vm.agentPromptOutput.value.positive)
         assertEquals("blurry, bad anatomy", vm.agentPromptOutput.value.negative)
@@ -1735,4 +1735,15 @@ class AgentRuntimeIntegrationTest {
         assertFalse(body.has("max_completion_tokens"))
         assertTrue(promptBodies.isEmpty())
     }
+}
+
+/** The user turn the test cares about: not the appended decision/compose/protocol step messages. */
+private fun isTaskMessage(element: com.google.gson.JsonElement): Boolean {
+    val obj = element.asJsonObject
+    if (obj["role"].asString != "user") return false
+    val content = obj["content"]
+    if (!content.isJsonPrimitive) return true
+    val text = content.asString
+    return listOf("【应用决策协议】", "【当前步骤：编写结果】", "【接口兼容动作协议】", "【先前工具结果数据】",
+        "【结构化动作兼容重试】", "【动作结构修正", "【结果格式修正", "【智能体已完成的执行决策", "【执行说明】").none { it in text }
 }
