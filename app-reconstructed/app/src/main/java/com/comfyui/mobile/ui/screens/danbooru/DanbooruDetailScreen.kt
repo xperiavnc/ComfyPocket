@@ -89,7 +89,7 @@ internal fun DanbooruDetailScreen(
         }
     }
     LazyColumn(modifier.testTag("danbooru-detail-scroll"), contentPadding = PaddingValues(bottom = 20.dp + bottomClearance),
-        verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        verticalArrangement = Arrangement.spacedBy(PocketTokens.Space.S)) {
         item {
             val ratio = if ((post.width ?: 0) > 0 && (post.height ?: 0) > 0)
                 (post.width!!.toFloat() / post.height!!).coerceIn(0.6f, 1.8f) else 1.2f
@@ -110,6 +110,13 @@ internal fun DanbooruDetailScreen(
                         }
                     }
                 }
+                // Refresh status sits on the picture instead of pushing the info card down.
+                if (state.detailLoading) {
+                    Text("正在更新帖子信息…", Modifier.align(Alignment.TopEnd).padding(PocketTokens.Space.XS)
+                        .clip(PocketTokens.Shape.Pill).background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                        color = androidx.compose.ui.graphics.Color.White, style = MiuixTheme.textStyles.footnote2)
+                }
             }
             if (post.isVideo && post.playbackCandidates().isEmpty()) {
                 Text("暂未提供视频地址；仍可复制标签或打开原帖查看")
@@ -117,30 +124,46 @@ internal fun DanbooruDetailScreen(
                 Text("${post.extension.uppercase()} 动态格式暂提供封面与标签，播放请打开原帖")
             }
             state.detailError?.let { Feedback(it + "；保留已读 Tag", "重试详情", vm::retryDetail) }
-            if (state.detailLoading) Text("正在更新帖子信息…", style = MiuixTheme.textStyles.footnote1)
         }
         item {
-            Card(colors = PocketCardColors.raised(), cornerRadius = PocketTokens.Radius.Medium) {
-                Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("画师  ${post.tags[TagGroup.ARTIST].orEmpty().joinToString(" / ").ifBlank { "未标注" }}",
-                        style = MiuixTheme.textStyles.body2)
+            Card(colors = PocketCardColors.raised(), cornerRadius = PocketTokens.Radius.Large) {
+                Column(Modifier.fillMaxWidth().padding(PocketTokens.Space.M),
+                    verticalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)) {
+                    Text("画师", style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    Text(post.tags[TagGroup.ARTIST].orEmpty().joinToString(" / ").ifBlank { "未标注" },
+                        style = MiuixTheme.textStyles.title4, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text("#${post.id} · ${post.width ?: "?"} × ${post.height ?: "?"} · ${post.extension.uppercase()} · ${post.rating.uppercase()}",
-                        style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSecondaryContainer)
-                    if (post.source.isNotBlank()) Text(post.source, style = MiuixTheme.textStyles.footnote2,
-                        color = MiuixTheme.colorScheme.onSecondaryContainer, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (post.fileUrl != null && post.isImage) {
-                            DanbooruSmallAction(if (busy) "读取中…" else "保存原图", enabled = !busy) { download(false) }
-                            DanbooruSmallAction("分享原图", enabled = !busy) { download(true) }
-                            DanbooruSmallAction(if (original) "显示预览" else "查看原图") { original = !original }
+                        style = MiuixTheme.textStyles.footnote2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                    // Main actions share one even row; links are lighter so a lone button never wraps.
+                    if (post.fileUrl != null && post.isImage) {
+                        Row(Modifier.fillMaxWidth().padding(top = PocketTokens.Space.XS),
+                            horizontalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)) {
+                            DanbooruSmallAction(if (busy) "读取中…" else "保存原图", Modifier.weight(1f),
+                                primary = true, enabled = !busy) { download(false) }
+                            DanbooruSmallAction("分享原图", Modifier.weight(1f), enabled = !busy) { download(true) }
+                            DanbooruSmallAction(if (original) "显示预览" else "查看原图", Modifier.weight(1f)) { original = !original }
                         }
-                        if (post.videoDownloadSource() != null) {
-                            DanbooruSmallAction(if (busy) "下载中…" else "下载视频", enabled = !busy) { download(false) }
-                            if (busy) DanbooruSmallAction("取消下载") { transfer?.cancel(); toast("已取消下载") }
+                    }
+                    if (post.videoDownloadSource() != null) {
+                        Row(Modifier.fillMaxWidth().padding(top = PocketTokens.Space.XS),
+                            horizontalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)) {
+                            DanbooruSmallAction(if (busy) "下载中…" else "下载视频", Modifier.weight(1f),
+                                primary = true, enabled = !busy) { download(false) }
+                            if (busy) DanbooruSmallAction("取消下载", Modifier.weight(1f)) { transfer?.cancel(); toast("已取消下载") }
                         }
-                        DanbooruSmallAction("原帖") { openWeb(context, post.postUrl) }
-                        if (post.source.startsWith("https://") || post.source.startsWith("http://"))
-                            DanbooruSmallAction("来源") { openWeb(context, post.source) }
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DanbooruInlineAction("原帖") { openWeb(context, post.postUrl) }
+                        if (post.source.startsWith("https://") || post.source.startsWith("http://")) {
+                            DanbooruInlineAction("来源") { openWeb(context, post.source) }
+                            Text(post.source.substringAfter("://").substringBefore('/'),
+                                Modifier.weight(1f, fill = false), style = MiuixTheme.textStyles.footnote2,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else if (post.source.isNotBlank()) {
+                            Text(post.source, Modifier.weight(1f, fill = false).padding(start = PocketTokens.Space.XS),
+                                style = MiuixTheme.textStyles.footnote2,
+                                color = MiuixTheme.colorScheme.onSurfaceVariantSummary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                     if (busy && post.isVideo) {
                         val length = total
