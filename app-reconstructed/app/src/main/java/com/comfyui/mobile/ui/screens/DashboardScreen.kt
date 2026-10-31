@@ -2,6 +2,7 @@ package com.comfyui.mobile.ui.screens
 
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import com.comfyui.mobile.ui.designsystem.PocketTokens
+import com.comfyui.mobile.ui.designsystem.PocketSectionHeader
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import com.comfyui.mobile.ui.screens.dashboard.UserProfileCard
@@ -53,7 +54,6 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.ProgressIndicatorDefaults
-import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextButton
 import com.comfyui.mobile.ui.MainViewModelRhConn
@@ -65,7 +65,7 @@ import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
-private val DashCardRadius = 28.dp
+private val DashCardRadius = PocketTokens.Radius.XLarge
 private val DashInnerRadius = 22.dp
 
 @Composable
@@ -228,7 +228,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                     kotlinx.coroutines.delay(1_000L)
                 }
             }
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(PocketTokens.Space.S))
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = DashCardRadius,
@@ -237,7 +237,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 pressFeedbackType = PressFeedbackType.Sink,
                 showIndication = true
     ) {
-                Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+                Column(modifier = Modifier.padding(horizontal = PocketTokens.Space.M, vertical = PocketTokens.Space.S)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -279,7 +279,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
         }
 
         if (!isRh && connected && busy) {
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(PocketTokens.Space.S))
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 cornerRadius = DashCardRadius,
@@ -289,7 +289,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 pressFeedbackType = PressFeedbackType.Sink,
                 showIndication = true
     ) {
-                Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+                Column(modifier = Modifier.padding(horizontal = PocketTokens.Space.M, vertical = PocketTokens.Space.S)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -338,9 +338,9 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(PocketTokens.Space.S))
 
-        SmallTitle(text = if (isRh) "云端算力" else "系统状态")
+        PocketSectionHeader(text = if (isRh) "云端算力" else "系统状态")
         Card(
             modifier = Modifier.fillMaxWidth(),
             cornerRadius = DashCardRadius,

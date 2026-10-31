@@ -57,10 +57,10 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.items
+import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -95,6 +95,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import kotlinx.coroutines.launch
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
 import com.comfyui.mobile.model.MediaOutput
@@ -152,7 +153,9 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     var shareBusy by remember { mutableStateOf(false) }
     var saveBusy by remember { mutableStateOf(false) }
     val shareClient = remember { AppModule.provideRepository().hostAwareCallFactory }
-    val gridState = rememberLazyGridState()
+    val gridState = rememberLazyStaggeredGridState()
+    // Learned image ratios for the masonry grid; unknown tiles start square.
+    val tileAspects = remember { androidx.compose.runtime.mutableStateMapOf<String, Float>() }
     var activeCategoryId by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(isLocalGallery) {
         if (!isLocalGallery) activeCategoryId = null
@@ -352,8 +355,8 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
             }
 
             if (displayMediaList.isNotEmpty()) {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
+                LazyVerticalStaggeredGrid(
+                    columns = StaggeredGridCells.Fixed(2),
                     state = gridState,
                     modifier = Modifier
                         .fillMaxSize()
@@ -364,8 +367,8 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                     contentPadding = PaddingValues(
                         bottom = (if (selectionMode && selectedKeys.isNotEmpty()) 100.dp else 24.dp) + floatingNavClearance
                     ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalItemSpacing = PocketTokens.Space.XS,
+                    horizontalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)
                 ) {
                     items(displayMediaList, key = { keyFor(it) }) { media ->
                         val key = keyFor(media)
@@ -375,6 +378,8 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             previewUrl = viewModel.previewUrl(media),
                             selectionMode = selectionMode,
                             isSelected = isSelected,
+                            aspect = tileAspects[key] ?: 1f,
+                            onAspectKnown = { ratio -> if (tileAspects[key] != ratio) tileAspects[key] = ratio },
                             onClick = {
                                 if (selectionMode) {
                                     val newSet = if (isSelected) selectedKeys - key else selectedKeys + key
@@ -795,6 +800,22 @@ fun FullScreenPreview(
     var chromeVisible by remember { mutableStateOf(true) }
     val currentMedia = mediaList.getOrNull(pagerState.currentPage)
     val scheme = MiuixTheme.colorScheme
+    // Swipe-to-dismiss state: the page follows the finger, backdrop fades with distance.
+    val dismissDrag = remember { androidx.compose.animation.core.Animatable(0f) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val dismissThresholdPx = with(density) { 120.dp.toPx() }
+    val dismissFadePx = with(density) { 360.dp.toPx() }
+    val dismissFraction = (kotlin.math.abs(dismissDrag.value) / dismissFadePx).coerceIn(0f, 1f)
+    val onDismissDrag: (Float) -> Unit = { total -> scope.launch { dismissDrag.snapTo(total) } }
+    val onDismissDragEnd: (Float) -> Unit = { total ->
+        scope.launch {
+            if (kotlin.math.abs(total) > dismissThresholdPx) {
+                onDismiss()
+            } else {
+                dismissDrag.animateTo(0f, androidx.compose.animation.core.spring(dampingRatio = 0.85f, stiffness = 500f))
+            }
+        }
+    }
 
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -807,12 +828,19 @@ fun FullScreenPreview(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.Black)
+                .background(Color.Black.copy(alpha = 1f - dismissFraction * 0.85f))
         ) {
             HorizontalPager(
                 state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                userScrollEnabled = true
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        translationY = dismissDrag.value
+                        val s = 1f - dismissFraction * 0.12f
+                        scaleX = s
+                        scaleY = s
+                    },
+                userScrollEnabled = dismissDrag.value == 0f
     ) { page ->
                 val media = mediaList.getOrNull(page)
                 if (media != null) {
@@ -892,7 +920,9 @@ fun FullScreenPreview(
                                     contentDescription = "Fullscreen Image",
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Fit,
-                                    onSingleTap = { chromeVisible = !chromeVisible }
+                                    onSingleTap = { chromeVisible = !chromeVisible },
+                                    onDismissDrag = onDismissDrag,
+                                    onDismissDragEnd = onDismissDragEnd
     )
                             }
                         }
@@ -901,7 +931,7 @@ fun FullScreenPreview(
             }
 
             AnimatedVisibility(
-                visible = chromeVisible,
+                visible = chromeVisible && dismissDrag.value == 0f,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.TopCenter)
@@ -973,7 +1003,7 @@ fun FullScreenPreview(
             }
 
             AnimatedVisibility(
-                visible = chromeVisible,
+                visible = chromeVisible && dismissDrag.value == 0f,
                 enter = fadeIn(),
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.BottomCenter)
@@ -1120,10 +1150,15 @@ fun ZoomableAsyncImage(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit,
     error: androidx.compose.ui.graphics.painter.Painter? = null,
-    onSingleTap: (() -> Unit)? = null
+    onSingleTap: (() -> Unit)? = null,
+    // Swipe-to-dismiss: vertical one-finger drags while not zoomed. Horizontal drags stay with the pager.
+    onDismissDrag: ((Float) -> Unit)? = null,
+    onDismissDragEnd: ((Float) -> Unit)? = null
     ) {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    val currentDismissDrag by androidx.compose.runtime.rememberUpdatedState(onDismissDrag)
+    val currentDismissDragEnd by androidx.compose.runtime.rememberUpdatedState(onDismissDragEnd)
 
     Box(
         modifier = modifier
@@ -1145,13 +1180,43 @@ fun ZoomableAsyncImage(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false)
+                    // 0 = undecided, 1 = vertical dismiss drag, -1 = not ours (horizontal / multi-touch)
+                    var dismissMode = 0
+                    var travel = Offset.Zero
+                    var dismissTotal = 0f
+                    val slop = viewConfiguration.touchSlop
                     while (true) {
                         val event = awaitPointerEvent()
                         val pressedCount = event.changes.count { it.pressed }
-                        if (pressedCount == 0) break
+                        if (pressedCount == 0) {
+                            if (dismissMode == 1) currentDismissDragEnd?.invoke(dismissTotal)
+                            break
+                        }
 
                         val zoomChange = event.calculateZoom()
                         val panChange = event.calculatePan()
+                        if (currentDismissDrag != null && dismissMode == 0) {
+                            if (pressedCount > 1 || scale > 1.05f) {
+                                dismissMode = -1
+                            } else {
+                                travel += panChange
+                                if (travel.getDistance() > slop) {
+                                    dismissMode = if (kotlin.math.abs(travel.y) > kotlin.math.abs(travel.x) * 1.4f) 1 else -1
+                                }
+                            }
+                        }
+                        if (dismissMode == 1) {
+                            if (pressedCount > 1) {
+                                // A second finger cancels the dismiss and hands over to pinch zoom.
+                                currentDismissDragEnd?.invoke(0f)
+                                dismissMode = -1
+                            } else {
+                                dismissTotal += panChange.y
+                                currentDismissDrag?.invoke(dismissTotal)
+                                event.changes.forEach { it.consume() }
+                                continue
+                            }
+                        }
                         val shouldHandle = pressedCount > 1 || scale > 1.05f
 
                         if (shouldHandle) {
@@ -1192,6 +1257,10 @@ fun ZoomableAsyncImage(
     }
 }
 
+/** Masonry tile ratio (width / height), clamped so panoramas and tall strips stay readable. */
+internal fun galleryTileAspect(raw: Float): Float =
+    if (raw.isFinite() && raw > 0f) raw.coerceIn(0.62f, 1.6f) else 1f
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaGridItem(
@@ -1201,19 +1270,26 @@ fun MediaGridItem(
     selectionMode: Boolean,
     isSelected: Boolean,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    aspect: Float = 1f,
+    onAspectKnown: (Float) -> Unit = {}
     ) {
     val url = previewUrl
     val scheme = MiuixTheme.colorScheme
-    val corner = 22.dp
-    val borderColor = if (isSelected) scheme.primary else scheme.outline.copy(alpha = 0.18f)
-    val borderWidth = if (isSelected) 2.5.dp else 1.dp
+    val corner = PocketTokens.Radius.Large
+    // Only selection draws an outline; idle tiles stay borderless like the rest of the app.
+    val borderColor = if (isSelected) scheme.primary else Color.Transparent
+    val borderWidth = if (isSelected) 2.5.dp else 0.dp
+    val reportAspect: (coil.compose.AsyncImagePainter.State.Success) -> Unit = { state ->
+        val size = state.painter.intrinsicSize
+        if (size != androidx.compose.ui.geometry.Size.Unspecified && size.width > 0f && size.height > 0f) onAspectKnown(size.width / size.height)
+    }
 
     val shape = RoundedCornerShape(corner)
     Card(
         modifier = modifier
             .testTag("legacy-media-${media.filename}")
-            .aspectRatio(1f)
+            .aspectRatio(galleryTileAspect(aspect))
             .clip(shape)
             .border(borderWidth, borderColor, shape)
             .combinedClickable(
@@ -1239,7 +1315,8 @@ fun MediaGridItem(
                             .build(),
                         contentDescription = null,
                         modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                        contentScale = ContentScale.Crop,
+                        onSuccess = reportAspect
     )
                 }
                 MediaType.VIDEO -> {
@@ -1253,7 +1330,8 @@ fun MediaGridItem(
                             contentDescription = null,
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop,
-                            error = rememberVectorPainter(MiuixIcons.AppRecording)
+                            error = rememberVectorPainter(MiuixIcons.AppRecording),
+                            onSuccess = reportAspect
     )
                         Box(
                             modifier = Modifier

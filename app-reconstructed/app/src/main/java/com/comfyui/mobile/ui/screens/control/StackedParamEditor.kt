@@ -127,7 +127,7 @@ fun StackedParamCard(
     ) {
                 Card(
                     modifier = Modifier.weight(1f, fill = false),
-                    cornerRadius = 999.dp,
+                    cornerRadius = PocketTokens.Radius.XLarge * 2,
                     insideMargin = PaddingValues(horizontal = 12.dp, vertical = 5.dp),
                     colors = CardDefaults.defaultColors(
                         color = scheme.primary.copy(alpha = 0.12f)

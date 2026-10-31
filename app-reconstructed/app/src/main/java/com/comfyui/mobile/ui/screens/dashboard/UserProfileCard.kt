@@ -54,7 +54,7 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import java.util.Calendar
 import com.comfyui.mobile.ui.components.DialogFormColumn
 
-private val DashCardRadius = 28.dp
+private val DashCardRadius = PocketTokens.Radius.XLarge
 
 fun getQqAvatarUrl(qq: String): String? {
     val trimmed = qq.trim()
