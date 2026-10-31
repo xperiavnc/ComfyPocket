@@ -6,6 +6,7 @@ import com.comfyui.mobile.ui.designsystem.PocketTokens
 import com.comfyui.mobile.ui.screens.agent.AgentWorkspaceLayout
 import com.comfyui.mobile.ui.screens.agent.AgentCardStatusFactory
 import com.comfyui.mobile.ui.screens.agent.AgentCapsuleBar
+import com.comfyui.mobile.ui.screens.agent.AgentLlmStatsLine
 import com.comfyui.mobile.ui.screens.agent.AgentPromptBindingPanel
 import com.comfyui.mobile.ui.screens.agent.AgentOutputPromptPanel
 import com.comfyui.mobile.ui.screens.agent.AgentChatPanel
@@ -353,6 +354,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             cardColors = cardColors,
             sidePad = sidePad,
             onOpenSessions = { navController.navigate("agent_sessions") },
+            headerBottom = agentLlmStats?.let { stats -> {
+                AgentLlmStatsLine(stats, Modifier.padding(start = sidePad, end = sidePad, bottom = 2.dp))
+            } },
             headerTrailing = {
                 com.comfyui.mobile.ui.screens.agent.AgentModelChip(
                     label = currentLlmProfile?.displayName ?: llmModel.ifBlank { "大模型" }, onClick = { showModelSwitchDialog = true })
@@ -387,7 +391,6 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 listState = listState,
                 modifier = Modifier.weight(1f),
                 framed = false,
-                llmStats = agentLlmStats,
                 toolbar = {
                     AgentCapsuleBar(
                         modelDisplayName = "",

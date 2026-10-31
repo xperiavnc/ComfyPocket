@@ -72,6 +72,27 @@ class LlmUsageStatsTest {
         assertTrue(stats.summary().startsWith("上下文 ≈502 / 8.0k (6%)"))
     }
 
+    @Test fun streamThatKeepsFlowingOutlivesTheFirstDataDeadline() = runBlocking {
+        client = LlmClient(client = network, totalTimeoutMillis = 300)
+        val body = (1..8).joinToString("") { delta("x") } + delta("", finish = "stop") + "data: [DONE]\n\n"
+        // ~1.2 s total, far past the 300 ms deadline, but the first chunk arrives immediately.
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream").setBody(body)
+            .throttleBody(48, 120, java.util.concurrent.TimeUnit.MILLISECONDS))
+        assertEquals("xxxxxxxx", stream().content)
+    }
+
+    @Test fun streamWithNoDataHitsTheTotalDeadline() = runBlocking {
+        client = LlmClient(client = network, totalTimeoutMillis = 200)
+        server.enqueue(MockResponse().setHeader("Content-Type", "text/event-stream")
+            .setBody(delta("late", finish = "stop")).setBodyDelay(3, java.util.concurrent.TimeUnit.SECONDS))
+        val error = kotlinx.coroutines.withTimeout(2_000) {
+            client.chatCompletionsStream(server.url("/v1").toString(), "k", "m", messages) { _, _, _, _ -> }
+                .exceptionOrNull() as LlmException
+        }
+        assertEquals(LlmErrorType.TIMEOUT_TOTAL, error.errorType)
+        assertTrue(client.activeRequestIds.isEmpty())
+    }
+
     @Test fun summaryShowsSpeedAndCacheRate() {
         val stats = AgentLlmStats("m", promptTokens = 12_000, outputTokens = 300, cachedTokens = 9_000,
             contextLimit = 128_000, tokensPerSecond = 41.6)

@@ -79,6 +79,8 @@ fun AgentWorkspaceLayout(
     onImageClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
     headerTrailing: (@Composable () -> Unit)? = null,
+    /** Slim line between the session header and the preview (model / context / speed). */
+    headerBottom: (@Composable () -> Unit)? = null,
     focusedIndex: Int = 0,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -118,6 +120,7 @@ fun AgentWorkspaceLayout(
                 headerTrailing()
             }
             }
+            headerBottom?.invoke()
             AgentWorkbench(
                 mediaList = mediaList, previewUrl = previewUrl, status = status, wfLabel = wfLabel,
                 cardColors = cardColors, sidePad = sidePad,

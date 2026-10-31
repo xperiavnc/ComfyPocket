@@ -18,6 +18,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -74,6 +75,8 @@ class LlmClient(
     fun cancelActive() { activeCalls.forEach { (_, active) -> active.cancelled.set(true); active.call.cancel() } }
 
     companion object {
+        /** Streams may run this many times the total deadline once tokens are flowing. */
+        const val StreamHardCapFactor = 5L
         fun resolveEndpoint(baseUrl: String): String {
             var root = baseUrl.trim().trimEnd('/')
             if (root.isBlank()) return ""
@@ -140,25 +143,40 @@ class LlmClient(
     private suspend fun <T> executeCall(
         requestId: String,
         request: Request,
-        read: suspend (Response) -> T
+        streaming: Boolean = false,
+        read: suspend (response: Response, onData: () -> Unit) -> T
     ): T = coroutineScope {
         require(requestId.isNotBlank()) { "Request ID is empty" }
         require(totalTimeoutMillis > 0) { "Total timeout must be positive" }
         currentCoroutineContext().ensureActive()
         val entry = ActiveCall(client.newCall(request))
-        entry.call.timeout().timeout(totalTimeoutMillis, TimeUnit.MILLISECONDS)
+        // A stream that keeps producing tokens is healthy however long it runs (long reasoning
+        // over a big context easily passes 4 min). For streams the total deadline only applies
+        // until the first data arrives; after that stalls are caught by the read timeout and an
+        // absolute cap stops runaway generations.
+        entry.call.timeout().timeout(
+            if (streaming) totalTimeoutMillis * StreamHardCapFactor else totalTimeoutMillis, TimeUnit.MILLISECONDS)
         check(activeCalls.putIfAbsent(requestId, entry) == null) { "Duplicate active request ID" }
+        val gotData = AtomicBoolean(false)
+        val firstDataDeadline = AtomicBoolean(false)
+        val watchdog = if (streaming) launch {
+            delay(totalTimeoutMillis)
+            if (!gotData.get()) { firstDataDeadline.set(true); entry.call.cancel() }
+        } else null
         try {
             suspendCancellableCoroutine { continuation ->
                 val worker = launch(Dispatchers.IO) {
                     try {
-                        val result = entry.call.execute().use { read(it) }
+                        val result = entry.call.execute().use { read(it) { gotData.set(true) } }
                         if (entry.cancelled.get()) throw CancellationException("LLM request stopped")
                         continuation.resume(result)
                     } catch (e: CancellationException) {
                         continuation.cancel(e)
                     } catch (e: Exception) {
                         if (entry.cancelled.get()) continuation.cancel(CancellationException("LLM request stopped", e))
+                        else if (firstDataDeadline.get()) continuation.resumeWithException(LlmException(
+                            LlmErrorType.TIMEOUT_TOTAL, "模型在 ${totalTimeoutMillis / 1000} 秒内没有开始输出。",
+                            endpoint = request.url.toString(), cause = e))
                         else continuation.resumeWithException(e)
                     }
                 }
@@ -168,6 +186,7 @@ class LlmClient(
                 }
             }
         } finally {
+            watchdog?.cancel()
             activeCalls.remove(requestId, entry)
         }
     }
@@ -231,7 +250,7 @@ class LlmClient(
                     generationLimits.outputParameter == OutputTokenParameter.LEGACY }
             ), images, messageImages)
             val started = System.nanoTime()
-            val output = executeCall(requestId, request(endpoint, apiKey, body, false)) { response ->
+            val output = executeCall(requestId, request(endpoint, apiKey, body, false)) { response, _ ->
                 connecting = false
                 checkHttp(response, endpoint)
                 val parsed = try {
@@ -299,7 +318,7 @@ class LlmClient(
                     generationLimits.outputParameter == OutputTokenParameter.LEGACY }
             ), images, messageImages)
             val started = System.nanoTime()
-            val output = executeCall(requestId, request(endpoint, apiKey, body, true)) { response ->
+            val output = executeCall(requestId, request(endpoint, apiKey, body, true), streaming = true) { response, onData ->
                 connecting = false
                 checkHttp(response, endpoint)
                 val source = response.body?.source()
@@ -326,6 +345,7 @@ class LlmClient(
                     if (chunk.error != null) {
                         throw LlmException(LlmErrorType.SERVER_ERROR, "模型在流式输出中返回错误。", endpoint = endpoint)
                     }
+                    onData()
                     chunk.usage?.let { usage = it }
                     val choice = chunk.choices?.firstOrNull()
                     val finish = choice?.finish_reason
@@ -405,7 +425,7 @@ class LlmClient(
     private fun mapFailure(e: Exception, endpoint: String, connecting: Boolean): LlmException {
         if (e is java.io.InterruptedIOException && e !is java.net.SocketTimeoutException &&
             e.message?.contains("timeout", ignoreCase = true) == true) {
-            return LlmException(LlmErrorType.TIMEOUT_TOTAL, "本轮模型请求超过总时限。", endpoint = endpoint, cause = e)
+            return LlmException(LlmErrorType.TIMEOUT_TOTAL, "本轮模型请求超过总时限（流式输出上限约 ${totalTimeoutMillis * StreamHardCapFactor / 60_000} 分钟）。", endpoint = endpoint, cause = e)
         }
         return LlmErrorMapper.map(e, endpoint = endpoint, isConnectingPhase = connecting)
     }
