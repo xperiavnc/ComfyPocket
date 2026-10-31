@@ -88,7 +88,7 @@ fun AgentCapsuleBar(
             }
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(CapsuleHeight)
                     .clip(CircleShape)
                     .background(MiuixTheme.colorScheme.surfaceContainerHighest)
                     .clickable { haptics.tick(); onWorkbenchActionsClick() },
@@ -106,8 +106,9 @@ fun AgentCapsuleBar(
     }
 }
 
-private val CapsuleHeight = 30.dp
-private val SegmentWidth = 56.dp
+// One control height for the whole toolbar row (mode switch, model pill, tune button).
+private val CapsuleHeight = PocketTokens.CompactControlHeight
+private val SegmentWidth = 60.dp
 
 /** Sliding segmented switch: tap a side or swipe horizontally. */
 @Composable

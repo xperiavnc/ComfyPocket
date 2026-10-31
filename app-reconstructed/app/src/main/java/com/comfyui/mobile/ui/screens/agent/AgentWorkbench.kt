@@ -57,6 +57,8 @@ import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Image
+import top.yukonga.miuix.kmp.icon.extended.Recent
+import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** One stable column: changing preview height never recreates the conversation content. */
@@ -83,18 +85,23 @@ fun AgentWorkspaceLayout(
         // Whole images are fitted now, so give portraits real height; chat keeps the rest.
         val previewHeight = (maxHeight * 0.42f - 64.dp).coerceIn(48.dp, 300.dp)
         Column(Modifier.fillMaxSize()) {
+            // Reads as a subtitle of the "Agent" title (breadcrumb), not as a second input field.
             Row(
-                Modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
-                    .clip(PocketTokens.Shape.Medium).background(scheme.surfaceContainer)
+                Modifier.padding(horizontal = sidePad - 8.dp)
+                    .clip(PocketTokens.Shape.Medium)
                     .testTag("agent-open-sessions")
-                    .clickable(role = Role.Button, onClick = onOpenSessions)
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .clickable(role = Role.Button, onClickLabel = "切换会话", onClick = onOpenSessions)
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(sessionTitle, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Icon(MiuixIcons.Recent, contentDescription = null, modifier = Modifier.size(16.dp),
+                    tint = scheme.onSurfaceVariantSummary)
+                Text(sessionTitle, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = scheme.onSurfaceVariantSummary,
                     style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium))
-                Text("会话", style = MiuixTheme.textStyles.footnote1, color = scheme.primary)
+                Icon(MiuixIcons.ExpandMore, contentDescription = null, modifier = Modifier.size(14.dp),
+                    tint = scheme.onSurfaceVariantSummary)
             }
             AgentWorkbench(
                 mediaList = mediaList, previewUrl = previewUrl, status = status, wfLabel = wfLabel,

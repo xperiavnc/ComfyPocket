@@ -47,6 +47,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.AgentChatMessage
@@ -127,6 +130,13 @@ fun AgentChatPanel(
                 if (hasEarlier) item(key = "earlier") {
                     Text("加载更早消息", color = scheme.primary,
                         modifier = Modifier.fillMaxWidth().clickable(onClick = onLoadEarlier).padding(10.dp))
+                }
+                // Empty conversation: offer a few starters instead of a blank middle.
+                if (messages.isEmpty() && !hasEarlier) item(key = "empty") {
+                    AgentEmptyHint(enabled = inputEnabled && !busy) { text ->
+                        haptics.tick()
+                        onInputChange(TextFieldValue(text, TextRange(text.length)))
+                    }
                 }
                 val pendingClarificationId = com.comfyui.mobile.agent.AgentQuestionPolicy.pending(messages)?.id
                 items(messages, key = { it.id }) { msg ->
@@ -295,6 +305,40 @@ private fun AttachMenuChip(label: String, onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         Text(text = label, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurface)
+    }
+}
+
+private val AgentStarters = listOf(
+    "画一张雨夜的城市街景，电影感光影",
+    "帮我写一段角色立绘的提示词",
+    "解释一下当前工作流的主要参数"
+)
+
+/** Starter prompts for an empty conversation; tapping one fills the input (never auto-sends). */
+@Composable
+private fun AgentEmptyHint(enabled: Boolean, onPick: (String) -> Unit) {
+    val scheme = MiuixTheme.colorScheme
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(vertical = PocketTokens.Space.XL).testTag("agent-empty-hint"),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)
+    ) {
+        Text("想画点什么？", style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
+            color = scheme.onSurface)
+        Text("描述画面，或试试下面的例子", style = MiuixTheme.textStyles.footnote1,
+            color = scheme.onSurfaceVariantSummary,
+            modifier = Modifier.padding(bottom = PocketTokens.Space.XXS))
+        AgentStarters.forEach { starter ->
+            Box(
+                modifier = Modifier
+                    .clip(PocketTokens.Shape.Pill)
+                    .background(scheme.surfaceContainer)
+                    .clickable(enabled = enabled, role = Role.Button) { onPick(starter) }
+                    .padding(horizontal = PocketTokens.Space.M, vertical = PocketTokens.Space.XS)
+            ) {
+                Text(starter, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurface, maxLines = 1)
+            }
+        }
     }
 }
 
