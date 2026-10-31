@@ -1,5 +1,8 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketCard
+import com.comfyui.mobile.ui.designsystem.PocketSurface
+
 import com.comfyui.mobile.ui.designsystem.PocketSectionHeader
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -146,10 +149,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             PocketSectionHeader("模型服务")
 
             // Profile selection stays visible; connection details and generation parameters expand separately.
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                insideMargin = PaddingValues(16.dp)
-    ) {
+            PocketCard(modifier = Modifier.fillMaxWidth(), surface = PocketSurface.Base) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "模型配置",

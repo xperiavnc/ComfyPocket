@@ -1,5 +1,8 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketCard
+import com.comfyui.mobile.ui.designsystem.PocketSurface
+
 import androidx.compose.animation.AnimatedVisibility
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import com.comfyui.mobile.ui.designsystem.PocketSettingsGroup
@@ -122,10 +125,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             Spacer(modifier = Modifier.height(4.dp))
 
             // 1. Appearance mode
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                insideMargin = PaddingValues(16.dp)
-    ) {
+            PocketCard(modifier = Modifier.fillMaxWidth(), surface = PocketSurface.Base) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
                         text = "外观模式",
@@ -170,10 +170,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             // Fixed palettes — collapsed by default; expand to pick from swatch grid
             var palettePickerExpanded by remember { mutableStateOf(false) }
             val currentPalette = remember(themePaletteId) { themePaletteById(themePaletteId) }
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                insideMargin = PaddingValues(16.dp)
-    ) {
+            PocketCard(modifier = Modifier.fillMaxWidth(), surface = PocketSurface.Base) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "主题色板",

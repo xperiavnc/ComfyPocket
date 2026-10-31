@@ -1,5 +1,8 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketCard
+import com.comfyui.mobile.ui.designsystem.PocketSurface
+
 import com.comfyui.mobile.ui.designsystem.PocketSettingsGroup
 
 import android.content.Intent
@@ -206,10 +209,7 @@ fun AboutScreen(navController: NavController) {
             }
 
             // 3. 核心特性速览卡片
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                insideMargin = PaddingValues(16.dp)
-    ) {
+            PocketCard(modifier = Modifier.fillMaxWidth(), surface = PocketSurface.Base) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "技术亮点",
