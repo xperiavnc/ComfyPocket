@@ -13,7 +13,9 @@ data class LlmProfile(
     val reasoningEffort: String? = null,
     val contextTokens: Int? = null,
     val maxOutputTokens: Int? = null,
-    val outputTokenParameter: String? = null
+    val outputTokenParameter: String? = null,
+    /** Last model list fetched from this profile's upstream; null = never fetched. Lets pickers open instantly. */
+    val availableModels: List<String>? = null
     ) {
     val generationLimits: com.comfyui.mobile.agent.AgentGenerationLimits
         get() = com.comfyui.mobile.agent.AgentGenerationLimits(contextTokens, maxOutputTokens,

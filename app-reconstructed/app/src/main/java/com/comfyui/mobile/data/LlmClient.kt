@@ -90,6 +90,61 @@ class LlmClient(
                 else -> "$root/v1/chat/completions"
             }
         }
+
+        /** The model list sits next to chat/completions on OpenAI-compatible services. */
+        fun resolveModelsEndpoint(baseUrl: String): String =
+            resolveEndpoint(baseUrl).takeIf { it.isNotBlank() }?.removeSuffix("/chat/completions")?.plus("/models").orEmpty()
+    }
+
+    /**
+     * Lists the upstream's model ids from the OpenAI-compatible `GET …/models` beside chat/completions.
+     * Accepts `{data:[{id}]}` (OpenAI), `{models:[{id|name|model}]}` (Ollama-style) and bare arrays.
+     */
+    suspend fun listModels(baseUrl: String, apiKey: String): Result<List<String>> = withContext(Dispatchers.IO) {
+        val endpoint = resolveModelsEndpoint(baseUrl)
+        runCatching {
+            if (endpoint.isBlank()) throw LlmException(LlmErrorType.CONFIG_INVALID, "请先填写 API Base URL。")
+            val request = Request.Builder().url(endpoint).get()
+                .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer ${apiKey.trim()}") }
+                .header("Accept", "application/json")
+                .build()
+            val call = client.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request)
+            try {
+                call.execute().use { response ->
+                    val body = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        throw LlmErrorMapper.map(java.io.IOException("HTTP ${response.code}"), endpoint = endpoint,
+                            httpCode = response.code, rawResponseBody = body)
+                    }
+                    val ids = parseModelIds(body)
+                    if (ids.isEmpty()) throw LlmException(LlmErrorType.EMPTY_RESPONSE, "服务没有返回可用的模型列表。",
+                        suggestion = "部分中转服务不提供 /models 接口，可以手动填写模型名称。", endpoint = endpoint,
+                        technicalDetail = body.take(300))
+                    ids
+                }
+            } catch (e: LlmException) { throw e } catch (e: Exception) {
+                throw LlmErrorMapper.map(e, endpoint = endpoint, isConnectingPhase = true)
+            }
+        }
+    }
+
+    private fun parseModelIds(body: String): List<String> {
+        val root = runCatching { com.google.gson.JsonParser.parseString(body) }.getOrNull() ?: return emptyList()
+        val array = when {
+            root.isJsonArray -> root.asJsonArray
+            root.isJsonObject && root.asJsonObject.get("data")?.isJsonArray == true -> root.asJsonObject.getAsJsonArray("data")
+            root.isJsonObject && root.asJsonObject.get("models")?.isJsonArray == true -> root.asJsonObject.getAsJsonArray("models")
+            else -> return emptyList()
+        }
+        return array.mapNotNull { item ->
+            when {
+                item.isJsonPrimitive -> item.asString
+                item.isJsonObject -> listOf("id", "name", "model").firstNotNullOfOrNull { key ->
+                    item.asJsonObject.get(key)?.takeIf { it.isJsonPrimitive }?.asString
+                }
+                else -> null
+            }?.trim()?.removePrefix("models/")?.takeIf { it.isNotBlank() }
+        }.distinct().sortedWith(String.CASE_INSENSITIVE_ORDER)
     }
 
     private fun validate(baseUrl: String, apiKey: String, model: String) {

@@ -161,6 +161,23 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     ) { uris -> viewModel.addAgentFileAttachments(uris, pickerOwner); pickerOwner = null }
 
     var showModelSwitchDialog by remember { mutableStateOf(false) }
+    var showQuickModels by remember { mutableStateOf(false) }
+    var quickModelsLoading by remember { mutableStateOf(false) }
+    var quickModelError by remember { mutableStateOf<String?>(null) }
+    // Fetches the active profile's upstream model list; the VM caches it on the profile.
+    val fetchQuickModels: () -> Unit = {
+        currentLlmProfile?.takeIf { !quickModelsLoading }?.let { chosen ->
+            quickModelsLoading = true
+            quickModelError = null
+            viewModel.fetchLlmModels(chosen.id, chosen.baseUrl, chosen.apiKey) { result ->
+                quickModelsLoading = false
+                quickModelError = result.exceptionOrNull()?.let { e ->
+                    (e as? com.comfyui.mobile.data.LlmException)?.let { "${it.errorType.title}：${it.userMessage}" }
+                        ?: "获取失败：${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+        }
+    }
     var showSessions by rememberSaveable { mutableStateOf(false) }
     var showWorkflowSheet by remember { mutableStateOf(false) }
     var workflowSheetLevel by remember { mutableStateOf(1) }
@@ -556,6 +573,22 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 }
             }
 
+            currentLlmProfile?.let { chosen ->
+                com.comfyui.mobile.ui.designsystem.PocketActionGroup {
+                    com.comfyui.mobile.ui.designsystem.PocketActionRow(
+                        label = "切换「${chosen.displayName}」的模型",
+                        summary = chosen.model.ifBlank { "未填写模型" },
+                        modifier = Modifier.testTag("agent-quick-model"),
+                        onClick = {
+                            showModelSwitchDialog = false
+                            quickModelError = null
+                            showQuickModels = true
+                            if (chosen.availableModels == null) fetchQuickModels()
+                        }
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(4.dp))
 
             Row(
@@ -577,6 +610,18 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     )
             }
         }
+    }
+
+    if (showQuickModels) currentLlmProfile?.let { chosen ->
+        com.comfyui.mobile.ui.screens.agent.AgentModelPicker(
+            models = chosen.availableModels,
+            current = chosen.model,
+            loading = quickModelsLoading,
+            error = quickModelError,
+            onRefresh = fetchQuickModels,
+            onPick = { viewModel.setLlmProfileModel(chosen.id, it) },
+            onDismiss = { showQuickModels = false }
+        )
     }
 
     OverlayDialog(

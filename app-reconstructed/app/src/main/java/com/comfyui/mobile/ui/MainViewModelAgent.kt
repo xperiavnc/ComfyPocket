@@ -888,6 +888,38 @@ object MainViewModelAgent {
         }
     }
 
+    /**
+     * Remembers a fetched model list on the saved profile, but only when the list came from the
+     * profile's saved address: a draft URL typed into the form must not label the stored profile.
+     */
+    fun cacheLlmModels(vm: MainViewModel, profileId: String, baseUrl: String, models: List<String>) {
+        val target = vm._llmProfiles.value.firstOrNull { it.id == profileId } ?: return
+        if (LlmClient.resolveEndpoint(target.baseUrl) != LlmClient.resolveEndpoint(baseUrl)) return
+        if (target.availableModels == models) return
+        val list = vm._llmProfiles.value.map { if (it.id == profileId) it.copy(availableModels = models) else it }
+        persistLlmProfiles(vm, list)
+        vm._llmProfiles.value = list
+    }
+
+    /** Quick switch: change one saved profile's model and make that profile current. */
+    fun setLlmProfileModel(vm: MainViewModel, profileId: String, model: String) {
+        if (!writable(vm)) return
+        val clean = model.trim()
+        val target = vm._llmProfiles.value.firstOrNull { it.id == profileId } ?: return
+        if (clean.isBlank()) return
+        if (target.model != clean) {
+            // A profile still named after its old model follows the new one; custom names stay.
+            val renamed = if (target.name.isBlank() || target.name == target.model) clean else target.name
+            val list = vm._llmProfiles.value.map {
+                if (it.id == profileId) it.copy(model = clean, name = renamed) else it
+            }
+            persistLlmProfiles(vm, list)
+            vm._llmProfiles.value = list
+        }
+        selectLlmProfile(vm, profileId)
+        vm.showToast("已切换模型：$clean")
+    }
+
     private fun syncCurrentProfileField(vm: MainViewModel, updater: (LlmProfile) -> LlmProfile) {
         val currId = vm._currentLlmProfileId.value
         val list = vm._llmProfiles.value.map {

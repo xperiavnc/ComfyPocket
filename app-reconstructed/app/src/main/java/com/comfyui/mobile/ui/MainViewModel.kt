@@ -3091,6 +3091,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun deleteLlmProfile(id: String) =
         MainViewModelAgent.deleteLlmProfile(this, id)
 
+    /**
+     * Fetches the upstream model list for the given (possibly unsaved) address and key. On success
+     * the list is cached on [profileId] when that profile's saved address matches.
+     */
+    fun fetchLlmModels(profileId: String?, baseUrl: String, apiKey: String,
+                       onResult: (Result<List<String>>) -> Unit) {
+        viewModelScope.launch {
+            val result = llmClient.listModels(baseUrl, apiKey)
+            result.getOrNull()?.let { models ->
+                if (profileId != null) MainViewModelAgent.cacheLlmModels(this@MainViewModel, profileId, baseUrl, models)
+            }
+            onResult(result)
+        }
+    }
+
+    fun setLlmProfileModel(profileId: String, model: String) =
+        MainViewModelAgent.setLlmProfileModel(this, profileId, model)
+
     fun setLlmBaseUrl(value: String) =
         MainViewModelAgent.setLlmBaseUrl(this, value)
 

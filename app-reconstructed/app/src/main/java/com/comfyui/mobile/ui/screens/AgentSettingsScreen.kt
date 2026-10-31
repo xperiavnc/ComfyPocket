@@ -60,6 +60,7 @@ import com.comfyui.mobile.ui.screens.agent.AgentGenerationLimitsControls
 import com.comfyui.mobile.ui.screens.agent.AgentSettingsDisclosure
 import com.comfyui.mobile.ui.screens.agent.AgentChoiceChip
 import com.comfyui.mobile.ui.screens.agent.AgentLimitsDraft
+import com.comfyui.mobile.ui.screens.agent.AgentModelPicker
 import top.yukonga.miuix.kmp.basic.Button
 import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
@@ -114,6 +115,38 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             ?: com.comfyui.mobile.agent.AgentGenerationLimits()))
     }
     var showPassword by remember { mutableStateOf(false) }
+    // Model list for the form's current address; seeded from the profile's last fetch.
+    var fetchedModels by remember(currentLlmProfileId) { mutableStateOf(currentLlmProfile?.availableModels) }
+    var fetchingModels by remember { mutableStateOf(false) }
+    var modelError by remember { mutableStateOf<String?>(null) }
+    var showModelPicker by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val savedProfile = llmProfiles.firstOrNull { it.id == editingProfileId }
+    val dirty = savedProfile == null || savedProfile.name != profileName.trim() ||
+        savedProfile.baseUrl != baseUrl.trim() || savedProfile.apiKey != apiKey.trim() ||
+        savedProfile.model != model.trim() ||
+        AgentReasoningEffort.fromStored(savedProfile.reasoningEffort) != reasoningEffort ||
+        AgentLimitsDraft.from(savedProfile.generationLimits) != limits
+    val fetchModels: (Boolean) -> Unit = { openPicker ->
+        if (baseUrl.isBlank()) modelError = "请先填写 API Base URL"
+        else if (!fetchingModels) {
+            fetchingModels = true
+            modelError = null
+            val forUrl = baseUrl
+            viewModel.fetchLlmModels(editingProfileId, baseUrl, apiKey) { result ->
+                fetchingModels = false
+                if (forUrl != baseUrl) return@fetchLlmModels
+                result.onSuccess { list ->
+                    fetchedModels = list
+                    if (model.isBlank()) list.firstOrNull()?.let { model = it }
+                    if (openPicker) showModelPicker = true
+                }.onFailure { e ->
+                    modelError = (e as? com.comfyui.mobile.data.LlmException)
+                        ?.let { "${it.errorType.title}：${it.userMessage}" } ?: "获取失败：${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+        }
+    }
 
     Scaffold(
         containerColor = scheme.background,
@@ -169,6 +202,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                 model = item.model
                                 reasoningEffort = AgentReasoningEffort.fromStored(item.reasoningEffort)
                                 limits = AgentLimitsDraft.from(item.generationLimits)
+                                fetchedModels = item.availableModels
+                                modelError = null
                                 viewModel.selectLlmProfile(item.id)
                             }
                         }
@@ -181,12 +216,17 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                             model = newP.model
                             reasoningEffort = AgentReasoningEffort.fromStored(newP.reasoningEffort)
                             limits = AgentLimitsDraft.from(newP.generationLimits)
+                            fetchedModels = null
+                            modelError = null
                         }
                     }
 
                     AgentSettingsDisclosure(
                         title = "连接配置",
-                        summary = model.ifBlank { "填写服务地址、密钥和模型名称" },
+                        summary = if (model.isBlank()) "填写服务地址、密钥和模型名称" else listOfNotNull(
+                            model.trim(),
+                            runCatching { java.net.URI(baseUrl.trim()).host }.getOrNull()?.takeIf { it.isNotBlank() }
+                        ).joinToString(" · "),
                         initiallyExpanded = baseUrl.isBlank() || model.isBlank()
                     ) {
                     TextField(
@@ -220,11 +260,14 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                             Triple("DeepSeek", "https://api.deepseek.com/v1", "deepseek-chat"),
                             Triple("硅基流动", "https://api.siliconflow.cn/v1", "deepseek-ai/DeepSeek-V3")
                         ).forEach { (label, url, defaultModel) ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(PocketTokens.Shape.Small)
-                                    .background(scheme.surfaceContainerHigh)
-                                    .clickable {
+                            com.comfyui.mobile.ui.designsystem.PocketPill(
+                                label = label,
+                                selected = baseUrl.trim().trimEnd('/') == url,
+                                onClick = {
+                                        if (baseUrl.trim().trimEnd('/') != url) {
+                                            fetchedModels = null
+                                            modelError = null
+                                        }
                                         baseUrl = url
                                         model = defaultModel
                                         if (profileName.isBlank() || profileName == "未命名配置") {
@@ -240,29 +283,27 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                                 apiKey = matchedRh.effectiveRhApiKey
                                             }
                                         }
-                                    }
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Text(
-                                    text = label,
-                                    fontSize = 11.sp,
-                                    color = scheme.primary,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
+                                }
+                            )
                         }
                     }
 
                     TextField(
                         value = baseUrl,
-                        onValueChange = { baseUrl = it },
+                        onValueChange = {
+                            if (it.trim() != baseUrl.trim()) { fetchedModels = null; modelError = null }
+                            baseUrl = it
+                        },
                         label = "API Base URL",
                         useLabelAsPlaceholder = true,
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
     )
                     Text(
-                        text = "兼容 OpenAI 规范，例如 https://api.deepseek.com/v1",
+                        text = if (baseUrl.isBlank()) "兼容 OpenAI 规范，例如 https://api.deepseek.com/v1"
+                            else "将请求：${com.comfyui.mobile.data.LlmClient.resolveEndpoint(baseUrl.trim())}",
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                         color = scheme.onSurfaceVariantSummary,
                         style = MiuixTheme.textStyles.body2,
                         fontSize = 12.sp
@@ -288,6 +329,27 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
     )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = when {
+                                fetchingModels -> "正在获取模型列表…"
+                                modelError != null -> modelError.orEmpty()
+                                fetchedModels != null -> "已获取 ${fetchedModels.orEmpty().size} 个模型，可直接选择"
+                                else -> "可从服务商获取模型列表后选择"
+                            },
+                            modifier = Modifier.weight(1f),
+                            color = if (modelError != null && !fetchingModels) scheme.error else scheme.onSurfaceVariantSummary,
+                            style = MiuixTheme.textStyles.footnote1,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        TextButton(
+                            text = if (fetchedModels == null) "获取模型" else "选择模型",
+                            enabled = !fetchingModels,
+                            onClick = { if (fetchedModels == null) fetchModels(true) else showModelPicker = true },
+                            modifier = Modifier.testTag("agent-settings-models")
+                        )
+                    }
 
                     }
                     AgentSettingsDisclosure(
@@ -329,9 +391,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
 
                         if (llmProfiles.size > 1) {
                             Button(
-                                onClick = {
-                                    viewModel.deleteLlmProfile(editingProfileId)
-                                },
+                                onClick = { confirmDelete = true },
                                 colors = ButtonDefaults.buttonColors(),
                                 modifier = Modifier.weight(0.45f).heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
                                 insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin
@@ -339,6 +399,42 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                 Text("删除", color = scheme.error)
                             }
                         }
+                    }
+                    if (dirty) Text(
+                        text = if (savedProfile == null) "新配置尚未保存" else "有未保存的修改",
+                        modifier = Modifier.fillMaxWidth().testTag("agent-settings-dirty"),
+                        style = MiuixTheme.textStyles.footnote1,
+                        color = scheme.onSurfaceVariantSummary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+            if (showModelPicker) AgentModelPicker(
+                models = fetchedModels,
+                current = model.trim(),
+                loading = fetchingModels,
+                error = modelError,
+                onRefresh = { fetchModels(false) },
+                onPick = { model = it },
+                onDismiss = { showModelPicker = false }
+            )
+            if (confirmDelete) {
+                val dismissal = rememberDialogDismiss { confirmDelete = false }
+                val doomed = savedProfile?.name ?: profileName
+                OverlayDialog(show = dismissal.show, title = "删除配置「$doomed」？",
+                    onDismissRequest = dismissal::dismiss, onDismissFinished = dismissal::onDismissFinished) {
+                    Column(dismissal.modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(PocketTokens.Space.M)) {
+                    Text("配置和其中的 API Key 会从这台设备删除，删除后会切换到另一个配置。",
+                        modifier = Modifier.fillMaxWidth(), style = MiuixTheme.textStyles.body2,
+                        color = scheme.onSurfaceVariantSummary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(PocketTokens.Space.S)) {
+                        TextButton("取消", onClick = dismissal::dismiss, modifier = Modifier.weight(1f))
+                        Button(
+                            onClick = { viewModel.deleteLlmProfile(editingProfileId); dismissal.dismiss() },
+                            modifier = Modifier.weight(1f)
+                        ) { Text("删除", color = scheme.error) }
+                    }
                     }
                 }
             }
