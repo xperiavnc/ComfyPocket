@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketActionRow
+import com.comfyui.mobile.ui.designsystem.PocketActionGroup
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -440,15 +442,21 @@ internal fun AgentConversationWorkspace(
                     "delete" -> onRequestDelete(row.id)
                 }
             }) { close ->
-                Text(row.title, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                TextButton("重命名", enabled = writable, onClick = { next = "rename"; close() })
-                if (!isArchived && (liveProjects.isNotEmpty() || row.projectId != null)) {
-                    TextButton("移动到工作区", enabled = writable, onClick = { next = "move"; close() })
+                DialogSubject(row.title)
+                PocketActionGroup {
+                    PocketActionRow("重命名", enabled = writable, onClick = { next = "rename"; close() })
+                    if (!isArchived && (liveProjects.isNotEmpty() || row.projectId != null)) {
+                        PocketActionRow("移动到工作区", enabled = writable,
+                            summary = liveProjects.firstOrNull { it.id == row.projectId }?.name ?: "未分组",
+                            onClick = { next = "move"; close() })
+                    }
+                    PocketActionRow(if (isArchived) "恢复会话" else "归档会话", enabled = writable,
+                        onClick = { next = "archive"; close() })
                 }
-                TextButton(if (isArchived) "恢复会话" else "归档会话", enabled = writable,
-                    onClick = { next = "archive"; close() })
-                TextButton("删除会话", enabled = writable, onClick = { next = "delete"; close() })
-                TextButton("取消", onClick = close)
+                PocketActionGroup {
+                    PocketActionRow("删除会话", destructive = true, enabled = writable, onClick = { next = "delete"; close() })
+                }
+                DialogCancel(close)
             }
         }
     }
@@ -459,15 +467,18 @@ internal fun AgentConversationWorkspace(
                 movingId = null
                 target?.let { onMove(row.id, it.second) }
             }) { close ->
-                Text(row.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
-                TextButton("未分组", enabled = writable && row.projectId != null,
-                    onClick = { target = true to null; close() })
-                liveProjects.forEach { project ->
-                    TextButton(project.name, enabled = writable && project.id != row.projectId,
-                        onClick = { target = true to project.id; close() })
+                DialogSubject(row.title)
+                PocketActionGroup {
+                    liveProjects.forEach { project ->
+                        PocketActionRow(project.name, enabled = writable && project.id != row.projectId,
+                            summary = if (project.id == row.projectId) "当前所在" else null,
+                            onClick = { target = true to project.id; close() })
+                    }
+                    PocketActionRow("未分组", enabled = writable && row.projectId != null,
+                        summary = if (row.projectId == null) "当前所在" else null,
+                        onClick = { target = true to null; close() })
                 }
-                TextButton("取消", onClick = close)
+                DialogCancel(close)
             }
         }
     }
@@ -484,13 +495,18 @@ internal fun AgentConversationWorkspace(
                     "delete" -> deletingProjectId = project.id
                 }
             }) { close ->
-                Text(project.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                TextButton("重命名", enabled = writable, onClick = { next = "rename"; close() })
-                if (!isArchived) TextButton("新建会话", enabled = writable, onClick = { next = "new"; close() })
-                TextButton(if (isArchived) "恢复工作区" else "归档工作区", enabled = writable,
-                    onClick = { next = "archive"; close() })
-                TextButton("删除工作区", enabled = writable, onClick = { next = "delete"; close() })
-                TextButton("取消", onClick = close)
+                DialogSubject(project.name)
+                PocketActionGroup {
+                    if (!isArchived) PocketActionRow("新建会话", enabled = writable, onClick = { next = "new"; close() })
+                    PocketActionRow("重命名", enabled = writable, onClick = { next = "rename"; close() })
+                    PocketActionRow(if (isArchived) "恢复工作区" else "归档工作区", enabled = writable,
+                        summary = if (isArchived) null else "工作区内的会话一起移到「已归档」",
+                        onClick = { next = "archive"; close() })
+                }
+                PocketActionGroup {
+                    PocketActionRow("删除工作区", destructive = true, enabled = writable, onClick = { next = "delete"; close() })
+                }
+                DialogCancel(close)
             }
         }
     }
@@ -641,6 +657,19 @@ private fun SessionRow(
         Spacer(Modifier.width(PocketTokens.Space.XS))
         Text(time, style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
     }
+}
+
+/** Which item the action dialog acts on: one muted, centred line under the title. */
+@Composable
+private fun DialogSubject(text: String) {
+    Text(text, modifier = Modifier.fillMaxWidth(), textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        maxLines = 1, overflow = TextOverflow.Ellipsis,
+        style = MiuixTheme.textStyles.footnote1, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+}
+
+@Composable
+private fun DialogCancel(close: () -> Unit) {
+    TextButton("取消", onClick = close, modifier = Modifier.fillMaxWidth())
 }
 
 @Composable
