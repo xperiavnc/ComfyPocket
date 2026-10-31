@@ -435,6 +435,38 @@ class ModelCenterVisualTest {
         } }
     }
 
+    @Test fun deadFirstProviderLinkFallsThroughToTheNextProviderImage() {
+        MockWebServer().use { proxy ->
+            proxy.enqueue(MockResponse().setResponseCode(404))
+            proxy.enqueue(MockResponse().setHeader("Content-Type", "image/png")
+                .setBody(Buffer().write(File(output, "fixture-cover.png").readBytes())))
+            val repo = CivitaiRepository(app, CivitaiSettings(proxyEnabled = true,
+                proxyAddress = proxy.url("/").toString(), apiKey = java.util.UUID.randomUUID().toString()),
+                AppModule.provideRepository())
+            val client = ReflectionHelpers.getField<OkHttpClient>(repo, "client")
+            ReflectionHelpers.setField(repo, "client", client.newBuilder().addInterceptor { chain ->
+                chain.proceed(chain.request().newBuilder().url(
+                    chain.request().url.newBuilder().scheme("http").port(80).build()).build())
+            }.build())
+            val dead = "https://image.civitai.com/dead-fixture/preview.png"
+            val alive = "https://image.civitai.com/alive-fixture/preview.png"
+            val model = fixtureState().page.items.first().copy(provider = ModelProvider(
+                images = listOf(ModelPreview("https://image.civitai.com/clip-fixture/intro.mp4"),
+                    ModelPreview(dead), ModelPreview(alive))))
+            try {
+                screen(0) {
+                    CompositionLocalProvider(LocalPhoneModelImages provides
+                        PhoneModelImages(repo.imageLoader, repo.transportScope, repo::imageRequest)) {
+                        LocalModelCover(model, dead, offline = false, modifier = Modifier.fillMaxWidth().height(180.dp))
+                    }
+                }.use {
+                    waitForCover()
+                    assertEquals(2, proxy.requestCount)
+                }
+            } finally { repo.close() }
+        }
+    }
+
     @Test fun unreadableLocalSidecarFallsBackToPhonePreviewWithoutBlockingDescription() {
         val local = fixtureCover()
         imageServer!!.dispatcher = object : Dispatcher() {

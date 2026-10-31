@@ -49,7 +49,8 @@ internal fun LocalModelDetails(
         .testTag("local-model-detail"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             LocalModelCover(item, coverUrl, state.fromCache,
-                Modifier.width(104.dp).height(if (coverUrl == null) 104.dp else 140.dp), contentScale = ContentScale.Crop)
+                Modifier.width(104.dp).height(if (coverUrl == null) 104.dp else 140.dp), contentScale = ContentScale.Crop,
+                bridgeFallback = vm.bridgePreview(item))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(title, style = MiuixTheme.textStyles.title4, fontWeight = FontWeight.SemiBold,
                     maxLines = 3, overflow = TextOverflow.Ellipsis)

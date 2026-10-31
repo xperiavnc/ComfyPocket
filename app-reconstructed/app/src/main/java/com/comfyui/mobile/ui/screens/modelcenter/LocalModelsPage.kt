@@ -197,7 +197,7 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
         }
         items(state.page.items, key = { it.id }) { model ->
             LaunchedEffect(model.id, model.sha256, state.sourceScope, state.sourceTransport) { vm.requestSource(model.id) }
-            LocalModelCard(model, coverUrl(model), state.compact, state.fromCache) { vm.openDetail(model.id) }
+            LocalModelCard(model, coverUrl(model), state.compact, state.fromCache, vm.bridgePreview(model)) { vm.openDetail(model.id) }
         }
         if (state.page.hasMore) item(span = { GridItemSpan(maxLineSpan) }) {
             TextButton(text = if (state.loading) "正在加载…" else "加载更多（已显示 ${state.page.items.size}）",
@@ -208,12 +208,13 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
 }
 
 @Composable
-internal fun LocalModelCard(model: LocalModel, previewUrl: String?, compact: Boolean, cached: Boolean, onClick: () -> Unit) {
+internal fun LocalModelCard(model: LocalModel, previewUrl: String?, compact: Boolean, cached: Boolean,
+                            bridgeFallback: String? = null, onClick: () -> Unit) {
     val colors = MiuixTheme.colorScheme
     Card(onClick = onClick, cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth().testTag("model-card-${model.id}")) {
         if (compact) Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            LocalModelCover(model, previewUrl, cached, Modifier.width(64.dp).height(80.dp))
+            LocalModelCover(model, previewUrl, cached, Modifier.width(64.dp).height(80.dp), bridgeFallback = bridgeFallback)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                 ModelCardName(model)
                 Text("${modelCategoryLabel(model.category)} · ${modelBytes(model.size)}",
@@ -225,7 +226,7 @@ internal fun LocalModelCard(model: LocalModel, previewUrl: String?, compact: Boo
             }
         } else Column {
             Box(Modifier.padding(6.dp)) {
-                LocalModelCover(model, previewUrl, cached, Modifier.fillMaxWidth().aspectRatio(.95f))
+                LocalModelCover(model, previewUrl, cached, Modifier.fillMaxWidth().aspectRatio(.95f), bridgeFallback = bridgeFallback)
                 Row(Modifier.fillMaxWidth().padding(8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     ModelStatusBadge(modelCategoryLabel(model.category))
                     if (model.annotation.favorite) ModelStatusBadge("收藏", true)

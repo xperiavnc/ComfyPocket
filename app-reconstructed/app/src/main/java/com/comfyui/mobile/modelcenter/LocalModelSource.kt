@@ -40,10 +40,19 @@ internal fun ModelCacheSnapshot.withPhoneSources(scope: String): ModelCacheSnaps
     copy(items = items.map { it.withPhoneSource(phoneSources, scope) })
 
 internal fun remoteModelPreview(item: LocalModel, index: Int = 0): String? =
-    item.provider?.images?.mapNotNull { image ->
+    remoteModelPreviews(item).getOrNull(index)
+
+private val VideoPreview = Regex("""(?i)\.(mp4|webm|mov|m4v|mkv)(\?|#|$)""")
+
+/**
+ * Every provider image the phone may fetch itself, in provider order. Video entries are dropped:
+ * cover loaders only decode stills, and Civitai often lists a clip first.
+ */
+internal fun remoteModelPreviews(item: LocalModel): List<String> =
+    item.provider?.images.orEmpty().mapNotNull { image ->
         image.url.toHttpUrlOrNull()?.takeIf { it.isHttps && it.username.isEmpty() && it.password.isEmpty() }
-            ?.toString()
-    }?.getOrNull(index)
+            ?.toString()?.takeUnless { VideoPreview.containsMatchIn(it) }
+    }.distinct()
 
 /**
  * Visible-item, hash-deduplicated phone requests. Binding changes cancel queued/in-flight

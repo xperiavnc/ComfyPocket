@@ -34,7 +34,7 @@ import coil.ImageLoader
 import coil.request.CachePolicy
 import coil.request.ImageRequest
 import com.comfyui.mobile.modelcenter.LocalModel
-import com.comfyui.mobile.modelcenter.remoteModelPreview
+import com.comfyui.mobile.modelcenter.remoteModelPreviews
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.Text
@@ -160,18 +160,23 @@ internal val LocalPhoneModelImages = staticCompositionLocalOf<PhoneModelImages?>
 @Composable
 internal fun LocalModelCover(
     item: LocalModel, url: String?, offline: Boolean, modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop, bridgeFallback: String? = null
 ) {
     val context = LocalContext.current
     val colors = MiuixTheme.colorScheme
     val phone = LocalPhoneModelImages.current
-    val remote = remoteModelPreview(item)
-    var fallback by remember(url, remote) { mutableStateOf(false) }
-    val actualUrl = if (fallback) remote else url
-    val direct = actualUrl != null && actualUrl == remote
-    var attempt by remember(actualUrl, phone?.namespace) { mutableIntStateOf(0) }
+    val remotes = remoteModelPreviews(item)
+    // Try the chosen cover, then every other provider still the phone can fetch, and only then
+    // the computer's cached copy. One dead CDN link or a leading video no longer blanks the card.
+    val candidates = remember(url, remotes, bridgeFallback) {
+        (listOfNotNull(url) + remotes + listOfNotNull(bridgeFallback)).distinct()
+    }
+    var attempt by remember(candidates, phone?.namespace) { mutableIntStateOf(0) }
+    var step by remember(candidates, phone?.namespace, attempt) { mutableIntStateOf(0) }
+    val actualUrl = candidates.getOrNull(step)
+    val direct = actualUrl != null && actualUrl in remotes
     var loaded by remember(actualUrl, phone?.namespace, attempt) { mutableStateOf(false) }
-    var failed by remember(actualUrl, phone?.namespace, attempt) { mutableStateOf(false) }
+    var failed by remember(candidates, phone?.namespace, attempt) { mutableStateOf(false) }
     val request = remember(context, actualUrl, offline, phone?.namespace, attempt) {
         actualUrl?.let {
             val builder = if (direct && phone != null) phone.request(it).newBuilder()
@@ -202,9 +207,8 @@ internal fun LocalModelCover(
                 imageLoader = if (direct && phone != null) phone.loader else Coil.imageLoader(context),
                 contentDescription = "${item.displayName}预览",
                 contentScale = contentScale, onSuccess = { loaded = true; failed = false },
-                onError = {
-                    if (!fallback && remote != null && remote != actualUrl) fallback = true else failed = true
-                }, modifier = Modifier.fillMaxSize().testTag("model-preview-${item.id}"))
+                onError = { if (step < candidates.lastIndex) step++ else failed = true },
+                modifier = Modifier.fillMaxSize().testTag("model-preview-${item.id}"))
         }
     }
 }

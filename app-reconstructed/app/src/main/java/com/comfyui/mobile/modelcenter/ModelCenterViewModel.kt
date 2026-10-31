@@ -409,6 +409,17 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
         return remote ?: if (item.preview?.source == "local") repository?.preview(item, index) else null
     }
 
+    /**
+     * Last-resort cover: the computer's cached copy of the provider image. Used only after every
+     * direct provider link has failed on the phone (unreachable CDN, blocked network), and only while
+     * the computer is connected; local sidecars already go through [preview].
+     */
+    fun bridgePreview(item: LocalModel): String? {
+        if (!state.value.connected || item.preview?.source == "local" || item.preview?.source == "none") return null
+        if (remoteModelPreviews(item).isEmpty()) return null
+        return repository?.preview(item, 0)
+    }
+
     suspend fun installation(modelId: Long, versionId: Long, fileId: Long): String {
         val repo = repository ?: return "安装状态待连接电脑确认"
         val token = generation
