@@ -18,7 +18,8 @@ class AgentPromptSettingsTest {
             .putString("agent_danbooru_mode", "AUTO").putString("agent_prompt_format", "ANIMA")
             .putString("agent_system_prompt", "我的人设").putString("agent_draw_prompt", "我的画图规则").commit()
         val store = AgentPromptSettingsStore(prefs)
-        assertEquals(AgentPromptSettings(false), store.load())
+        // The multi-step tool agent is on unless the user turned it off.
+        assertEquals(AgentPromptSettings(false, toolLoop = true), store.load())
         assertFalse(prefs.contains("agent_prompt_format"))
         assertFalse(prefs.all.keys.any { it.startsWith("agent_danbooru_") })
         assertEquals("我的人设", prefs.getString("agent_system_prompt", null))
@@ -27,5 +28,7 @@ class AgentPromptSettingsTest {
         assertEquals(AgentPromptSettings(false), store.load())
         store.save(AgentPromptSettings(true))
         assertEquals(AgentPromptSettings(true), store.load())
+        store.save(AgentPromptSettings(true, toolLoop = true))
+        assertEquals(AgentPromptSettings(true, toolLoop = true), store.load())
     }
 }

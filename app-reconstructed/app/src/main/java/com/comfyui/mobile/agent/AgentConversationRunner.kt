@@ -18,7 +18,9 @@ data class AgentReply(
     /** Model-proposed IDs are validated against this turn's registered candidates. */
     val outfitSelections: List<com.comfyui.mobile.model.AgentCharacterSelection>? = null,
     val positiveAliases: List<AgentPromptAlias>? = null,
-    val negativeAliases: List<AgentPromptAlias>? = null
+    val negativeAliases: List<AgentPromptAlias>? = null,
+    /** Extra workflow fields staged by the tool agent (patch_workflow); applied with the prompt. */
+    val workflowChanges: List<AgentFieldChange>? = null
 )
 
 enum class AgentAction { ASK_USER, RESPOND, APPLY_PROMPT, DRAW }
@@ -39,6 +41,11 @@ interface AgentConversationObserver {
 interface AgentWorkflowPort {
     suspend fun prepare()
     suspend fun patchPrompt(prompt: String, negativePrompt: String?)
+    /** Applies the prompt together with tool-staged field changes in one atomic patch. */
+    suspend fun patchPrompt(prompt: String, negativePrompt: String?, changes: List<AgentFieldChange>) {
+        if (changes.isNotEmpty()) throw AgentExecutionException("当前工作流不支持修改额外参数")
+        patchPrompt(prompt, negativePrompt)
+    }
     suspend fun promptApplied(prompt: String)
     suspend fun submit(): String
 }
@@ -61,7 +68,7 @@ class AgentDrawExecutor(private val workflow: AgentWorkflowPort) {
         phase(AgentPhase.APPLYING)
         workflow.prepare()
         checkCurrent()
-        workflow.patchPrompt(reply.prompt, reply.negativePrompt)
+        workflow.patchPrompt(reply.prompt, reply.negativePrompt, reply.workflowChanges.orEmpty())
         checkCurrent()
         workflow.promptApplied(reply.prompt)
         if (!reply.shouldDraw) return null

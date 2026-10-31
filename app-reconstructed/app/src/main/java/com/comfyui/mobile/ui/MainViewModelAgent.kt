@@ -1353,6 +1353,25 @@ object MainViewModelAgent {
             messages[0] = com.comfyui.mobile.network.ChatMessageDto("system", finalSystem)
             val decisionSystem = com.comfyui.mobile.agent.AgentInteractionProtocol.decisionSystem(
                 persona, characterContext.promptData(), com.comfyui.mobile.agent.AgentMode.DRAW)
+            // Multi-step tool agent: only with native tool calls and a loaded workflow; the model may
+            // touch nothing beyond the prompt targets and the fields the user exposed as aux params.
+            val toolbox = if (settings.tagSettings.toolLoop &&
+                !vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model)) {
+                // The tools need the graph now, not at apply time; a cold first turn would otherwise
+                // silently skip the agent. Loading is idempotent and shared with prepare().
+                ensureAgentWorkflowLoaded(vm, silent = true)
+                checkCurrent()
+                withContext(Dispatchers.Main) {
+                    runCatching { vm.agentRuntime.workflowSnapshot(emptyList()) }.getOrNull()?.let { snapshot ->
+                        com.comfyui.mobile.agent.AgentDrawToolbox(snapshot, vm._agentNodeTitles.value, settings.lores,
+                            if (settings.tagSettings.useLocalLibrary) vm::searchLocalTags else null)
+                    }
+                }
+            } else null
+            val toolReserve = toolbox?.let {
+                (com.comfyui.mobile.agent.AgentDrawToolbox.instruction(com.comfyui.mobile.agent.AgentToolLoop.DEFAULT_MAX_STEPS) +
+                    vm.gson.toJson(it.definitions)).toByteArray(Charsets.UTF_8).size + 4096
+            } ?: 0
             val currentRequestIndex = messages.lastIndex
             messages.addAll(com.comfyui.mobile.agent.AgentQuestionPolicy.toolContinuation(
                 userText, priorHistory, structuredAnswer))
@@ -1365,7 +1384,8 @@ object MainViewModelAgent {
                     com.comfyui.mobile.agent.AgentContextMessage(message,
                         if (index + 1 + historyCount == currentRequestIndex) imageDataUrls else emptyList())
                 }, settings.generationLimits, defaultHistoryMessages = 4,
-                reservedInputTokens = com.comfyui.mobile.agent.AgentInteractionProtocol.contextReserve(finalSystem, decisionSystem))
+                reservedInputTokens = com.comfyui.mobile.agent.AgentInteractionProtocol.contextReserve(finalSystem, decisionSystem) +
+                    toolReserve)
             messages.clear()
             messages.addAll(selection.messages.map { it.message })
             vm.addLog("Agent 上下文：保守估算 ${selection.estimatedInputTokens} tokens，裁剪 ${selection.removedMessages} 条历史", LogType.INFO)
@@ -1373,23 +1393,36 @@ object MainViewModelAgent {
             val imageMessages = selection.messages.mapIndexedNotNull { index, item ->
                 item.images.takeIf { it.isNotEmpty() }?.let { index to it }
             }.toMap()
-            val outcome = vm.agentRuntime.interact(requestId, settings, messages, imageMessages, decisionSystem,
-                streaming = onProgress != null || onAgentProgress != null, checkCurrent = checkCurrent,
-                progress = { progress ->
-                    if (onAgentProgress != null) onAgentProgress(progress)
-                    else onProgress?.invoke("", "", progress.reasoning, progress.content)
-                },
-                // A draw reply whose JSON can't be read used to end the turn with "未出图"; ask once for a fix.
-                validate = { content ->
-                    val check = com.comfyui.mobile.data.AgentReplyParser.parse(
-                        sanitizeThinkingContent(content), preserveNaturalLanguage = true)
-                    check.error.takeIf { it == "模型返回的 JSON 无法解析" && check.prompt.isBlank() && check.clarification == null }
-                })
+            val streaming = onProgress != null || onAgentProgress != null
+            val relay: suspend (com.comfyui.mobile.agent.AgentProgress) -> Unit = { progress ->
+                if (onAgentProgress != null) onAgentProgress(progress)
+                else onProgress?.invoke("", "", progress.reasoning, progress.content)
+            }
+            // A draw reply whose JSON can't be read used to end the turn with "未出图"; ask once for a fix.
+            val validate: (String) -> String? = { content ->
+                val check = com.comfyui.mobile.data.AgentReplyParser.parse(
+                    sanitizeThinkingContent(content), preserveNaturalLanguage = true)
+                check.error.takeIf { it == "模型返回的 JSON 无法解析" && check.prompt.isBlank() && check.clarification == null }
+            }
+            val outcome = toolbox?.let {
+                try {
+                    vm.agentRuntime.runTools(requestId, settings, messages, imageMessages, it, streaming,
+                        checkCurrent, relay, validate)
+                } catch (e: com.comfyui.mobile.data.LlmException) {
+                    if (!com.comfyui.mobile.agent.AgentInteractionLoop.explicitlyRejectsTools(e)) throw e
+                    // The service refuses native tools: remember that and run the compatible flow instead.
+                    vm.llmClient.useTextToolProtocol(settings.baseUrl, settings.model)
+                    vm.addLog("Agent 工具模式：服务不支持原生工具调用，已改用兼容流程", LogType.WARNING)
+                    null
+                }
+            } ?: vm.agentRuntime.interact(requestId, settings, messages, imageMessages, decisionSystem,
+                streaming = streaming, checkCurrent = checkCurrent, progress = relay, validate = validate)
             checkCurrent()
             val output = outcome.output
             val parsed = outcome.question ?: parseAgentLlmReply(vm, checkNotNull(output).content, output.reasoning,
                 userText = userText)
-            val planned = parsed.copy(outfitSelections = parsed.outfitSelections ?: outcome.plan?.outfits?.ifEmpty { null })
+            val planned = parsed.copy(outfitSelections = parsed.outfitSelections ?: outcome.plan?.outfits?.ifEmpty { null },
+                workflowChanges = toolbox?.changes?.ifEmpty { null })
             val completed = com.comfyui.mobile.agent.AgentCharacterPolicy.complete(planned, characterContext, taskText,
                 outcome.plan?.profileOverrides.orEmpty())
             Result.success(completed.copy(

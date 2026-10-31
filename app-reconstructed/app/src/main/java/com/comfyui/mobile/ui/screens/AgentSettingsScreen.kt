@@ -77,6 +77,7 @@ import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Edit
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.utils.overScrollVertical
 import com.comfyui.mobile.ui.components.DialogFormColumn
 import com.comfyui.mobile.ui.components.rememberDialogDismiss
@@ -439,6 +440,19 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 }
             }
 
+            PocketCard(surface = PocketSurface.Base) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                        Text("多步工具智能体", style = MiuixTheme.textStyles.body1)
+                        Text("绘图时让模型自己查看与修改工作流参数、查词、读取角色档案后再提交，最多 8 步，" +
+                            "每步进度会显示在回复里。需要服务支持原生工具调用，否则自动使用兼容流程。",
+                            style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
+                    }
+                    Switch(tagSettings.toolLoop,
+                        onCheckedChange = { viewModel.setAgentPromptSettings(tagSettings.copy(toolLoop = it)) },
+                        modifier = Modifier.testTag("agent-tool-loop-enabled"))
+                }
+            }
             com.comfyui.mobile.ui.screens.agent.AgentRuleFilesPanel(
                 files = ruleFiles, importing = importingRules,
                 onImport = viewModel::importAgentRules, onRemove = viewModel::removeAgentRules,

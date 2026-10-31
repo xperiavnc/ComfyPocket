@@ -325,7 +325,25 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         progress: suspend (AgentProgress) -> Unit = {},
         validate: ((String) -> String?)? = null
     ): AgentInteractionOutcome = AgentInteractionLoop(
-        AgentInteractionModel { request, onProgress ->
+        model(requestId, settings, images, streaming, checkCurrent),
+        initialTextProtocol = vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model),
+        onTextProtocol = {
+            vm.llmClient.useTextToolProtocol(settings.baseUrl, settings.model)
+            vm.addLog("Agent 交互：切换到 JSON 动作兼容模式（原生工具不可用或未返回动作）", LogType.INFO)
+        },
+        initialAutoToolChoice = vm.llmClient.usesAutoToolChoice(settings.baseUrl, settings.model),
+        onAutoToolChoice = {
+            vm.llmClient.useAutoToolChoice(settings.baseUrl, settings.model)
+            vm.addLog("Agent 交互：当前服务保留原生工具，使用自动工具选择兼容协议", LogType.INFO)
+        }
+    ).run(messages, decisionSystem, checkCurrent, progress, validate)
+
+
+    /** Streaming, context-budget, phase and live-stats adapter shared by every agent loop. */
+    private fun model(
+        requestId: String, settings: AgentLlmSettings, images: Map<Int, List<String>>,
+        streaming: Boolean, checkCurrent: suspend () -> Unit
+    ): AgentInteractionModel = AgentInteractionModel { request, onProgress ->
             checkCurrent()
             session.state.value.turn?.takeIf { it.id == requestId }?.let {
                 session.advance(it, if (request.deciding) AgentPhase.DECIDING else AgentPhase.GENERATING)
@@ -369,18 +387,60 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 tools = request.tools, toolChoice = request.toolChoice).getOrThrow()
             vm._agentLlmStats.value = AgentLlmStats.from(settings.model, output, promptEstimate, contextLimit)
             output
-        },
-        initialTextProtocol = vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model),
-        onTextProtocol = {
-            vm.llmClient.useTextToolProtocol(settings.baseUrl, settings.model)
-            vm.addLog("Agent 交互：切换到 JSON 动作兼容模式（原生工具不可用或未返回动作）", LogType.INFO)
-        },
-        initialAutoToolChoice = vm.llmClient.usesAutoToolChoice(settings.baseUrl, settings.model),
-        onAutoToolChoice = {
-            vm.llmClient.useAutoToolChoice(settings.baseUrl, settings.model)
-            vm.addLog("Agent 交互：当前服务保留原生工具，使用自动工具选择兼容协议", LogType.INFO)
         }
-    ).run(messages, decisionSystem, checkCurrent, progress, validate)
+
+    /**
+     * Multi-step tool agent: the model inspects/patches the workflow, writes the prompt, looks up
+     * tags or character profiles and submits, seeing every tool result. Native tool calls only.
+     */
+    internal suspend fun runTools(
+        requestId: String, settings: AgentLlmSettings, messages: List<ChatMessageDto>,
+        images: Map<Int, List<String>>, toolbox: AgentToolbox, streaming: Boolean = true,
+        checkCurrent: suspend () -> Unit,
+        progress: suspend (AgentProgress) -> Unit = {},
+        validate: ((String) -> String?)? = null
+    ): AgentInteractionOutcome = AgentToolLoop(model(requestId, settings, images, streaming, checkCurrent), toolbox)
+        .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS), checkCurrent, progress,
+            onStep = { step ->
+                vm.addLog("Agent 工具第 ${step.index} 步：${step.label}${if (step.ok) "" else "（失败）"}" +
+                    step.note.takeIf { it.isNotBlank() }?.let { " · ${it.take(160)}" }.orEmpty(),
+                    if (step.ok) LogType.INFO else LogType.WARNING)
+            }, validate = validate)
+
+    /** Read-only view of the agent workflow limited to the allowed field addresses. */
+    internal fun workflowSnapshot(targets: List<Pair<String, String>>, extraAllowed: Collection<String> = emptyList()): AgentWorkflowSnapshot {
+        val graph = vm.agentWorkflow ?: throw AgentExecutionException("工作流为空")
+        val allowed = vm._agentAuxNodeKeys.value + targets.map { "${it.first}:${it.second}" } + extraAllowed
+        val fields = vm._agentEditableNodes.value.mapNotNull { node ->
+            val key: String
+            val kind: AgentFieldKind
+            var options: List<String>? = null
+            var min: Double? = null
+            var max: Double? = null
+            when (node) {
+                is EditableNode.TextInput -> { key = node.key; kind = AgentFieldKind.TEXT; options = node.options }
+                is EditableNode.ImageInput -> { key = node.key; kind = AgentFieldKind.IMAGE }
+                is EditableNode.BooleanInput -> { key = node.key; kind = AgentFieldKind.BOOLEAN }
+                is EditableNode.NumberInput -> {
+                    key = node.key
+                    kind = if (node.value is Int || node.value is Long) AgentFieldKind.INTEGER else AgentFieldKind.DECIMAL
+                    min = node.min; max = node.max
+                }
+            }
+            if ("${node.nodeId}:$key" !in allowed) null else AgentFieldSpec(node.nodeId, key, node.classType, kind, options, min, max)
+        }.toMutableList()
+        // Preserve automatic prompt targeting for API nodes not exposed by object_info.
+        for (target in targets) {
+            if (fields.none { it.nodeId == target.first && it.key == target.second }) {
+                val node = graph[target.first] as? Map<*, *>
+                val inputs = node?.get("inputs") as? Map<*, *>
+                if (inputs?.get(target.second) is String && node["class_type"] is String) {
+                    fields.add(AgentFieldSpec(target.first, target.second, node["class_type"] as String, AgentFieldKind.TEXT))
+                }
+            }
+        }
+        return AgentWorkflowSnapshot(graph, fields)
+    }
 
     private fun Int?.orZero(): Int = this ?: 0
 
@@ -410,7 +470,12 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             }
         }
 
-        override suspend fun patchPrompt(prompt: String, negativePrompt: String?) = withContext(Dispatchers.Main) {
+        override suspend fun patchPrompt(prompt: String, negativePrompt: String?) =
+            patchPrompt(prompt, negativePrompt, emptyList())
+
+        override suspend fun patchPrompt(
+            prompt: String, negativePrompt: String?, changes: List<AgentFieldChange>
+        ) = withContext(Dispatchers.Main) {
             session.requireCurrent(turn)
             val (target, configuredNegative) = try {
                 val positive = MainViewModelAgent.findPrimaryPositivePromptTarget(vm)
@@ -437,14 +502,19 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     )
                 }
             }
-            val snapshot = workflowSnapshot(positiveTargets + negativeTargets)
+            // Prompt targets and the uploaded image always win over tool-staged values for the same field.
+            val reserved = (positiveTargets + negativeTargets).map { "${it.first}:${it.second}" }.toSet() +
+                listOfNotNull(uploadedImage?.first?.let { "${it.nodeId}:${it.key}" })
+            val extra = changes.filter { "${it.nodeId}:${it.key}" !in reserved }
+            val snapshot = workflowSnapshot(positiveTargets + negativeTargets, extra.map { "${it.nodeId}:${it.key}" })
             tools.inspectWorkflow.execute(snapshot).getOrElse {
                 throw AgentExecutionException("工作流检查失败：${it.message}")
             }
-            val changes = positiveTargets.mapTo(mutableListOf()) { (id, key) -> AgentFieldChange(id, key, prompt) }
-            negativeTargets.forEach { (id, key) -> changes.add(AgentFieldChange(id, key, negativePrompt!!)) }
-            uploadedImage?.let { (node, value) -> changes.add(AgentFieldChange(node.nodeId, node.key, value)) }
-            val patch = tools.patchWorkflow.execute(AgentPatchRequest(snapshot, changes)).getOrElse {
+            val patchChanges = positiveTargets.mapTo(mutableListOf()) { (id, key) -> AgentFieldChange(id, key, prompt) }
+            negativeTargets.forEach { (id, key) -> patchChanges.add(AgentFieldChange(id, key, negativePrompt!!)) }
+            uploadedImage?.let { (node, value) -> patchChanges.add(AgentFieldChange(node.nodeId, node.key, value)) }
+            patchChanges.addAll(extra)
+            val patch = tools.patchWorkflow.execute(AgentPatchRequest(snapshot, patchChanges)).getOrElse {
                 throw AgentExecutionException("工作流修改未通过校验：${it.message}")
             }
             session.requireCurrent(turn)
@@ -475,40 +545,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             vm.addLog("Agent patch_workflow 已校验并修改 ${patch.diff.size} 个字段", LogType.INFO)
         }
 
-        private fun workflowSnapshot(targets: List<Pair<String, String>>): AgentWorkflowSnapshot {
-            val graph = vm.agentWorkflow ?: throw AgentExecutionException("工作流为空")
-            val allowed = vm._agentAuxNodeKeys.value + targets.map { "${it.first}:${it.second}" } +
-                listOfNotNull(uploadedImage?.first?.let { "${it.nodeId}:${it.key}" })
-            val fields = vm._agentEditableNodes.value.mapNotNull { node ->
-                val key: String
-                val kind: AgentFieldKind
-                var options: List<String>? = null
-                var min: Double? = null
-                var max: Double? = null
-                when (node) {
-                    is EditableNode.TextInput -> { key = node.key; kind = AgentFieldKind.TEXT; options = node.options }
-                    is EditableNode.ImageInput -> { key = node.key; kind = AgentFieldKind.IMAGE }
-                    is EditableNode.BooleanInput -> { key = node.key; kind = AgentFieldKind.BOOLEAN }
-                    is EditableNode.NumberInput -> {
-                        key = node.key
-                        kind = if (node.value is Int || node.value is Long) AgentFieldKind.INTEGER else AgentFieldKind.DECIMAL
-                        min = node.min; max = node.max
-                    }
-                }
-                if ("${node.nodeId}:$key" !in allowed) null else AgentFieldSpec(node.nodeId, key, node.classType, kind, options, min, max)
-            }.toMutableList()
-            // Preserve automatic prompt targeting for API nodes not exposed by object_info.
-            for (target in targets) {
-                if (fields.none { it.nodeId == target.first && it.key == target.second }) {
-                    val node = graph[target.first] as? Map<*, *>
-                    val inputs = node?.get("inputs") as? Map<*, *>
-                    if (inputs?.get(target.second) is String && node["class_type"] is String) {
-                        fields.add(AgentFieldSpec(target.first, target.second, node["class_type"] as String, AgentFieldKind.TEXT))
-                    }
-                }
-            }
-            return AgentWorkflowSnapshot(graph, fields)
-        }
+        private fun workflowSnapshot(targets: List<Pair<String, String>>, extra: Collection<String> = emptyList()) =
+            this@MainViewModelAgentRuntime.workflowSnapshot(targets,
+                extra + listOfNotNull(uploadedImage?.first?.let { "${it.nodeId}:${it.key}" }))
 
         override suspend fun promptApplied(prompt: String) = withContext(Dispatchers.Main) {
             session.requireCurrent(turn)

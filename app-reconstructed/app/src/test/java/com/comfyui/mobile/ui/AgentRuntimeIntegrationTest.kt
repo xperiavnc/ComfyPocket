@@ -421,7 +421,9 @@ class AgentRuntimeIntegrationTest {
 
     @Before fun setup() {
         app = RuntimeEnvironment.getApplication()
-        app.getSharedPreferences("comfy_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        // These cases pin the decide→compose protocol; the tool agent has its own tests.
+        app.getSharedPreferences("comfy_prefs", Context.MODE_PRIVATE).edit().clear()
+            .putBoolean("agent_tool_loop_enabled", false).commit()
         server = MockWebServer()
         server.dispatcher = object : Dispatcher() {
             override fun dispatch(request: RecordedRequest): MockResponse = when (request.path?.substringBefore('?')) {
@@ -1290,6 +1292,31 @@ class AgentRuntimeIntegrationTest {
         assertTrue("fixture-pid-1" in vm.agentRunPromptIds)
         assertEquals("cat, rain", vm.agentMessages.value.last().expandedPrompt)
         assertNull(vm.agentMessages.value.last().errorMessage)
+    }
+
+    @Test fun toolAgentWritesThePromptThroughToolsAndSubmitsOnce() {
+        vm._agentPromptSettings.value = AgentPromptSettings(toolLoop = true)
+        responses += nativeAction("set_prompt", """{"prompt":"cat, rain","negative_prompt":""}""", "t-prompt")
+        responses += nativeAction("submit_workflow", """{"reply":"画好了","draw":true}""", "t-submit")
+        vm.sendAgentMessage("画一只猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertTrue(decisionBodies.isEmpty())
+        assertEquals(2, llmBodies.size)
+        val first = JsonParser.parseString(llmBodies.first()).asJsonObject
+        assertEquals("auto", first["tool_choice"].asString)
+        assertTrue(first["tools"].asJsonArray.any { it.toString().contains("submit_workflow") })
+        val second = JsonParser.parseString(llmBodies.last()).asJsonObject["messages"].asJsonArray
+        val result = second.last().asJsonObject
+        assertEquals("tool", result["role"].asString)
+        assertEquals("t-prompt", result["tool_call_id"].asString)
+        assertEquals("cat, rain", graphText())
+        val prompt = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        assertEquals("cat, rain", prompt["1"].asJsonObject["inputs"].asJsonObject["text"].asString)
+        val last = vm.agentMessages.value.last()
+        assertEquals("画好了", last.content)
+        assertTrue(last.thinkingContent.orEmpty().contains("写入提示词"))
+        assertNull(last.errorMessage)
     }
 
     @Test fun promptOnlyNeverQueuesButStillWritesTags() {
