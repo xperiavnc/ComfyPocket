@@ -20,6 +20,7 @@ import com.comfyui.mobile.ui.AgentStorageStatus
 import com.comfyui.mobile.ui.screens.AgentConversationWorkspace
 import com.comfyui.mobile.ui.screens.AgentSessionDrawer
 import com.comfyui.mobile.ui.screens.agentRelativeTime
+import com.comfyui.mobile.ui.screens.agentPreviewText
 import com.comfyui.mobile.agent.workspace.AgentProject
 import androidx.activity.ComponentDialog
 import org.robolectric.shadows.ShadowDialog
@@ -317,6 +318,14 @@ class AgentConversationsUiTest {
             compose.waitForIdle()
             assertFalse(visible.value)
         } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun rawJsonPreviewsShowOnlyTheReplyText() {
+        assertEquals("已经提交生成（任务号 365aaea0）。这次", agentPreviewText(
+            """{"reply": "已经提交生成（任务号 365aaea0）。这次"""))
+        assertEquals("说 \"好\" 换行", agentPreviewText("""{"reply":"说 \"好\"\n换行","prompt":"x"}"""))
+        assertEquals("普通摘要", agentPreviewText("普通摘要"))
+        assertEquals("{\"prompt\":\"x\"}", agentPreviewText("{\"prompt\":\"x\"}"))
     }
 
     @Test fun relativeTimeUsesShortChineseUnits() {

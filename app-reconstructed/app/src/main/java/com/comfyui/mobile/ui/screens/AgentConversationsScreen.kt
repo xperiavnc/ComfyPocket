@@ -29,6 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.composed
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.selected
+import androidx.compose.foundation.text.BasicTextField
+import top.yukonga.miuix.kmp.icon.extended.Close
+import top.yukonga.miuix.kmp.icon.extended.Search
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -81,7 +87,9 @@ fun AgentConversationsScreen(navController: NavController, viewModel: MainViewMo
 }
 
 @Composable
-internal fun AgentConversationsPanel(viewModel: MainViewModel, onClose: () -> Unit, modifier: Modifier = Modifier) {
+internal fun AgentConversationsPanel(
+    viewModel: MainViewModel, onClose: () -> Unit, modifier: Modifier = Modifier, showBack: Boolean = true
+) {
     val rows by viewModel.agentConversations.collectAsState()
     val archived by viewModel.agentArchivedConversations.collectAsState()
     val projects by viewModel.agentProjects.collectAsState()
@@ -107,7 +115,8 @@ internal fun AgentConversationsPanel(viewModel: MainViewModel, onClose: () -> Un
         onArchiveProject = viewModel::setAgentProjectArchived,
         onDeleteProject = viewModel::deleteAgentProject,
         onMove = viewModel::moveAgentConversation,
-        onArchive = viewModel::setAgentConversationArchived
+        onArchive = viewModel::setAgentConversationArchived,
+        showBack = showBack
     )
 }
 
@@ -134,7 +143,8 @@ internal fun AgentSessionDrawer(visible: Boolean, onDismiss: () -> Unit, content
         Scaffold(containerColor = Color.Transparent) {
             Box(Modifier.fillMaxSize()) {
                 AnimatedVisibility(transition, enter = fadeIn(tween(220)), exit = fadeOut(tween(200))) {
-                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.32f))
+                    // Strong enough to read as "behind" on dark themes too, so nothing looks tappable there.
+                    Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.6f))
                         .pointerInput(Unit) { detectTapGestures { dismiss() } }
                         .semantics { contentDescription = "关闭会话列表" }
                         .testTag("agent-session-scrim"))
@@ -142,9 +152,11 @@ internal fun AgentSessionDrawer(visible: Boolean, onDismiss: () -> Unit, content
                 AnimatedVisibility(transition,
                     enter = slideInHorizontally(tween(300, easing = FastOutSlowInEasing)) { -it },
                     exit = slideOutHorizontally(tween(220, easing = FastOutSlowInEasing)) { -it }) {
-                    Box(Modifier.widthIn(max = 400.dp).fillMaxWidth(0.88f).fillMaxHeight()
+                    val panelShape = RoundedCornerShape(topEnd = PocketTokens.Radius.XLarge, bottomEnd = PocketTokens.Radius.XLarge)
+                    Box(Modifier.widthIn(max = 360.dp).fillMaxWidth(0.84f).fillMaxHeight()
                         .offset { IntOffset(drag.value.roundToInt(), 0) }
-                        .clip(RoundedCornerShape(topEnd = PocketTokens.Radius.XLarge, bottomEnd = PocketTokens.Radius.XLarge))
+                        .shadow(16.dp, panelShape)
+                        .clip(panelShape)
                         .background(scheme.surface)
                         .pointerInput(Unit) {
                             detectHorizontalDragGestures(
@@ -212,6 +224,61 @@ internal fun agentRelativeTime(then: Long, now: Long): String {
     }
 }
 
+private val ReplyField = Regex(""""reply"\s*:\s*"((?:\\.|[^"\\])*)""")
+
+/** Older previews stored the raw model JSON; show only its reply text. Works on truncated JSON too. */
+internal fun agentPreviewText(raw: String): String {
+    val text = raw.trim()
+    if (!text.startsWith("{")) return text
+    val reply = ReplyField.find(text)?.groupValues?.get(1) ?: return text
+    return reply.replace("\\n", " ").replace("\\\"", "\"").replace("\\\\", "\\").trim()
+}
+
+@Composable
+private fun SessionTabs(archivedTab: Boolean, archivedCount: Int, onSelect: (Boolean) -> Unit) {
+    val scheme = MiuixTheme.colorScheme
+    Row(Modifier.fillMaxWidth().height(PocketTokens.CompactControlHeight).clip(PocketTokens.Shape.Pill)
+        .background(scheme.surfaceContainerHigh).padding(3.dp)) {
+        listOf(false to "进行中", true to (if (archivedCount == 0) "已归档" else "已归档 · $archivedCount")).forEach { (value, label) ->
+            val selected = value == archivedTab
+            Box(Modifier.weight(1f).fillMaxHeight().clip(PocketTokens.Shape.Pill)
+                .background(if (selected) scheme.surface else Color.Transparent)
+                .clickable(onClickLabel = label) { onSelect(value) }
+                .semantics { this.selected = selected }
+                .testTag(if (value) "agent-session-tab-archived" else "agent-session-tab-active"),
+                contentAlignment = Alignment.Center) {
+                Text(label, style = MiuixTheme.textStyles.body2.copy(
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal),
+                    color = if (selected) scheme.onSurface else scheme.onSurfaceVariantSummary)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionSearchField(query: String, onChange: (String) -> Unit) {
+    val scheme = MiuixTheme.colorScheme
+    Row(Modifier.fillMaxWidth().height(PocketTokens.ControlHeight).clip(PocketTokens.Shape.Pill)
+        .background(scheme.surfaceContainerHigh).padding(start = PocketTokens.Space.S, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Icon(MiuixIcons.Search, contentDescription = null, tint = scheme.onSurfaceVariantSummary,
+            modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(PocketTokens.Space.XS))
+        Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            if (query.isEmpty()) Text("搜索会话", style = MiuixTheme.textStyles.body2,
+                color = scheme.onSurfaceVariantSummary)
+            BasicTextField(query, onChange, singleLine = true,
+                textStyle = MiuixTheme.textStyles.body2.copy(color = scheme.onSurface),
+                cursorBrush = SolidColor(scheme.primary),
+                modifier = Modifier.fillMaxWidth().testTag("agent-session-search")
+                    .semantics { contentDescription = "搜索会话名称或摘要" })
+        }
+        if (query.isNotEmpty()) IconButton(onClick = { onChange("") }, modifier = Modifier.size(32.dp)) {
+            Icon(MiuixIcons.Close, "清空搜索", Modifier.size(16.dp), tint = scheme.onSurfaceVariantSummary)
+        }
+    }
+}
+
 private data class SessionSection(
     val key: String, val project: AgentProject?, val title: String?, val rows: List<AgentConversation>
 )
@@ -240,7 +307,8 @@ internal fun AgentConversationWorkspace(
     onDeleteProject: (String) -> Unit = {},
     onMove: (String, String?) -> Unit = { _, _ -> },
     onArchive: (String, Boolean) -> Unit = { _, _ -> },
-    now: Long = System.currentTimeMillis()
+    now: Long = System.currentTimeMillis(),
+    showBack: Boolean = true
 ) {
     val scheme = MiuixTheme.colorScheme
     var archivedTab by rememberSaveable { mutableStateOf(false) }
@@ -284,9 +352,9 @@ internal fun AgentConversationWorkspace(
     val total = sections.sumOf { it.rows.size }
     val allRows = conversations + archived
     Column(modifier.fillMaxSize().statusBarsPadding().imePadding()) {
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp),
+        Row(Modifier.fillMaxWidth().padding(start = if (showBack) 4.dp else PocketTokens.PagePadding, end = 4.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(MiuixIcons.Back, "返回 Agent") }
+            if (showBack) IconButton(onClick = onBack) { Icon(MiuixIcons.Back, "返回 Agent") }
             Text("会话", modifier = Modifier.weight(1f),
                 style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold))
             IconButton(onClick = { namingId = "project-new" }, enabled = writable,
@@ -298,22 +366,10 @@ internal fun AgentConversationWorkspace(
                 Icon(MiuixIcons.Add, contentDescription = "新建会话")
             }
         }
-        Column(Modifier.padding(horizontal = PocketTokens.PagePadding)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)) {
-                PocketPill("进行中", Modifier.weight(1f).testTag("agent-session-tab-active"), selected = !archivedTab) {
-                    archivedTab = false
-                }
-                PocketPill(if (archived.isEmpty()) "已归档" else "已归档 · ${archived.size}",
-                    Modifier.weight(1f).testTag("agent-session-tab-archived"), selected = archivedTab) {
-                    archivedTab = true
-                }
-            }
+        Column(Modifier.padding(horizontal = PocketTokens.PagePadding, vertical = PocketTokens.Space.XS)) {
+            SessionTabs(archivedTab, archived.size) { archivedTab = it }
             Spacer(Modifier.height(PocketTokens.Space.S))
-            TextField(
-                value = query, onValueChange = { query = it }, singleLine = true,
-                label = "搜索会话名称或摘要",
-                modifier = Modifier.fillMaxWidth().testTag("agent-session-search")
-            )
+            SessionSearchField(query) { query = it }
             if (search.isNotEmpty() && total > 0) {
                 Text("$total 个 · 按最近更新排序", Modifier.padding(top = PocketTokens.Space.XS),
                     style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
@@ -578,7 +634,7 @@ private fun SessionRow(
                 style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium))
             Text(buildString {
                 if (row.mode == "chat") append("Chat · ")
-                append(row.lastMessagePreview.ifBlank { "暂无消息" })
+                append(agentPreviewText(row.lastMessagePreview).ifBlank { "暂无消息" })
             }, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
         }

@@ -331,7 +331,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val bottomPad = floatingNavClearance
 
     AgentSessionDrawer(visible = showSessions, onDismiss = { showSessions = false }) {
-        AgentConversationsPanel(viewModel, onClose = { showSessions = false })
+        AgentConversationsPanel(viewModel, onClose = { showSessions = false }, showBack = false)
     }
 
     Scaffold(
