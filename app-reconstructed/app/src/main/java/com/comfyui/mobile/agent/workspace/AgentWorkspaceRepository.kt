@@ -60,6 +60,63 @@ class AgentWorkspaceRepository(
     }
 
     fun observeConversations(scope: String) = dao.observeConversations(scope.also(::validScope))
+    fun observeArchivedConversations(scope: String) = dao.observeArchivedConversations(scope.also(::validScope))
+    fun observeProjects(scope: String) = dao.observeProjects(scope.also(::validScope))
+
+    private fun projectName(name: String): String = name.trim().also {
+        require(it.isNotEmpty() && it.length <= 60) { "工作区名称需为 1–60 个字符" }
+    }
+
+    private suspend fun ownProject(id: String, scope: String): AgentProject {
+        val row = requireNotNull(dao.project(id)) { "工作区已被删除" }
+        require(row.scope == scope) { "Project scope differs" }
+        return row
+    }
+
+    private suspend fun ownConversation(id: String, scope: String): AgentConversation {
+        val row = requireNotNull(dao.conversation(id)) { "Conversation was deleted" }
+        require(row.scope == scope) { "Conversation scope differs" }
+        return row
+    }
+
+    suspend fun createProject(scope: String, name: String): AgentProject = locked {
+        validScope(scope)
+        val time = now()
+        AgentProject(UUID.randomUUID().toString(), scope, projectName(name), createdAt = time, updatedAt = time)
+            .also { dao.putProject(it) }
+    }
+
+    suspend fun renameProject(id: String, scope: String, name: String): AgentProject = locked {
+        ownProject(id, scope).copy(name = projectName(name), updatedAt = now()).also { dao.putProject(it) }
+    }
+
+    suspend fun setProjectArchived(id: String, scope: String, archived: Boolean): AgentProject = locked {
+        ownProject(id, scope).copy(archivedAt = if (archived) now() else null).also { dao.putProject(it) }
+    }
+
+    /** Deleting a workspace never deletes its sessions: they move back to 未分组. */
+    suspend fun deleteProject(id: String, scope: String) = locked {
+        ownProject(id, scope)
+        database.withTransaction {
+            dao.ungroupProject(id)
+            dao.deleteProject(id)
+        }
+    }
+
+    /** Moving keeps updatedAt so the recent-activity order does not jump. */
+    suspend fun moveConversation(id: String, scope: String, projectId: String?): AgentConversation = locked {
+        val row = ownConversation(id, scope)
+        projectId?.let { ownProject(it, scope) }
+        row.copy(projectId = projectId).also { dao.putConversation(it) }
+    }
+
+    /** Restoring a session out of an archived workspace also ungroups it so it becomes visible. */
+    suspend fun setConversationArchived(id: String, scope: String, archived: Boolean): AgentConversation = locked {
+        val row = ownConversation(id, scope)
+        val hiddenByProject = !archived && row.projectId?.let { dao.project(it)?.archivedAt != null } == true
+        row.copy(archivedAt = if (archived) now() else null,
+            projectId = if (hiddenByProject) null else row.projectId).also { dao.putConversation(it) }
+    }
 
     suspend fun createConversation(
         scope: String, title: String = "新会话", projectId: String? = null
@@ -116,8 +173,13 @@ class AgentWorkspaceRepository(
     suspend fun saveConversation(row: AgentConversation, makeActive: Boolean = true) = locked {
         validScope(row.scope)
         database.withTransaction {
-            dao.putConversation(row.copy(updatedAt = now(), title = dao.conversation(row.id)?.title ?: row.title,
-                lastMessagePreview = dao.conversation(row.id)?.lastMessagePreview ?: row.lastMessagePreview))
+            // Title, preview, workspace and archive state are owned by the stored row, not by the
+            // possibly stale in-memory copy that triggered this save.
+            val stored = dao.conversation(row.id)
+            dao.putConversation(row.copy(updatedAt = now(), title = stored?.title ?: row.title,
+                lastMessagePreview = stored?.lastMessagePreview ?: row.lastMessagePreview,
+                projectId = if (stored != null) stored.projectId else row.projectId,
+                archivedAt = stored?.archivedAt))
             if (dao.state(row.id) == null) dao.putState(AgentConversationState(row.id))
             if (makeActive) dao.putMeta(AgentWorkspaceMeta("active:${row.scope}", row.id))
         }

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.agent.workspace
 
 import android.content.Context
+import androidx.room.AutoMigration
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Insert
@@ -18,13 +19,30 @@ abstract class AgentWorkspaceDao {
     @Query("""SELECT agent_conversations.* FROM agent_conversations
         LEFT JOIN agent_projects ON agent_projects.id = agent_conversations.projectId
         WHERE agent_conversations.scope = :scope AND agent_projects.archivedAt IS NULL
+            AND agent_conversations.archivedAt IS NULL
         ORDER BY agent_conversations.updatedAt DESC, agent_conversations.id ASC""")
     abstract fun observeConversations(scope: String): Flow<List<AgentConversation>>
     @Query("""SELECT agent_conversations.* FROM agent_conversations
         LEFT JOIN agent_projects ON agent_projects.id = agent_conversations.projectId
         WHERE agent_conversations.scope = :scope AND agent_projects.archivedAt IS NULL
+            AND agent_conversations.archivedAt IS NULL
         ORDER BY agent_conversations.updatedAt DESC, agent_conversations.id ASC LIMIT 1""")
     abstract suspend fun recentConversation(scope: String): AgentConversation?
+    /** Sessions archived on their own or hidden because their workspace is archived. */
+    @Query("""SELECT agent_conversations.* FROM agent_conversations
+        LEFT JOIN agent_projects ON agent_projects.id = agent_conversations.projectId
+        WHERE agent_conversations.scope = :scope
+            AND (agent_conversations.archivedAt IS NOT NULL OR agent_projects.archivedAt IS NOT NULL)
+        ORDER BY agent_conversations.updatedAt DESC, agent_conversations.id ASC""")
+    abstract fun observeArchivedConversations(scope: String): Flow<List<AgentConversation>>
+    @Query("SELECT * FROM agent_projects WHERE scope = :scope ORDER BY updatedAt DESC, id ASC")
+    abstract fun observeProjects(scope: String): Flow<List<AgentProject>>
+    @Query("SELECT * FROM agent_projects WHERE id = :id")
+    abstract suspend fun project(id: String): AgentProject?
+    @Query("UPDATE agent_conversations SET projectId = NULL WHERE projectId = :id")
+    abstract suspend fun ungroupProject(id: String)
+    @Query("DELETE FROM agent_projects WHERE id = :id")
+    abstract suspend fun deleteProject(id: String)
     @Query("SELECT * FROM agent_conversations WHERE id = :id")
     abstract suspend fun conversation(id: String): AgentConversation?
     @Query("SELECT * FROM agent_conversation_state WHERE conversationId = :id")
@@ -113,7 +131,8 @@ abstract class AgentWorkspaceDao {
         AgentMessage::class, AgentExecutionLink::class, AgentConversationMedia::class,
         AgentAsset::class, AgentAssetRef::class, AgentMigrationState::class, AgentWorkspaceMeta::class
     ],
-    version = 1, exportSchema = true
+    version = 2, exportSchema = true,
+    autoMigrations = [AutoMigration(from = 1, to = 2)]
 )
 abstract class AgentWorkspaceDatabase : RoomDatabase() {
     abstract fun workspace(): AgentWorkspaceDao

@@ -161,6 +161,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     ) { uris -> viewModel.addAgentFileAttachments(uris, pickerOwner); pickerOwner = null }
 
     var showModelSwitchDialog by remember { mutableStateOf(false) }
+    var showSessions by rememberSaveable { mutableStateOf(false) }
     var showWorkflowSheet by remember { mutableStateOf(false) }
     var workflowSheetLevel by remember { mutableStateOf(1) }
     var showPromptDialog by remember { mutableStateOf(false) }
@@ -329,7 +330,12 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     // Reading raw asPaddingValues here would lift the input twice.
     val bottomPad = floatingNavClearance
 
+    AgentSessionDrawer(visible = showSessions, onDismiss = { showSessions = false }) {
+        AgentConversationsPanel(viewModel, onClose = { showSessions = false })
+    }
+
     Scaffold(
+        modifier = Modifier.agentEdgeSwipe { showSessions = true },
         containerColor = scheme.background,
         topBar = {
             TopAppBar(
@@ -353,7 +359,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             wfLabel = wfLabel,
             cardColors = cardColors,
             sidePad = sidePad,
-            onOpenSessions = { navController.navigate("agent_sessions") },
+            onOpenSessions = { showSessions = true },
             headerBottom = agentLlmStats?.let { stats -> {
                 AgentLlmStatsLine(stats, Modifier.padding(start = sidePad, end = sidePad, bottom = 2.dp))
             } },

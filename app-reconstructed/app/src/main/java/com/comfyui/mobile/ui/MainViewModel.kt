@@ -2786,8 +2786,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     val agentConversations get() = agentWorkspace.conversations
     val activeAgentConversation get() = agentWorkspace.activeConversation
     val agentConversationDeleteInfo get() = agentWorkspace.deleteInfo
-    fun newAgentConversation(title: String = "新会话", onOpened: () -> Unit = {}) =
-        agentWorkspace.newConversation(title, onOpened)
+    val agentArchivedConversations get() = agentWorkspace.archivedConversations
+    val agentProjects get() = agentWorkspace.projects
+    fun newAgentConversation(title: String = "新会话", projectId: String? = null, onOpened: () -> Unit = {}) =
+        agentWorkspace.newConversation(title, projectId, onOpened)
+    fun createAgentProject(name: String) = agentWorkspace.createProject(name)
+    fun renameAgentProject(id: String, name: String) = agentWorkspace.renameProject(id, name)
+    fun setAgentProjectArchived(id: String, archived: Boolean) = agentWorkspace.setProjectArchived(id, archived)
+    fun deleteAgentProject(id: String) = agentWorkspace.deleteProject(id)
+    fun moveAgentConversation(id: String, projectId: String?) = agentWorkspace.moveConversation(id, projectId)
+    fun setAgentConversationArchived(id: String, archived: Boolean) =
+        agentWorkspace.setConversationArchived(id, archived)
     fun openAgentConversation(id: String, onOpened: () -> Unit = {}) =
         agentWorkspace.openConversation(id, onOpened)
     fun renameAgentConversation(id: String, title: String) = agentWorkspace.renameConversation(id, title)

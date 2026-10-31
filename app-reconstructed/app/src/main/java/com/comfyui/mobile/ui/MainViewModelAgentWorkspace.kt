@@ -75,6 +75,10 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
     private val attachmentGenerations = ConcurrentHashMap<String, Long>()
     private val mutableConversations = MutableStateFlow<List<AgentConversation>>(emptyList())
     val conversations = mutableConversations.asStateFlow()
+    private val mutableArchived = MutableStateFlow<List<AgentConversation>>(emptyList())
+    val archivedConversations = mutableArchived.asStateFlow()
+    private val mutableProjects = MutableStateFlow<List<com.comfyui.mobile.agent.workspace.AgentProject>>(emptyList())
+    val projects = mutableProjects.asStateFlow()
     private val mutableActiveConversation = MutableStateFlow<AgentConversation?>(null)
     val activeConversation = mutableActiveConversation.asStateFlow()
     private val mutableDeleteInfo = MutableStateFlow<AgentConversationDeleteInfo?>(null)
@@ -212,7 +216,13 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         conversationObserver?.cancel()
         observedScope = scope
         mutableConversations.value = emptyList()
+        mutableArchived.value = emptyList()
+        mutableProjects.value = emptyList()
         conversationObserver = worker.launch {
+            launch { repository.observeArchivedConversations(scope).collect { rows ->
+                if (observedScope == scope) mutableArchived.value = rows } }
+            launch { repository.observeProjects(scope).collect { rows ->
+                if (observedScope == scope) mutableProjects.value = rows } }
             repository.observeConversations(scope).collect { rows ->
                 if (observedScope == scope) mutableConversations.value = rows
             }
@@ -333,13 +343,13 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         }
     }
 
-    fun newConversation(title: String = "新会话", onOpened: () -> Unit = {}) {
+    fun newConversation(title: String = "新会话", projectId: String? = null, onOpened: () -> Unit = {}) {
         val clean = title.trim().ifEmpty { "新会话" }
         if (clean.length > 120 || !beginSwitch()) return
         val time = System.currentTimeMillis()
         val row = AgentConversation(java.util.UUID.randomUUID().toString(), MainViewModelAgent.scope(vm), clean,
             mode = vm.prefs.getString("agent_interaction_mode", MainViewModel.AGENT_MODE_DRAW) ?: MainViewModel.AGENT_MODE_DRAW,
-            llmProfileId = defaultProfileId(),
+            llmProfileId = defaultProfileId(), projectId = projectId,
             createdAt = time, updatedAt = time)
         transientRows[row.id] = row
         // Only scope/template defaults; never inherit the outgoing session's parameter overrides.
@@ -356,6 +366,27 @@ internal class MainViewModelAgentWorkspace(private val vm: MainViewModel) {
         reload(row)
         onOpened()
     }
+
+    /** Sidebar workspace/archive edits: serialized with every other write, errors become toasts. */
+    private fun organize(block: suspend (scope: String) -> Unit) {
+        if (!requireWritable()) return
+        val scope = MainViewModelAgent.scope(vm)
+        vm.viewModelScope.launch {
+            try { serial { block(scope) } } catch (e: IllegalArgumentException) {
+                vm.showToast(e.message?.takeIf { msg -> msg.any { it.code > 0x2E80 } } ?: "操作失败，请刷新后重试")
+            } catch (e: Exception) {
+                vm.showToast("操作失败，请刷新后重试")
+            }
+        }
+    }
+
+    fun createProject(name: String) = organize { repository.createProject(it, name) }
+    fun renameProject(id: String, name: String) = organize { repository.renameProject(id, it, name) }
+    fun setProjectArchived(id: String, archived: Boolean) = organize { repository.setProjectArchived(id, it, archived) }
+    fun deleteProject(id: String) = organize { repository.deleteProject(id, it) }
+    fun moveConversation(id: String, projectId: String?) = organize { repository.moveConversation(id, it, projectId) }
+    fun setConversationArchived(id: String, archived: Boolean) =
+        organize { repository.setConversationArchived(id, it, archived) }
 
     fun renameConversation(id: String, title: String) {
         if (!requireWritable()) return

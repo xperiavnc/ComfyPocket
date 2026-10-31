@@ -443,4 +443,45 @@ class AgentWorkspaceRepositoryTest {
         assertEquals("画星澜", repo.messages(a.id).single().content)
         assertEquals("{}", repo.state(a.id)!!.workflowStateJson)
     }
+
+    @Test fun workspacesGroupArchiveAndDeleteWithoutLosingSessions() = check {
+        val pc = repo.createProject("local", "  PC  ")
+        assertEquals("PC", pc.name)
+        assertTrue(failure { repo.createProject("local", " ") }.message!!.contains("工作区名称"))
+        val inside = repo.createConversation("local", "分组", pc.id)
+        val loose = repo.createConversation("local", "散落")
+        assertEquals(listOf(pc.id), repo.observeProjects("local").first().map { it.id })
+
+        val moved = repo.moveConversation(loose.id, "local", pc.id)
+        assertEquals(pc.id, moved.projectId)
+        assertEquals(loose.updatedAt, moved.updatedAt)
+        // A later save from a stale in-memory row must not undo the move.
+        repo.saveConversation(loose.copy(lastMessagePreview = "新消息"))
+        assertEquals(pc.id, db.workspace().conversation(loose.id)!!.projectId)
+
+        repo.setConversationArchived(inside.id, "local", true)
+        assertEquals(listOf(loose.id), repo.observeConversations("local").first().map { it.id })
+        assertEquals(listOf(inside.id), repo.observeArchivedConversations("local").first().map { it.id })
+        repo.saveConversation(inside.copy(title = "分组改"))
+        assertNotNull("Saving keeps the archive flag", db.workspace().conversation(inside.id)!!.archivedAt)
+        repo.setConversationArchived(inside.id, "local", false)
+
+        repo.setProjectArchived(pc.id, "local", true)
+        assertTrue(repo.observeConversations("local").first().isEmpty())
+        assertEquals(setOf(inside.id, loose.id), repo.observeArchivedConversations("local").first().map { it.id }.toSet())
+        // Restoring one session out of an archived workspace puts it back as ungrouped.
+        val restored = repo.setConversationArchived(loose.id, "local", false)
+        assertNull(restored.projectId)
+        assertEquals(listOf(loose.id), repo.observeConversations("local").first().map { it.id })
+        repo.setProjectArchived(pc.id, "local", false)
+
+        repo.renameProject(pc.id, "local", "APK")
+        assertEquals("APK", repo.observeProjects("local").first().single().name)
+        repo.deleteProject(pc.id, "local")
+        assertTrue(repo.observeProjects("local").first().isEmpty())
+        val rows = repo.observeConversations("local").first()
+        assertEquals(setOf(inside.id, loose.id), rows.map { it.id }.toSet())
+        assertTrue("Deleting a workspace only ungroups its sessions", rows.all { it.projectId == null })
+        assertTrue(failure { repo.moveConversation(loose.id, "local", pc.id) }.message!!.contains("工作区已被删除"))
+    }
 }

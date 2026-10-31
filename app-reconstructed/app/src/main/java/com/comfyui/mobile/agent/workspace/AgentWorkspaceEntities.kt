@@ -37,7 +37,9 @@ data class AgentConversation(
     val workflowRef: String? = null,
     val lastMessagePreview: String = "",
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    /** Archived sessions leave the active sidebar list but keep every message and asset. */
+    val archivedAt: Long? = null
 )
 
 @Entity(

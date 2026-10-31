@@ -18,6 +18,11 @@ import com.comfyui.mobile.agent.workspace.AgentConversationDeleteInfo
 import com.comfyui.mobile.ui.AgentStorageMode
 import com.comfyui.mobile.ui.AgentStorageStatus
 import com.comfyui.mobile.ui.screens.AgentConversationWorkspace
+import com.comfyui.mobile.ui.screens.AgentSessionDrawer
+import com.comfyui.mobile.ui.screens.agentRelativeTime
+import com.comfyui.mobile.agent.workspace.AgentProject
+import androidx.activity.ComponentDialog
+import org.robolectric.shadows.ShadowDialog
 import com.comfyui.mobile.ui.theme.ComfyControllerTheme
 import java.io.File
 import org.junit.Assert.*
@@ -122,7 +127,7 @@ class AgentConversationsUiTest {
             compose.onNodeWithText("1 个 · 按最近更新排序").assertExists()
             compose.onNodeWithTag("agent-session-s1").performClick()
             assertEquals("s1", opened)
-            compose.onNodeWithTag("agent-session-more-s1").performClick()
+            compose.onNodeWithTag("agent-session-s1").performTouchInput { longClick() }
             compose.onNodeWithText("重命名").performClick()
             compose.onNodeWithTag("agent-session-title").performTextReplacement("重命名验证")
             compose.onNodeWithText("保存").performClick()
@@ -136,7 +141,7 @@ class AgentConversationsUiTest {
         } finally { controller.pause().stop().destroy() }
     }
 
-    @Test fun longPressSelectionAndDeleteDialogEachConsumeOnlyOneBackGesture() {
+    @Test fun longPressActionsAndDeleteDialogEachConsumeOnlyOneBackGesture() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         var backs = 0
         var deleted = 0
@@ -155,22 +160,23 @@ class AgentConversationsUiTest {
                 }
             } })
             compose.onNodeWithTag("agent-session-s0").performTouchInput { longClick() }
-            compose.onNodeWithContentDescription("退出会话选择").assertExists()
+            compose.onNodeWithText("会话操作").assertExists()
             gesture(controller.get(), true)
-            compose.onNodeWithContentDescription("退出会话选择").assertExists()
+            compose.onNodeWithText("会话操作").assertExists()
             gesture(controller.get())
-            compose.onNodeWithContentDescription("退出会话选择").assertDoesNotExist()
+            compose.onNodeWithText("会话操作").assertDoesNotExist()
             assertEquals(0, backs)
             compose.onNodeWithTag("agent-session-s0").performTouchInput { longClick() }
-            compose.onNodeWithText("删除", substring = false).performClick()
+            compose.onNodeWithText("删除会话").performClick()
             compose.onNodeWithText("未完成或待确认任务：1 个。删除记录不会取消服务器任务。").assertExists()
             capture(controller.get(), "delete-dark")
             gesture(controller.get())
             compose.onNodeWithText("删除会话？").assertDoesNotExist()
-            compose.onNodeWithContentDescription("退出会话选择").assertExists()
+            compose.onNodeWithTag("agent-session-list").assertExists()
             assertEquals(0, backs)
             assertEquals(0, deleted)
-            compose.onNodeWithText("删除", substring = false).performClick()
+            compose.onNodeWithTag("agent-session-s0").performTouchInput { longClick() }
+            compose.onNodeWithText("删除会话").performClick()
             compose.onNodeWithText("确认删除").performClick()
             compose.waitForIdle()
             assertEquals(1, deleted)
@@ -204,5 +210,122 @@ class AgentConversationsUiTest {
             compose.onNodeWithText("清除搜索").performClick()
             compose.onNodeWithText("还没有已保存的会话").assertIsDisplayed()
         } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun workspacesGroupSessionsAndOfferCreateMoveArchiveThroughRealControls() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val now = 1792533600000L
+        val project = AgentProject("pc", "local", "PC", createdAt = 1, updatedAt = now)
+        val grouped = listOf(
+            AgentConversation("g1", "local", "分组会话", projectId = "pc", createdAt = 1, updatedAt = now - 3 * 3_600_000L),
+            AgentConversation("u1", "local", "散落会话", createdAt = 1, updatedAt = now - 2 * 86_400_000L)
+        )
+        val old = AgentConversation("a1", "local", "旧会话", createdAt = 1, updatedAt = now, archivedAt = now)
+        var createdIn: Pair<String, String?>? = null
+        var createdProject: String? = null
+        var moved: Pair<String, String?>? = null
+        var archivedCall: Pair<String, Boolean>? = null
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(true, manageSystemBars = false) {
+                        Scaffold {
+                            AgentConversationWorkspace(grouped, "g1", AgentStorageStatus(AgentStorageMode.ROOM), null,
+                                {}, {}, {}, { _, _ -> }, {}, {}, {}, {},
+                                projects = listOf(project), archived = listOf(old),
+                                onNewInProject = { title, id -> createdIn = title to id },
+                                onCreateProject = { createdProject = it },
+                                onMove = { id, target -> moved = id to target },
+                                onArchive = { id, value -> archivedCall = id to value },
+                                now = now)
+                        }
+                    }
+                }
+            } })
+            compose.onNodeWithTag("agent-project-pc").assertIsDisplayed()
+            compose.onNodeWithText("未分组").assertIsDisplayed()
+            compose.onNodeWithText("3 小时").assertExists()
+            compose.onNodeWithText("2 天").assertExists()
+            capture(controller.get(), "workspaces-dark")
+
+            compose.onNodeWithTag("agent-project-new-pc").performClick()
+            compose.onNodeWithText("创建").performClick()
+            compose.waitForIdle()
+            assertEquals("新会话" to "pc", createdIn)
+
+            compose.onNodeWithTag("agent-project-pc").performClick()
+            compose.onNodeWithTag("agent-session-g1").assertDoesNotExist()
+            compose.onNodeWithTag("agent-project-pc").performClick()
+            compose.onNodeWithTag("agent-session-g1").assertExists()
+
+            compose.onNodeWithTag("agent-session-u1").performTouchInput { longClick() }
+            compose.onNodeWithText("移动到工作区").performClick()
+            compose.waitForIdle()
+            compose.onNode(hasText("PC") and SemanticsMatcher.expectValue(
+                androidx.compose.ui.semantics.SemanticsProperties.Role, androidx.compose.ui.semantics.Role.Button))
+                .performClick()
+            compose.waitForIdle()
+            assertEquals("u1" to "pc", moved)
+
+            compose.onNodeWithTag("agent-session-g1").performTouchInput { longClick() }
+            compose.onNodeWithText("归档会话").performClick()
+            compose.waitForIdle()
+            assertEquals("g1" to true, archivedCall)
+
+            compose.onNodeWithTag("agent-project-create").performClick()
+            compose.onNodeWithTag("agent-project-title").performTextReplacement("APK")
+            compose.onNodeWithText("创建").performClick()
+            compose.waitForIdle()
+            assertEquals("APK", createdProject)
+
+            compose.onNodeWithTag("agent-session-tab-archived").performClick()
+            compose.onNodeWithTag("agent-session-a1").assertIsDisplayed()
+            compose.onNodeWithTag("agent-session-a1").performTouchInput { longClick() }
+            compose.onNodeWithText("恢复会话").performClick()
+            compose.waitForIdle()
+            assertEquals("a1" to false, archivedCall)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun drawerOpensOverContentAndClosesWithBackAndScrim() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val visible = mutableStateOf(false)
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(true, manageSystemBars = false) {
+                        Scaffold {
+                            TextButton("打开会话", onClick = { visible.value = true })
+                            AgentSessionDrawer(visible.value, onDismiss = { visible.value = false }) {
+                                TextButton("抽屉内容", onClick = {})
+                            }
+                        }
+                    }
+                }
+            } })
+            compose.onNodeWithTag("agent-session-drawer").assertDoesNotExist()
+            compose.onNodeWithText("打开会话").performClick()
+            compose.onNodeWithText("抽屉内容").assertIsDisplayed()
+            compose.runOnIdle {
+                (ShadowDialog.getLatestDialog() as ComponentDialog).onBackPressedDispatcher.onBackPressed()
+            }
+            compose.waitForIdle()
+            assertFalse(visible.value)
+            compose.onNodeWithTag("agent-session-drawer").assertDoesNotExist()
+            compose.onNodeWithText("打开会话").performClick()
+            compose.onNodeWithTag("agent-session-scrim").performTouchInput { click(centerRight) }
+            compose.waitForIdle()
+            assertFalse(visible.value)
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun relativeTimeUsesShortChineseUnits() {
+        val now = 1792533600000L
+        assertEquals("刚刚", agentRelativeTime(now - 5_000, now))
+        assertEquals("5 分钟", agentRelativeTime(now - 5 * 60_000, now))
+        assertEquals("3 小时", agentRelativeTime(now - 3 * 3_600_000L, now))
+        assertEquals("2 天", agentRelativeTime(now - 2 * 86_400_000L, now))
+        assertEquals("1 周", agentRelativeTime(now - 8 * 86_400_000L, now))
+        assertEquals("刚刚", agentRelativeTime(now + 10_000, now))
     }
 }
