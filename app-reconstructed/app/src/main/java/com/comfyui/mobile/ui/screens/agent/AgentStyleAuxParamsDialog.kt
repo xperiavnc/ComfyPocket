@@ -457,7 +457,8 @@ fun AgentStyleAuxParamsDialog(
                 verticalAlignment = Alignment.CenterVertically
     ) {
                 TextButton(
-                    text = "重载",
+                    text = "保存",
+                    colors = top.yukonga.miuix.kmp.basic.ButtonDefaults.textButtonColorsPrimary(),
                     onClick = onResetWorkflowClick,
                     modifier = Modifier.weight(1f)
     )

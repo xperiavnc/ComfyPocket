@@ -52,6 +52,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import coil.size.Precision
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.platform.LocalContext
 import com.comfyui.mobile.model.MediaOutput
 import top.yukonga.miuix.kmp.basic.CardColors
 import top.yukonga.miuix.kmp.basic.Icon
@@ -95,6 +99,7 @@ fun AgentImagePreviewCard(
     ) {
     val scheme = MiuixTheme.colorScheme
     val overlayOn = status.showOverlay
+    val context = LocalContext.current
     // Keep last overlay payload so exit fade still draws "完成" (no empty flash).
     var heldOverlayStatus by remember { mutableStateOf(status) }
     SideEffect {
@@ -161,7 +166,14 @@ fun AgentImagePreviewCard(
                                     contentScale = ContentScale.Crop
                                 )
                                 AsyncImage(
-                                    model = url,
+                                    // Own memory-cache entry at exact size: the 40dp header thumb and gallery
+                                    // tiles share the URL and were being upscaled here (jagged edges).
+                                    model = remember(url) {
+                                        ImageRequest.Builder(context).data(url)
+                                            .memoryCacheKey("agent-preview:$url").diskCacheKey(url)
+                                            .precision(Precision.EXACT).allowHardware(true).build()
+                                    },
+                                    filterQuality = FilterQuality.High,
                                     contentDescription = if (page == 0) "最新生成" else "历史生成",
                                     modifier = Modifier.fillMaxSize().blur(imageBlur),
                                     contentScale = if (portrait) ContentScale.Crop else ContentScale.Fit,

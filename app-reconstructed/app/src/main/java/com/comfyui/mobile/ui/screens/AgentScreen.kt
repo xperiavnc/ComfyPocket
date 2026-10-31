@@ -878,7 +878,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         onAuxParamChange = { nodeId, key, value ->
             viewModel.updateAgentNodeValue(nodeId, key, value)
         },
-        onResetWorkflowClick = { viewModel.resetAgentSavedWorkflow() },
+        onResetWorkflowClick = { viewModel.saveAgentWorkflowDefaults() },
         isCloudMode = isCloudMode,
         onBrowseCloudModel = { nodeId, key, type ->
             cloudModelOwner = viewModel.captureAgentConfigurationOwner()

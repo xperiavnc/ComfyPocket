@@ -133,13 +133,6 @@ fun AgentChatPanel(
                     Text("加载更早消息", color = scheme.primary,
                         modifier = Modifier.fillMaxWidth().clickable(onClick = onLoadEarlier).padding(10.dp))
                 }
-                // Empty conversation: offer a few starters instead of a blank middle.
-                if (messages.isEmpty() && !hasEarlier) item(key = "empty") {
-                    AgentEmptyHint(enabled = inputEnabled && !busy) { text ->
-                        haptics.tick()
-                        onInputChange(TextFieldValue(text, TextRange(text.length)))
-                    }
-                }
                 val pendingClarificationId = com.comfyui.mobile.agent.AgentQuestionPolicy.pending(messages)?.id
                 items(messages, key = { it.id }) { msg ->
                     AgentBubble(
@@ -290,32 +283,6 @@ private fun ChatRoundButton(
 @Composable
 private fun AttachMenuChip(label: String, onClick: () -> Unit) {
     PocketPill(label = label, idleColor = MiuixTheme.colorScheme.surfaceContainerHighest, onClick = onClick)
-}
-
-private val AgentStarters = listOf(
-    "画一张雨夜的城市街景，电影感光影",
-    "帮我写一段角色立绘的提示词",
-    "解释一下当前工作流的主要参数"
-)
-
-/** Starter prompts for an empty conversation; tapping one fills the input (never auto-sends). */
-@Composable
-private fun AgentEmptyHint(enabled: Boolean, onPick: (String) -> Unit) {
-    val scheme = MiuixTheme.colorScheme
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = PocketTokens.Space.XL).testTag("agent-empty-hint"),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)
-    ) {
-        Text("想画点什么？", style = MiuixTheme.textStyles.body1.copy(fontWeight = FontWeight.SemiBold),
-            color = scheme.onSurface)
-        Text("描述画面，或试试下面的例子", style = MiuixTheme.textStyles.footnote1,
-            color = scheme.onSurfaceVariantSummary,
-            modifier = Modifier.padding(bottom = PocketTokens.Space.XXS))
-        AgentStarters.forEach { starter ->
-            PocketPill(label = starter, enabled = enabled, idleColor = scheme.surfaceContainer) { onPick(starter) }
-        }
-    }
 }
 
 /** Thumbnails for images, name chips for text files. [onRemove] null = read-only (message bubble). */

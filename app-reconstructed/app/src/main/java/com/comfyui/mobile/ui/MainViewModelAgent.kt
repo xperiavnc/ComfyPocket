@@ -415,7 +415,41 @@ object MainViewModelAgent {
         vm.prefs.edit().putString(key, vm.gson.toJson(vm.agentWorkflowParamValues)).apply()
     }
 
-        fun loadAgentWorkflowParams(vm: MainViewModel, source: String, id: String, fallbackWorkflowKey: String? = null): MutableMap<String, Any> {
+    fun getAgentWorkflowDefaultsKey(vm: MainViewModel, source: String, id: String): String =
+        "agent_wf_defaults_${scope(vm)}_${source}_${id}"
+
+    /**
+     * 画风与辅助参数「保存」: remember the current parameter values as this workflow's defaults.
+     * Every session that uses the workflow (new, switched-to, or reopened) starts from them.
+     */
+    fun saveAgentWorkflowDefaults(vm: MainViewModel) {
+        val source = vm._agentWorkflowSource.value
+        val id = vm._agentWorkflowId.value
+        if (source.isBlank() || id.isBlank()) { vm.showToast("请先选择工作流"); return }
+        vm.prefs.edit().putString(getAgentWorkflowDefaultsKey(vm, source, id),
+            vm.gson.toJson(vm.agentWorkflowParamValues.toMap())).apply()
+        persistAgentWorkflowParams(vm, source, id)
+        vm.showToast("已保存，切换会话后也会沿用这些参数")
+    }
+
+    internal fun loadAgentWorkflowDefaults(vm: MainViewModel, source: String, id: String): Map<String, Any> {
+        val raw = vm.prefs.getString(getAgentWorkflowDefaultsKey(vm, source, id), null) ?: return emptyMap()
+        return try {
+            val type = object : TypeToken<Map<String, Any>>() {}.type
+            val parsed: Map<String, Any> = vm.gson.fromJson(raw, type) ?: emptyMap()
+            (vm.sanitizeNumbers(parsed) as? Map<String, Any>) ?: emptyMap()
+        } catch (_: Exception) { emptyMap() }
+    }
+
+    /** Session values, with the workflow's saved defaults (if any) layered on top. */
+    fun loadAgentWorkflowParams(vm: MainViewModel, source: String, id: String, fallbackWorkflowKey: String? = null): MutableMap<String, Any> {
+        val base = loadAgentSessionWorkflowParams(vm, source, id, fallbackWorkflowKey)
+        if (source.isBlank() || id.isBlank()) return base
+        base.putAll(loadAgentWorkflowDefaults(vm, source, id))
+        return base
+    }
+
+    private fun loadAgentSessionWorkflowParams(vm: MainViewModel, source: String, id: String, fallbackWorkflowKey: String? = null): MutableMap<String, Any> {
         if (source.isBlank() || id.isBlank()) return mutableMapOf()
         if (room(vm)) vm.agentWorkspace.workflowField("parameters", source, id)?.let {
             val type = object : TypeToken<Map<String, Any>>() {}.type

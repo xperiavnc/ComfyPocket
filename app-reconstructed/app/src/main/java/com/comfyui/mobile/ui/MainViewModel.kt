@@ -3097,6 +3097,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     fun resetAgentSavedWorkflow() =
         MainViewModelAgent.resetAgentSavedWorkflow(this)
 
+    fun saveAgentWorkflowDefaults() =
+        MainViewModelAgent.saveAgentWorkflowDefaults(this)
+
     fun showUserMessage(msg: String) =
         MainViewModelAgent.showUserMessage(this, msg)
 
