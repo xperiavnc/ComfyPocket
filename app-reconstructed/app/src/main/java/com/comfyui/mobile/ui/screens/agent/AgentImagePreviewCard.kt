@@ -35,6 +35,10 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,6 +80,7 @@ internal fun previewIsPortrait(aspect: Float?): Boolean =
 private val PortraitFocus = androidx.compose.ui.BiasAlignment(0f, -0.55f)
 // Long-edge cap for the preview bitmap; ComfyUI outputs are usually 1–2K so this is near-original.
 private const val PreviewDecodeBound = 2048
+private const val AutoRetries = 3
 
 /**
  * Agent image preview — fitted image over a blurred ambient copy of itself, so any aspect
@@ -112,6 +117,14 @@ fun AgentImagePreviewCard(
     // Width / height of loaded images, keyed by URL; picks crop vs fit per page.
     val aspects = remember { mutableStateMapOf<String, Float>() }
     val loadFailed = remember { mutableStateMapOf<String, Boolean>() }
+    // Coil never retries a failed request on its own, so a load that failed while the network
+    // dropped stayed blank even though the fullscreen viewer (a fresh request) worked. Bumping
+    // the attempt rebuilds the request: automatic backoff first, then tap-to-retry.
+    val attempts = remember { mutableStateMapOf<String, Int>() }
+    val retryScope = rememberCoroutineScope()
+    fun retry(url: String) { loadFailed.remove(url); attempts[url] = (attempts[url] ?: 0) + 1 }
+    // A new result usually means the connection is back: give every failed page another go.
+    LaunchedEffect(mediaList.firstOrNull()?.let(previewUrl)) { loadFailed.keys.toList().forEach(::retry) }
     // Blur the picture itself while busy; a blurred scrim over a sharp image only looks grey.
     val imageBlur by animateDpAsState(if (overlayOn) 18.dp else 0.dp, tween(260), label = "preview_blur")
 
@@ -158,15 +171,20 @@ fun AgentImagePreviewCard(
                             }
                         } else {
                             val portrait = previewIsPortrait(aspects[url])
+                            val failed = loadFailed[url] == true
                             Box(
                                 Modifier.fillMaxSize()
-                                    .then(if (canOpenImage) Modifier.clickable { onImageClick(page) } else Modifier)
+                                    .then(when {
+                                        failed -> Modifier.clickable(onClickLabel = "重新加载") { retry(url) }
+                                        canOpenImage -> Modifier.clickable { onImageClick(page) }
+                                        else -> Modifier
+                                    })
                             ) {
                                 // Shown until the bitmap arrives (old history can be slow) or when it fails.
-                                if (loadFailed[url] == true) Column(Modifier.align(Alignment.Center),
+                                if (failed) Column(Modifier.align(Alignment.Center),
                                     horizontalAlignment = Alignment.CenterHorizontally) {
                                     Icon(MiuixIcons.Image, contentDescription = null, tint = scheme.onSurfaceVariantSummary)
-                                    Text("图片加载失败", style = MiuixTheme.textStyles.footnote1,
+                                    Text("图片加载失败 · 点按重试", style = MiuixTheme.textStyles.footnote1,
                                         color = scheme.onSurfaceVariantSummary)
                                 } else Icon(MiuixIcons.Image, contentDescription = null,
                                     modifier = Modifier.align(Alignment.Center).size(36.dp),
@@ -181,7 +199,7 @@ fun AgentImagePreviewCard(
                                 AsyncImage(
                                     // Own memory-cache entry at exact size: the 40dp header thumb and gallery
                                     // tiles share the URL and were being upscaled here (jagged edges).
-                                    model = remember(url) {
+                                    model = remember(url, attempts[url]) {
                                         ImageRequest.Builder(context).data(url)
                                             .memoryCacheKey("agent-preview-full:$url").diskCacheKey(url)
                                             // Fixed decode bound: sizing from layout caught the card mid-expand
@@ -196,7 +214,13 @@ fun AgentImagePreviewCard(
                                     modifier = Modifier.fillMaxSize().blur(imageBlur),
                                     contentScale = if (portrait) ContentScale.Crop else ContentScale.Fit,
                                     alignment = if (portrait) PortraitFocus else Alignment.Center,
-                                    onError = { loadFailed[url] = true },
+                                    onError = {
+                                        val tried = attempts[url] ?: 0
+                                        if (tried < AutoRetries) retryScope.launch {
+                                            delay(1500L shl tried)  // 1.5 s, 3 s, 6 s
+                                            attempts[url] = tried + 1
+                                        } else loadFailed[url] = true
+                                    },
                                     onSuccess = { s ->
                                         loadFailed.remove(url)
                                         val size = s.painter.intrinsicSize

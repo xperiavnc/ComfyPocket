@@ -196,7 +196,19 @@ fun AgentWorkbench(
                     .testTag("agent-workbench-thumbnail"),
                 contentAlignment = Alignment.Center
             ) {
-                if (url.isNotBlank()) AsyncImage(url, "最新生成缩略图", Modifier.size(40.dp), contentScale = ContentScale.Crop)
+                // Same retry story as the preview: a failed thumb otherwise stays an empty tile.
+                var thumbAttempt by androidx.compose.runtime.remember(url) { mutableStateOf(0) }
+                var thumbFailed by androidx.compose.runtime.remember(url) { mutableStateOf(false) }
+                LaunchedEffect(url, thumbFailed) {
+                    if (thumbFailed && thumbAttempt < 3) {
+                        kotlinx.coroutines.delay(1500L shl thumbAttempt)
+                        thumbFailed = false; thumbAttempt++
+                    }
+                }
+                if (url.isNotBlank()) androidx.compose.runtime.key(thumbAttempt) {
+                    AsyncImage(url, "最新生成缩略图", Modifier.size(40.dp), contentScale = ContentScale.Crop,
+                        onError = { thumbFailed = true })
+                }
                 else Icon(MiuixIcons.Image, contentDescription = null, tint = scheme.onSurfaceVariantSummary)
             }
             Row(
