@@ -321,7 +321,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                             },
                             enabled = runCatching { limits.parsed() }.isSuccess,
                             colors = ButtonDefaults.buttonColorsPrimary(),
-                            modifier = Modifier.weight(1f).height(com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                            modifier = Modifier.weight(1f).heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                            insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin,
                     ) {
                             Text("保存配置")
                         }
@@ -332,7 +333,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                                     viewModel.deleteLlmProfile(editingProfileId)
                                 },
                                 colors = ButtonDefaults.buttonColors(),
-                                modifier = Modifier.weight(0.45f).height(com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight)
+                                modifier = Modifier.weight(0.45f).heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                                insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin
     ) {
                                 Text("删除", color = scheme.error)
                             }

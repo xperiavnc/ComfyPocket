@@ -41,6 +41,8 @@ object PocketTokens {
     /** Touch target for icon actions and compact controls. */
     val ControlHeight = 40.dp
     val CompactControlHeight = 36.dp
+    /** Miuix Button default vertical margin (16dp) clips text at 40dp; use with heightIn(min = ControlHeight). */
+    val ButtonMargin = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp)
 
     object Shape {
         val Small = RoundedCornerShape(Radius.Small)

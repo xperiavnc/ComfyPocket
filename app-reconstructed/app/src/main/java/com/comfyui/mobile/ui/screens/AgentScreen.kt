@@ -756,7 +756,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             cm.setPrimaryClip(ClipData.newPlainText(label, text))
             AppToast.show(context, "已复制$label")
         }
-        TextButton(text = "关闭", onClick = { showPromptDialog = false })
+        TextButton(text = "关闭", onClick = { showPromptDialog = false },
+            modifier = Modifier.fillMaxWidth().padding(top = com.comfyui.mobile.ui.designsystem.PocketTokens.Space.XS))
     }
 
     if (showImageViewer && displayMediaList.isNotEmpty()) {

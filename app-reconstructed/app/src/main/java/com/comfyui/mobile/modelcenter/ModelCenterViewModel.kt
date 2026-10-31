@@ -131,10 +131,11 @@ class ModelCenterViewModel(application: Application) : AndroidViewModel(applicat
     fun query(value: LocalModelQuery) {
         if (value == state.value.query) return
         queryEpoch++
-        // A selected chip must never label rows/counts from the previous query,
-        // even while a slow phone request is still in flight.
+        // A selected chip must never label rows/counts from the previous query, even while a slow
+        // phone request is still in flight. Show this query's cached rows at once (stale-while-
+        // revalidate) so switching to e.g. LoRA does not wait on the network to show anything.
         mutable.value = state.value.copy(query = value, scrollIndex = 0, scrollOffset = 0,
-            page = state.value.page.copy(items = emptyList(), page = 1, total = 0, hasMore = false))
+            page = cachedPage(value, 1))
         snapshot = snapshot.copy(query = value, scrollIndex = 0, scrollOffset = 0)
         persist()
         refresh()

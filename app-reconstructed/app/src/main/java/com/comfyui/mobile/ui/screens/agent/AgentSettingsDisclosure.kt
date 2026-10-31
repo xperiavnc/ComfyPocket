@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -40,10 +41,11 @@ internal fun AgentSettingsDisclosure(
     content: @Composable ColumnScope.() -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
-    val rotation by animateFloatAsState(if (expanded) 180f else 0f)
+    val rotation by animateFloatAsState(if (expanded) 180f else 0f, androidx.compose.animation.core.tween(220), label = "disclosureChevron")
     Column {
         Row(
-            Modifier.fillMaxWidth().clickable(role = Role.Button) { expanded = !expanded }.padding(vertical = 14.dp),
+            Modifier.fillMaxWidth().clip(com.comfyui.mobile.ui.designsystem.PocketTokens.Shape.Medium)
+                .clickable(role = Role.Button) { expanded = !expanded }.padding(vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {

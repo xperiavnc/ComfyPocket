@@ -90,7 +90,10 @@ class ModelCenterQueryRegressionTest {
         assertTrue(pending.loading)
         assertTrue("Old category cards must disappear at selection, not after the network reply",
             pending.page.items.all { it.category == "LORA" })
-        assertEquals(0, pending.page.total)
+        // Cached LoRA rows show at once (no blank list while the network answers); the
+        // total counts only rows matching the new chip, never the previous checkpoint total.
+        assertTrue("Cached rows for the selected chip must show immediately", pending.page.items.isNotEmpty())
+        assertEquals(pending.page.items.size, pending.page.total)
         assertFalse(pending.page.hasMore)
         await { !vm.state.value.loading && vm.state.value.page.total == 48 }
         assertEquals(40, vm.state.value.page.items.size)

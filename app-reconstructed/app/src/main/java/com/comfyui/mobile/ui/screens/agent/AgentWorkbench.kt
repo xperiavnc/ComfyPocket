@@ -195,8 +195,15 @@ fun AgentWorkbench(
                     tint = scheme.onSurfaceVariantSummary)
             }
         }
-        if (status.showProgress) AgentStatusProgressBar(status.progress,
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("agent-workbench-progress"))
+        // Collapsed: the header carries a slim progress bar (the expanded preview has its own overlay).
+        AnimatedVisibility(visible = status.showProgress && !expanded,
+            enter = expandVertically(tween(180)) + fadeIn(tween(180)),
+            exit = shrinkVertically(tween(180)) + fadeOut(tween(140))) {
+            AgentStatusProgressBar(status.progress,
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                    .testTag("agent-workbench-progress"),
+                trackColor = scheme.surfaceContainerHighest)
+        }
         AnimatedVisibility(
             visible = expanded,
             enter = expandVertically(tween(220)) + fadeIn(tween(160)),

@@ -688,6 +688,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                             _objectInfo.value = info
                             currentWorkflow?.let { parseEditableNodes(it) }
                             MainViewModelAiAppSession.rebuildNodes(this@MainViewModel)
+                            agentWorkflow?.let { MainViewModelAgent.parseAgentEditableNodes(this@MainViewModel, it) }
                         }
                     }
                 }
@@ -1463,6 +1464,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
             _objectInfo.value = info
             currentWorkflow?.let { parseEditableNodes(it) }
             MainViewModelAiAppSession.rebuildNodes(this@MainViewModel)
+            agentWorkflow?.let { MainViewModelAgent.parseAgentEditableNodes(this@MainViewModel, it) }
         }
     }
 

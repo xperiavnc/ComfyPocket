@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -129,7 +130,8 @@ fun ControlWorkflowHeaderCard(
                     // Cloud: text-only 「云端」(saved workflows of this site) + 「同步」(pull from RunningHub); no file import.
                     Button(
                         onClick = onLocalClick,
-                        modifier = Modifier.weight(1f).height(PocketTokens.ControlHeight),
+                        modifier = Modifier.weight(1f).heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                        insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin,
                         cornerRadius = pillRadius,
                         colors = ButtonDefaults.buttonColors()
     ) {
@@ -138,7 +140,8 @@ fun ControlWorkflowHeaderCard(
                     if (onCloudSyncClick != null) {
                         Button(
                             onClick = onCloudSyncClick,
-                            modifier = Modifier.weight(1f).height(PocketTokens.ControlHeight),
+                            modifier = Modifier.weight(1f).heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                            insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin,
                             cornerRadius = pillRadius,
                             colors = ButtonDefaults.buttonColors()
     ) {
@@ -148,7 +151,8 @@ fun ControlWorkflowHeaderCard(
                 } else {
                     Button(
                         onClick = onLocalClick,
-                        modifier = Modifier.weight(1f).height(PocketTokens.ControlHeight),
+                        modifier = Modifier.weight(1f).heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                        insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin,
                         cornerRadius = pillRadius,
                         colors = ButtonDefaults.buttonColors()
     ) {
@@ -158,7 +162,8 @@ fun ControlWorkflowHeaderCard(
                     }
                     Button(
                         onClick = onImportClick,
-                        modifier = Modifier.weight(1f).height(PocketTokens.ControlHeight),
+                        modifier = Modifier.weight(1f).heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                        insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin,
                         cornerRadius = pillRadius,
                         colors = ButtonDefaults.buttonColors()
     ) {

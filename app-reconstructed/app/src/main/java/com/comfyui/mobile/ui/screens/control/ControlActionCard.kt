@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -144,7 +145,8 @@ fun ControlRunCard(
                     onClick = { haptics.tick(); onStopClick() },
                     modifier = Modifier
                         .weight(1f)
-                        .height(PocketTokens.ControlHeight),
+                        .heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                        insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin,
                     cornerRadius = PocketTokens.Radius.Medium,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.error.copy(alpha = 0.12f),
@@ -159,7 +161,8 @@ fun ControlRunCard(
                     onClick = { haptics.confirm(); onSaveClick() },
                     modifier = Modifier
                         .weight(1f)
-                        .height(PocketTokens.ControlHeight),
+                        .heightIn(min = com.comfyui.mobile.ui.designsystem.PocketTokens.ControlHeight),
+                        insideMargin = com.comfyui.mobile.ui.designsystem.PocketTokens.ButtonMargin,
                     cornerRadius = PocketTokens.Radius.Medium,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.surfaceContainerHigh,

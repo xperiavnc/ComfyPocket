@@ -27,7 +27,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PageSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.geometry.Size
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -62,6 +67,17 @@ import top.yukonga.miuix.kmp.icon.extended.Report
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /**
+ * Page width for the preview pager. Unknown or wide-ish images fill the card (fit + ambient
+ * blur); clearly portrait images get a page exactly as wide as the image at full height so
+ * the card shows the picture plus its neighbours instead of two blurred bars.
+ */
+internal fun previewPageWidth(maxWidth: Dp, maxHeight: Dp, aspect: Float?): Dp {
+    if (aspect == null || !aspect.isFinite() || aspect <= 0f || aspect >= 0.9f) return maxWidth
+    val w = maxHeight * aspect.coerceAtLeast(0.45f)
+    return if (w < maxWidth * 0.8f) w else maxWidth
+}
+
+/**
  * Agent image preview — fitted image over a blurred ambient copy of itself, so any aspect
  * ratio shows completely (portraits are no longer cropped into a strip). Busy phases blur
  * the image itself and float one status block on top.
@@ -92,6 +108,8 @@ fun AgentImagePreviewCard(
         if (status.showOverlay) heldOverlayStatus = status
     }
     val canOpenImage = mediaList.isNotEmpty() && !overlayOn
+    // Width / height of loaded images, keyed by URL; drives the portrait carousel layout.
+    val aspects = remember { mutableStateMapOf<String, Float>() }
     // Blur the picture itself while busy; a blurred scrim over a sharp image only looks grey.
     val imageBlur by animateDpAsState(if (overlayOn) 18.dp else 0.dp, tween(260), label = "preview_blur")
 
@@ -113,10 +131,18 @@ fun AgentImagePreviewCard(
             .clip(RoundedCornerShape(PreviewCorner))
             .background(cardColors.color)
     ) {
-            if (mediaList.isNotEmpty()) {
+            if (mediaList.isNotEmpty()) BoxWithConstraints(Modifier.fillMaxSize()) {
+                // Portrait sets (e.g. 9:16) become a centred carousel: each page is as wide as the
+                // image at full height, neighbours peek in at the sides, no blurred letterbox bars.
+                val leadAspect = aspects[mediaList.firstOrNull()?.let(previewUrl).orEmpty()]
+                val pageWidth = previewPageWidth(maxWidth, maxHeight, leadAspect)
+                val carousel = pageWidth < maxWidth
                 HorizontalPager(
                     state = pagerState,
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier.fillMaxSize(),
+                    pageSize = if (carousel) PageSize.Fixed(pageWidth) else PageSize.Fill,
+                    contentPadding = PaddingValues(horizontal = if (carousel) (maxWidth - pageWidth) / 2 else 0.dp),
+                    pageSpacing = if (carousel) PocketTokens.Space.XS else 0.dp
     ) { page ->
                     val media = mediaList.getOrNull(page)
                     if (media != null) {
@@ -133,13 +159,17 @@ fun AgentImagePreviewCard(
                                     style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                             }
                         } else {
+                            val current = page == pagerState.currentPage
+                            val dim by animateFloatAsState(if (!carousel || current) 1f else 0.55f,
+                                tween(200), label = "preview_page_dim")
                             Box(
-                                Modifier.fillMaxSize().then(
-                                    if (canOpenImage) Modifier.clickable { onImageClick(page) } else Modifier
-                                )
+                                Modifier.fillMaxSize()
+                                    .then(if (carousel) Modifier.clip(PocketTokens.Shape.Large) else Modifier)
+                                    .graphicsLayer { alpha = dim }
+                                    .then(if (canOpenImage) Modifier.clickable { onImageClick(page) } else Modifier)
                             ) {
-                                // Ambient fill for letterbox areas: same image, cropped, heavily blurred and dimmed.
-                                AsyncImage(
+                                // Ambient fill for letterbox areas (landscape / mixed sets only).
+                                if (!carousel) AsyncImage(
                                     model = url,
                                     contentDescription = null,
                                     modifier = Modifier.fillMaxSize().blur(28.dp).alpha(0.55f),
@@ -149,7 +179,11 @@ fun AgentImagePreviewCard(
                                     model = url,
                                     contentDescription = if (page == 0) "最新生成" else "历史生成",
                                     modifier = Modifier.fillMaxSize().blur(imageBlur),
-                                    contentScale = ContentScale.Fit
+                                    contentScale = if (carousel) ContentScale.Crop else ContentScale.Fit,
+                                    onSuccess = { s ->
+                                        val size = s.painter.intrinsicSize
+                                        if (size != Size.Unspecified && size.height > 0f) aspects[url] = size.width / size.height
+                                    }
                                 )
                             }
                         }
@@ -371,9 +405,11 @@ private fun defaultTitle(phase: AgentCardPhase): String = when (phase) {
 @Composable
 internal fun AgentStatusProgressBar(
     progress: Float?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trackColor: Color? = null
     ) {
     val scheme = MiuixTheme.colorScheme
+    val track = trackColor ?: scheme.surface.copy(alpha = 0.35f)
     val h = 4.dp
     if (progress != null) {
         LinearProgressIndicator(
@@ -383,7 +419,7 @@ internal fun AgentStatusProgressBar(
                 .clip(PocketTokens.Shape.Pill),
             colors = ProgressIndicatorDefaults.progressIndicatorColors(
                 foregroundColor = scheme.primary,
-                backgroundColor = scheme.surface.copy(alpha = 0.35f)
+                backgroundColor = track
     )
     )
     } else {
@@ -402,7 +438,7 @@ internal fun AgentStatusProgressBar(
             modifier = modifier
                 .height(h)
                 .clip(PocketTokens.Shape.Pill)
-                .background(scheme.surface.copy(alpha = 0.35f))
+                .background(track)
     ) {
             val travel = (maxWidth * 0.66f).coerceAtLeast(0.dp)
             Box(
