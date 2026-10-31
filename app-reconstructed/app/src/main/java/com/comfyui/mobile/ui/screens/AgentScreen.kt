@@ -318,8 +318,9 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         briefComplete = false
     }
 
-    val lastAssistantError = messages.lastOrNull { it.role == "assistant" && !it.errorMessage.isNullOrBlank() }
-        ?.errorMessage
+    // Only the newest assistant turn decides the badge; an older failed turn must not stick to later successes.
+    val lastAssistantError = messages.lastOrNull { it.role == "assistant" }
+        ?.errorMessage?.takeIf { it.isNotBlank() }
     // Bridge the busy→complete edge in the same frame (wasImageBusy still true before SideEffect).
     val effectiveBriefComplete = !agentImageBusy &&
         displayMediaList.isNotEmpty() &&

@@ -821,7 +821,9 @@ object MainViewModelAgent {
             name = "新配置",
             baseUrl = "https://api.deepseek.com/v1",
             apiKey = "",
-            model = "deepseek-v4.1-flash"
+            model = "deepseek-v4.1-flash",
+            // New profiles start with low effort; endpoints that reject the field fall back automatically.
+            reasoningEffort = com.comfyui.mobile.agent.AgentReasoningEffort.LOW.wireValue
         )
         val list = vm._llmProfiles.value + newProfile
         persistLlmProfiles(vm, list)

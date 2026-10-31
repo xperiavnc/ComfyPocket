@@ -3247,7 +3247,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                     lastFailDetail = repository.lastQueuePromptError ?: "null pid（无错误详情）"
                 }
                 if (!pid.isNullOrBlank()) {
-                    agentWorkspace.confirm(link, pid, localId)
+                    // The server already accepted the task: bookkeeping trouble must not turn it into a failure.
+                    try {
+                        agentWorkspace.confirm(link, pid, localId)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        addLog("Agent 任务已提交，但会话记录确认失败 id=$pid: ${e.message}", LogType.WARNING)
+                    }
                     withContext(kotlinx.coroutines.NonCancellable) {
                         if (localId != null) taskStore.update(localId) { it.copy(remoteId = pid,
                             state = com.comfyui.mobile.backend.TaskState.QUEUED.name) }

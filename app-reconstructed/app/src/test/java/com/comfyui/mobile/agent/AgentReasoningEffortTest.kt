@@ -19,6 +19,21 @@ class AgentReasoningEffortTest {
         assertNull(AgentReasoningEffort.DEFAULT.wireValue)
     }
 
+    @Test fun decisionStepNeverReasonsAboveLow() {
+        assertEquals(AgentReasoningEffort.LOW, AgentReasoningEffort.forDecision(AgentReasoningEffort.DEFAULT))
+        assertEquals(AgentReasoningEffort.LOW, AgentReasoningEffort.forDecision(AgentReasoningEffort.MAX))
+        assertEquals(AgentReasoningEffort.NONE, AgentReasoningEffort.forDecision(AgentReasoningEffort.NONE))
+        assertEquals(AgentReasoningEffort.MINIMAL, AgentReasoningEffort.forDecision(AgentReasoningEffort.MINIMAL))
+    }
+
+    @Test fun onlyReasoningParameterErrorsTriggerTheEffortFallback() {
+        assertTrue(AgentReasoningEffort.rejectedBy(400, "Unrecognized request argument supplied: reasoning_effort"))
+        assertTrue(AgentReasoningEffort.rejectedBy(422, "reasoning_effort: value must be one of high, medium"))
+        assertFalse(AgentReasoningEffort.rejectedBy(401, "reasoning_effort unsupported"))
+        assertFalse(AgentReasoningEffort.rejectedBy(400, "tools schema invalid"))
+        assertFalse(AgentReasoningEffort.rejectedBy(400, null))
+    }
+
     @Test fun eachProfileRoundTripsWithoutSharingTier() {
         val gson = Gson()
         val profiles = listOf(LlmProfile(id = "one", reasoningEffort = "max"), LlmProfile(id = "two", reasoningEffort = "xhigh"))

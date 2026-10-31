@@ -63,7 +63,7 @@ object AgentInteractionProtocol {
     val decisionTools = listOf(askTool, continueTool)
 
     /** Users asked for questions rather than silent guesses whenever instructions disagree. */
-    const val CONFLICT_CHECK = "【冲突必问】出现下列任一情况就调用 ask_user_question，不要自行取舍：本轮要求与导入规则、角色档案、已登记服装、画风/辅助参数或上一轮提示词相矛盾；同一句里的要求互相冲突；指代不清（哪个角色、哪套衣服、改哪一张）；缺少会明显改变画面的关键信息。每题给 2–4 个具体选项并说明区别，一次最多 4 题。只有用户明确说“你决定/随便/按默认”或差异无关紧要时才 continue_task。"
+    const val CONFLICT_CHECK = "【拿不准就问】这一步只做快速判断，不要展开推理或预写提示词。本轮要求与规则、角色档案、服装或上一轮明显矛盾，指代不清，或缺少会明显改变画面的信息时，直接调用 ask_user_question（每题 2–4 个选项，最多 4 题），不要反复权衡去猜；没有这类问题就立即 continue_task。用户说过“你决定/随便/按默认”或差异无关紧要时直接继续。"
 
     /** The decision step is appended to the shared transcript, so its whole text is extra input. */
     @Suppress("UNUSED_PARAMETER")

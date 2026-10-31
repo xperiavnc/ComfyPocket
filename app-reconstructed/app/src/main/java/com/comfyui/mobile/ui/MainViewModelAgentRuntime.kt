@@ -55,6 +55,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
     private val session get() = vm.agentSession
     private val tools = AgentTools()
 
+    /** Endpoints (baseUrl|model) that rejected reasoning_effort; later calls omit the field. */
+    private val effortRejected = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
     fun stop(reason: String = "已停止", invalidateContext: Boolean = false) {
         val submitting = session.state.value.turn?.phase == AgentPhase.SUBMITTING
         val turn = session.stop(reason, invalidateContext) ?: return
@@ -361,9 +364,12 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             val started = System.nanoTime()
             var firstToken = 0L
             var lastLive = 0L
-            val output = if (streaming) vm.llmClient.chatCompletionsStream(
+            val effortKey = "${settings.baseUrl.trim()}|${settings.model.trim()}"
+            val wanted = if (request.deciding) AgentReasoningEffort.forDecision(settings.effort) else settings.effort
+            val effort = if (effortKey in effortRejected) AgentReasoningEffort.DEFAULT else wanted
+            suspend fun call(effort: AgentReasoningEffort) = if (streaming) vm.llmClient.chatCompletionsStream(
                 settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
-                requestId = requestId, reasoningEffort = settings.effort,
+                requestId = requestId, reasoningEffort = effort,
                 generationLimits = settings.generationLimits, tools = request.tools, toolChoice = request.toolChoice
             ) { _, _, reasoning, content ->
                 val now = System.nanoTime()
@@ -383,8 +389,17 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             }.getOrThrow()
             else vm.llmClient.chatCompletions(
                 settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
-                requestId = requestId, reasoningEffort = settings.effort, generationLimits = settings.generationLimits,
+                requestId = requestId, reasoningEffort = effort, generationLimits = settings.generationLimits,
                 tools = request.tools, toolChoice = request.toolChoice).getOrThrow()
+            val output = try {
+                call(effort)
+            } catch (e: LlmException) {
+                if (effort.wireValue == null || !AgentReasoningEffort.rejectedBy(e.httpCode, e.technicalDetail)) throw e
+                // Endpoint does not accept reasoning_effort: remember and resend without the field.
+                effortRejected += effortKey
+                vm.addLog("Agent：服务不支持推理强度参数，已改为跟随模型", LogType.INFO)
+                call(AgentReasoningEffort.DEFAULT)
+            }
             vm._agentLlmStats.value = AgentLlmStats.from(settings.model, output, promptEstimate, contextLimit)
             output
         }
