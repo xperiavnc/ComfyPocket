@@ -3,6 +3,7 @@ package com.comfyui.mobile.ui.screens
 import android.content.Intent
 import com.comfyui.mobile.ui.designsystem.PocketCardColors
 import com.comfyui.mobile.ui.designsystem.PocketTokens
+import com.comfyui.mobile.ui.designsystem.PocketSettingsGroup
 import android.os.Build
 import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import kotlinx.coroutines.Dispatchers
@@ -281,7 +282,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             Spacer(modifier = Modifier.height(4.dp))
 
             // 1. 服务与连接管理
-            Card {
+            PocketSettingsGroup("连接") {
                 ArrowPreference(
                     title = "服务器管理",
                     summary = serverSummary,
@@ -298,7 +299,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             }
 
             // 2. 界面与外观
-            Card {
+            PocketSettingsGroup("外观") {
                 ArrowPreference(
                     title = "主题与外观",
                     summary = themeSummary,
@@ -315,7 +316,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             }
 
             // 3. 智能助手 Agent
-            Card {
+            PocketSettingsGroup("智能助手") {
                 ArrowPreference(
                     title = "Agent 设置",
                     summary = agentSummary,
@@ -348,7 +349,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             }
 
             // 4. 偏好与存储
-            Card {
+            PocketSettingsGroup("偏好与存储") {
                 SwitchPreference(
                     title = "自动保存",
                     summary = "完成后写入相册",
@@ -394,7 +395,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             }
 
             // 5. 备份与数据管理
-            Card {
+            PocketSettingsGroup("备份与数据") {
                 ArrowPreference(
                     title = "导出备份",
                     summary = ".cui.bak",
@@ -429,7 +430,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             }
 
             // 5. 诊断与运行日志
-            Card {
+            PocketSettingsGroup("诊断") {
                 ArrowPreference(
                     title = "运行日志",
                     summary = if (consoleLogs.isNotEmpty()) "${consoleLogs.size} 条日志" else "查看运行日志",
@@ -443,9 +444,6 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                     },
                     onClick = { navController.navigate("console") }
     )
-            }
-
-            Card {
                 ArrowPreference(
                     title = "导出返回/退出诊断",
                     summary = if (exportingDiagnostics) "正在导出…" else "返回路径、崩溃类型与系统退出原因，不含 Key",
@@ -459,7 +457,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
             }
 
             // 6. 关于应用
-            Card {
+            PocketSettingsGroup(null) {
                 ArrowPreference(
                     title = "关于应用",
                     summary = if (versionName.contains("beta", ignoreCase = true)) "v$versionName" else "v$versionName · Beta",

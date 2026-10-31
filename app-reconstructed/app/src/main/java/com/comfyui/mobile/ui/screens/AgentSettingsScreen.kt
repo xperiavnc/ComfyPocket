@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketSectionHeader
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.activity.result.contract.ActivityResultContracts
@@ -133,7 +135,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = PocketTokens.PagePadding)
                 .padding(
                     bottom = 28.dp + floatingNavClearance
     ),
@@ -141,8 +143,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     ) {
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text("模型服务", Modifier.padding(start = 4.dp, top = 8.dp),
-                style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+            PocketSectionHeader("模型服务")
 
             // Profile selection stays visible; connection details and generation parameters expand separately.
             Card(
@@ -343,8 +344,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             com.comfyui.mobile.ui.screens.agent.AgentRuleFilesPanel(
                 files = ruleFiles, importing = importingRules,
                 onImport = viewModel::importAgentRules, onRemove = viewModel::removeAgentRules)
-            Text("可选资源", Modifier.padding(start = 4.dp, top = 8.dp),
-                style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+            PocketSectionHeader("可选资源")
             com.comfyui.mobile.ui.screens.agent.AgentLocalTagSettings(
                 settings = tagSettings, libraryState = libraryState, search = viewModel::searchLocalTags,
                 onImport = { importLibrary.launch(arrayOf("application/zip", "application/x-zip-compressed", "application/octet-stream")) },

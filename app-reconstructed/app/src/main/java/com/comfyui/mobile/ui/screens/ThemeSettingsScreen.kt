@@ -2,6 +2,7 @@ package com.comfyui.mobile.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import com.comfyui.mobile.ui.designsystem.PocketTokens
+import com.comfyui.mobile.ui.designsystem.PocketSettingsGroup
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -242,7 +243,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             }
 
             // 3. Visual effects / notifications
-            Card {
+            PocketSettingsGroup("通知") {
                 SwitchPreference(
                     title = "通知显示百分比",
                     summary = "通知栏显示进度百分比",
@@ -260,7 +261,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
             }
 
             // 4. UI scale
-            Card {
+            PocketSettingsGroup("显示") {
                 SliderPreference(
                     value = scaleDraft,
                     onValueChange = { scaleDraft = (it * 100f).roundToInt() / 100f },
