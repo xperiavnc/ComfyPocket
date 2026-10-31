@@ -158,53 +158,41 @@ fun AgentChatPanel(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
-            toolbar?.invoke()
+            val canSend = inputEnabled && !busy && (input.text.isNotBlank() || attachments.isNotEmpty())
+            // One composer surface: attachments + field on top, a single control row underneath.
+            // Replaces the old separate toolbar row + input row so the bottom reads as one block.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("agent-composer")
+                    .clip(PocketTokens.Shape.XLarge)
+                    .background(scheme.surface)
+                    .padding(PocketTokens.Space.XS)
+    ) {
             if (attachments.isNotEmpty()) {
                 AgentAttachmentStrip(
                     attachments = attachments,
                     onRemove = { id -> haptics.tick(); onRemoveAttachment(id) },
-                    modifier = Modifier.padding(bottom = 6.dp)
+                    modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 2.dp)
     )
             }
             if (attachMenuOpen && !busy && inputEnabled) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(start = 4.dp, top = 4.dp, bottom = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
                     AttachMenuChip("图片") { attachMenuOpen = false; haptics.tick(); onPickImages() }
                     AttachMenuChip("文档") { attachMenuOpen = false; haptics.tick(); onPickFiles() }
                 }
             }
-            val canSend = inputEnabled && !busy && (input.text.isNotBlank() || attachments.isNotEmpty())
-            // Bottom-aligned so the buttons stay put while the field grows to 5 lines.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-                val plusRotation by animateFloatAsState(if (attachMenuOpen) 45f else 0f, label = "attachPlus")
-                ChatRoundButton(
-                    filled = false,
-                    enabled = inputEnabled && !busy,
-                    onClick = { haptics.tick(); attachMenuOpen = !attachMenuOpen }
-    ) { tint ->
-                    Icon(
-                        MiuixIcons.Add,
-                        contentDescription = if (attachMenuOpen) "收起附件菜单" else "添加附件",
-                        modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = plusRotation },
-                        tint = tint
-    )
-                }
                 BasicTextField(
                     value = input,
                     onValueChange = onInputChange,
                     modifier = Modifier
-                        .weight(1f)
+                        .fillMaxWidth()
                         .testTag("agent-chat-input")
                         .heightIn(min = ChatButtonSize)
-                        .clip(RoundedCornerShape(ChatButtonSize / 2))
-                        .background(scheme.surface)
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .padding(horizontal = PocketTokens.Space.S, vertical = 10.dp)
                         .bringIntoViewRequester(bringIntoViewRequester)
                         .onFocusEvent { fs ->
                             if (fs.isFocused) {
@@ -230,6 +218,25 @@ fun AgentChatPanel(
                         }
                     }
     )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(PocketTokens.Space.XS)
+    ) {
+                val plusRotation by animateFloatAsState(if (attachMenuOpen) 45f else 0f, label = "attachPlus")
+                ChatRoundButton(
+                    filled = false,
+                    enabled = inputEnabled && !busy,
+                    onClick = { haptics.tick(); attachMenuOpen = !attachMenuOpen }
+    ) { tint ->
+                    Icon(
+                        MiuixIcons.Add,
+                        contentDescription = if (attachMenuOpen) "收起附件菜单" else "添加附件",
+                        modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = plusRotation },
+                        tint = tint
+    )
+                }
+                Box(modifier = Modifier.weight(1f)) { toolbar?.invoke() }
                 ChatRoundButton(
                     filled = true,
                     enabled = busy || canSend,
@@ -252,11 +259,14 @@ fun AgentChatPanel(
     )
                 }
             }
+            }
         }
     }
 }
 
 private val ChatButtonSize = 40.dp
+// Buttons in the composer control row match the toolbar capsules (36dp).
+private val ComposerButtonSize = PocketTokens.CompactControlHeight
 private val PanelCorner = 28.dp
 private val PanelPadding = 12.dp
 /**
@@ -272,13 +282,14 @@ private fun ChatRoundButton(
     content: @Composable (tint: Color) -> Unit
 ) {
     // Surface disc one step off the chat card so it reads in light and dark.
-    PocketIconButton(onClick = onClick, filled = filled, enabled = enabled, size = ChatButtonSize,
-        idleColor = MiuixTheme.colorScheme.surface, content = content)
+    // Sits on the composer's surface, so idle discs step up to the toolbar capsule colour.
+    PocketIconButton(onClick = onClick, filled = filled, enabled = enabled, size = ComposerButtonSize,
+        idleColor = MiuixTheme.colorScheme.surfaceContainerHighest, content = content)
 }
 
 @Composable
 private fun AttachMenuChip(label: String, onClick: () -> Unit) {
-    PocketPill(label = label, idleColor = MiuixTheme.colorScheme.surface, onClick = onClick)
+    PocketPill(label = label, idleColor = MiuixTheme.colorScheme.surfaceContainerHighest, onClick = onClick)
 }
 
 private val AgentStarters = listOf(

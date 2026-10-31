@@ -100,12 +100,9 @@ import com.comfyui.mobile.ui.LocalFloatingNavClearance
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 import com.comfyui.mobile.ui.components.DialogFormColumn
 
-private val ControlCardRadius = 28.dp
-private val KsuInnerRadius = 22.dp
-private val ControlCardShape = RoundedCornerShape(ControlCardRadius)
-private val KsuInnerShape = RoundedCornerShape(KsuInnerRadius)
+private val ControlCardRadius = PocketTokens.Radius.XLarge
 private val PillShape = PocketTokens.Shape.Pill
-private val PillCornerRadius = 999.dp
+private val PillCornerRadius = PocketTokens.Radius.XLarge * 2
 
 
 @Composable
@@ -1030,7 +1027,7 @@ fun ControlScreen(viewModel: ControlUi) {
             cornerRadius = ControlCardRadius,
             colors = cardColors
     ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(modifier = Modifier.padding(PocketTokens.Space.M)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1084,7 +1081,6 @@ fun ControlScreen(viewModel: ControlUi) {
                 }
             }
         }
-    Spacer(modifier = Modifier.height(16.dp))
 }
 
         // --- Control Buttons ---

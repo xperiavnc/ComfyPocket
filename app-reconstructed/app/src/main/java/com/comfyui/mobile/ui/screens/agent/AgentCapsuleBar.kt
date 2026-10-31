@@ -56,7 +56,7 @@ fun AgentCapsuleBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = sidePad, vertical = 4.dp),
+            .padding(horizontal = sidePad),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
@@ -108,7 +108,8 @@ fun AgentCapsuleBar(
 
 // One control height for the whole toolbar row (mode switch, model pill, tune button).
 private val CapsuleHeight = PocketTokens.CompactControlHeight
-private val SegmentWidth = 60.dp
+// Narrow enough that [+] mode · model · tune … send fit one 360dp-wide composer row.
+private val SegmentWidth = 52.dp
 
 /** Sliding segmented switch: tap a side or swipe horizontally. */
 @Composable

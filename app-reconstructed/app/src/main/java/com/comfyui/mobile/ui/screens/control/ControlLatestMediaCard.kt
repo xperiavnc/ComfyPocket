@@ -51,7 +51,7 @@ fun ControlLatestMediaCard(
         pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
+        Column(modifier = Modifier.padding(PocketTokens.Space.M)) {
             Text(
                 "本次生成 · ${latestGenerationList.size}",
                 style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),

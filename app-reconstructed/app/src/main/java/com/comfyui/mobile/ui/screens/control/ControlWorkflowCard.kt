@@ -58,7 +58,7 @@ fun ControlWorkflowHeaderCard(
         showIndication = false
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier.padding(PocketTokens.Space.M),
             verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
             Text(
