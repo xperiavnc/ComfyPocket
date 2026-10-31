@@ -79,6 +79,7 @@ fun AgentWorkspaceLayout(
     onImageClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
     headerTrailing: (@Composable () -> Unit)? = null,
+    focusedIndex: Int = 0,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
@@ -124,7 +125,7 @@ fun AgentWorkspaceLayout(
                 onExpandedChange = { next ->
                     expanded = next
                     if (next && keyboardVisible) { focus.clearFocus(); keyboard?.hide() }
-                }, onImageClick = onImageClick
+                }, onImageClick = onImageClick, focusedIndex = focusedIndex
             )
             content()
         }
@@ -144,10 +145,18 @@ fun AgentWorkbench(
     previewHeight: Dp,
     onExpandedChange: (Boolean) -> Unit,
     onImageClick: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    focusedIndex: Int = 0
 ) {
     val scheme = MiuixTheme.colorScheme
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { mediaList.size })
+    // Follow the full-screen viewer: returning from it shows the image the user ended on.
+    LaunchedEffect(focusedIndex) {
+        if (mediaList.isNotEmpty()) {
+            val target = focusedIndex.coerceIn(0, mediaList.lastIndex)
+            if (pagerState.currentPage != target) pagerState.scrollToPage(target)
+        }
+    }
     LaunchedEffect(mediaList.firstOrNull()?.let { "${it.subfolder}|${it.filename}|${it.timestamp}" }) {
         if (mediaList.isNotEmpty() && pagerState.currentPage != 0) pagerState.scrollToPage(0)
     }

@@ -72,4 +72,36 @@ class AgentRuleFilesTest {
             assertEquals(original, store.load())
         }
     }
+
+    @Test fun multipleFilesStayInTheLibraryAndSwitchingOnlyChangesTheActiveOne() {
+        val prefs = RuntimeEnvironment.getApplication().getSharedPreferences("rule-files-library", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        val store = AgentRuleFilesStore(prefs)
+        val a = AgentRuleDocument("a.txt", "RULE_A")
+        val b = AgentRuleDocument("b.md", "RULE_B")
+        // A pre-library save (active file only) still shows up as one library entry.
+        val legacy = AgentRuleFiles(drawing = a)
+        assertEquals(listOf(a), legacy.library(AgentRuleKind.DRAWING))
+        var files = legacy.replace(AgentRuleKind.DRAWING, b)
+        assertEquals(b, files.drawing)
+        assertEquals(listOf("b.md", "a.txt"), files.library(AgentRuleKind.DRAWING).map { it.name })
+        files = files.select(AgentRuleKind.DRAWING, "a.txt")
+        assertEquals(a, files.drawing)
+        files = files.select(AgentRuleKind.DRAWING, null)
+        assertNull(files.drawing)
+        assertEquals(2, files.library(AgentRuleKind.DRAWING).size)
+        store.save(files)
+        assertEquals(files, AgentRuleFilesStore(prefs).load())
+        // Re-importing the same name replaces its content instead of duplicating it.
+        files = files.replace(AgentRuleKind.DRAWING, AgentRuleDocument("a.txt", "RULE_A2"))
+        assertEquals(2, files.library(AgentRuleKind.DRAWING).size)
+        assertEquals("RULE_A2", files.drawing!!.content)
+        // Removing deletes the active file; removing the last one returns to the empty state.
+        files = files.replace(AgentRuleKind.DRAWING, null)
+        assertEquals(listOf("b.md"), files.library(AgentRuleKind.DRAWING).map { it.name })
+        files = files.select(AgentRuleKind.DRAWING, "b.md").replace(AgentRuleKind.DRAWING, null)
+        assertEquals(AgentRuleFiles(), files)
+        assertTrue(AgentPromptPolicy.system("", "RULE_B", emptyList()).contains(AgentPromptPolicy.RULE_PRIORITY))
+        assertFalse(AgentPromptPolicy.system("", "", emptyList()).contains(AgentPromptPolicy.RULE_PRIORITY))
+    }
 }

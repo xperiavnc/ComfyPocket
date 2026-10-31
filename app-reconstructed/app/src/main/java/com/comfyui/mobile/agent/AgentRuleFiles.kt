@@ -14,10 +14,53 @@ enum class AgentRuleKind(val title: String) {
 
 /** A durable copy of the imported text; no dependency on the external document URI. */
 data class AgentRuleDocument(val name: String, val content: String, val importedAt: Long = System.currentTimeMillis())
-data class AgentRuleFiles(val dialogue: AgentRuleDocument? = null, val drawing: AgentRuleDocument? = null) {
+/**
+ * [dialogue]/[drawing] are the active files sent to the model. The libraries keep every imported
+ * file so the user can switch between them; null (not empty) when unused so old JSON and
+ * `AgentRuleFiles()` compare equal after a round trip through Gson.
+ */
+data class AgentRuleFiles(
+    val dialogue: AgentRuleDocument? = null,
+    val drawing: AgentRuleDocument? = null,
+    val dialogueLibrary: List<AgentRuleDocument>? = null,
+    val drawingLibrary: List<AgentRuleDocument>? = null
+) {
+    companion object { const val MAX_LIBRARY = 8 }
+
     fun document(kind: AgentRuleKind) = if (kind == AgentRuleKind.DIALOGUE) dialogue else drawing
-    fun replace(kind: AgentRuleKind, document: AgentRuleDocument?) =
-        if (kind == AgentRuleKind.DIALOGUE) copy(dialogue = document) else copy(drawing = document)
+
+    /** Every file of this kind, the active one included even if it predates the library. */
+    fun library(kind: AgentRuleKind): List<AgentRuleDocument> {
+        val stored = (if (kind == AgentRuleKind.DIALOGUE) dialogueLibrary else drawingLibrary).orEmpty()
+        val active = document(kind) ?: return stored
+        return if (stored.any { it.name == active.name }) stored.map { if (it.name == active.name) active else it }
+            else listOf(active) + stored
+    }
+
+    private fun with(kind: AgentRuleKind, active: AgentRuleDocument?, library: List<AgentRuleDocument>): AgentRuleFiles {
+        val lib = library.takeIf { it.isNotEmpty() }
+        return if (kind == AgentRuleKind.DIALOGUE) copy(dialogue = active, dialogueLibrary = lib)
+            else copy(drawing = active, drawingLibrary = lib)
+    }
+
+    /** Non-null: add (same name replaces) and activate. Null: delete the active file from the library. */
+    fun replace(kind: AgentRuleKind, document: AgentRuleDocument?): AgentRuleFiles {
+        val current = library(kind)
+        if (document == null) {
+            val active = document(kind) ?: return this
+            return with(kind, null, current.filterNot { it.name == active.name })
+        }
+        val rest = current.filterNot { it.name == document.name }
+        require(rest.size < MAX_LIBRARY) { "每类规则最多保存 $MAX_LIBRARY 个文件，请先移除不用的" }
+        return with(kind, document, listOf(document) + rest)
+    }
+
+    /** Switch the active file; null keeps the library but sends no rule of this kind. */
+    fun select(kind: AgentRuleKind, name: String?): AgentRuleFiles {
+        val current = library(kind)
+        val target = name?.let { n -> current.firstOrNull { it.name == n } ?: error("规则文件不存在：$n") }
+        return with(kind, target, current)
+    }
 }
 
 object AgentRuleFileReader {
@@ -66,7 +109,7 @@ class AgentRuleFilesStore(private val prefs: SharedPreferences, private val gson
 
     fun save(files: AgentRuleFiles) {
         // Validate the complete replacement before changing any persisted value.
-        listOfNotNull(files.dialogue, files.drawing).forEach {
+        (AgentRuleKind.entries.flatMap { files.library(it) }).forEach {
             require(it.name.isNotBlank() && it.content.isNotBlank() &&
                 it.content.toByteArray(Charsets.UTF_8).size <= AgentRuleFileReader.MAX_BYTES) { "规则文件内容无效或过长" }
         }

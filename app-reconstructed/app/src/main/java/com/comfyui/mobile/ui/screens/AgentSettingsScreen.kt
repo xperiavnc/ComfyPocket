@@ -345,7 +345,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
 
             com.comfyui.mobile.ui.screens.agent.AgentRuleFilesPanel(
                 files = ruleFiles, importing = importingRules,
-                onImport = viewModel::importAgentRules, onRemove = viewModel::removeAgentRules)
+                onImport = viewModel::importAgentRules, onRemove = viewModel::removeAgentRules,
+                onSelect = viewModel::selectAgentRules)
             PocketSectionHeader("可选资源")
             com.comfyui.mobile.ui.screens.agent.AgentLocalTagSettings(
                 settings = tagSettings, libraryState = libraryState, search = viewModel::searchLocalTags,

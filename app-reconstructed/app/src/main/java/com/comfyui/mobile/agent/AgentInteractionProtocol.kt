@@ -71,6 +71,7 @@ object AgentInteractionProtocol {
         appendLine("本步骤选择一个工具动作：ask_user_question 提问并等待用户；continue_task 继续到正式答复或提示词编写。字段按工具定义填写。")
         appendLine("当前模式：${if (mode == AgentMode.DRAW) "绘图" else "聊天，不执行出图"}。本步骤不输出最终 prompt/negative_prompt。")
         if (persona.isNotBlank()) {
+            appendLine(AgentPromptPolicy.RULE_PRIORITY)
             appendLine("【用户导入的对话规则】")
             appendLine(persona)
         }

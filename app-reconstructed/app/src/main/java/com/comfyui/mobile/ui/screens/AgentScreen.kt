@@ -357,6 +357,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                     label = currentLlmProfile?.displayName ?: llmModel.ifBlank { "大模型" }, onClick = { showModelSwitchDialog = true })
             },
             onImageClick = { index -> fullScreenMediaIndex = index; showImageViewer = true },
+            focusedIndex = fullScreenMediaIndex,
             modifier = Modifier
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
@@ -770,6 +771,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             mediaList = displayMediaList,
             viewModel = viewModel,
             isLocalGallery = false,
+            onPageChange = { fullScreenMediaIndex = it },
             onDismiss = { showImageViewer = false }
     )
     }

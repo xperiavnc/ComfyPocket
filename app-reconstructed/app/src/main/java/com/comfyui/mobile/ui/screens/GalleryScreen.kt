@@ -791,9 +791,14 @@ fun FullScreenPreview(
     viewModel: MediaPreviewHost,
     isLocalGallery: Boolean,
     onShare: ((MediaOutput) -> Unit)? = null,
+    onPageChange: ((Int) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val pagerState = rememberPagerState(initialPage = initialIndex, pageCount = { mediaList.size })
+    // Lets the caller keep its own thumbnail/pager on the image the user swiped to.
+    if (onPageChange != null) LaunchedEffect(pagerState) {
+        androidx.compose.runtime.snapshotFlow { pagerState.settledPage }.collect { onPageChange(it) }
+    }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isSharing by remember { mutableStateOf(false) }

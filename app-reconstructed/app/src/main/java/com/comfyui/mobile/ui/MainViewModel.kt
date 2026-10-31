@@ -2860,6 +2860,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         agentRules.replace(kind, null)
         showToast("已移除${kind.title}，下一轮生效")
     }
+    fun selectAgentRules(kind: com.comfyui.mobile.agent.AgentRuleKind, name: String?) {
+        runCatching { agentRules.select(kind, name) }
+            .onSuccess { showToast(if (name == null) "${kind.title}已停用，下一轮生效" else "已切换${kind.title}：$name，下一轮生效") }
+            .onFailure { showToast(it.message ?: "切换失败") }
+    }
 
     internal val _agentSystemPrompt = MutableStateFlow(_agentRuleFiles.value.dialogue?.content.orEmpty())
     val agentSystemPrompt = _agentSystemPrompt.asStateFlow()

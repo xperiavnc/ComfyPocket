@@ -44,6 +44,9 @@ internal class MainViewModelAgentRules(private val vm: MainViewModel) {
     fun replace(kind: AgentRuleKind, document: AgentRuleDocument?) =
         apply(vm._agentRuleFiles.value.replace(kind, document), setOf(kind))
 
+    fun select(kind: AgentRuleKind, name: String?) =
+        apply(vm._agentRuleFiles.value.select(kind, name), setOf(kind))
+
     fun restore(files: AgentRuleFiles) = apply(files, AgentRuleKind.entries.toSet())
 
     private fun apply(files: AgentRuleFiles, changed: Set<AgentRuleKind>) {
