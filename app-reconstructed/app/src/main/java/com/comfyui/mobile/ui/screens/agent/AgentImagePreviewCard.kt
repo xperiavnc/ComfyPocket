@@ -74,6 +74,8 @@ internal fun previewIsPortrait(aspect: Float?): Boolean =
 
 /** Portrait crops keep the upper third in view, where the subject's face usually is. */
 private val PortraitFocus = androidx.compose.ui.BiasAlignment(0f, -0.55f)
+// Long-edge cap for the preview bitmap; ComfyUI outputs are usually 1–2K so this is near-original.
+private const val PreviewDecodeBound = 2048
 
 /**
  * Agent image preview — fitted image over a blurred ambient copy of itself, so any aspect
@@ -181,8 +183,13 @@ fun AgentImagePreviewCard(
                                     // tiles share the URL and were being upscaled here (jagged edges).
                                     model = remember(url) {
                                         ImageRequest.Builder(context).data(url)
-                                            .memoryCacheKey("agent-preview:$url").diskCacheKey(url)
-                                            .precision(Precision.EXACT).allowHardware(true).build()
+                                            .memoryCacheKey("agent-preview-full:$url").diskCacheKey(url)
+                                            // Fixed decode bound: sizing from layout caught the card mid-expand
+                                            // (and as Fit before the aspect was known), cached a tiny bitmap
+                                            // and stretched it into staircase edges.
+                                            .size(PreviewDecodeBound, PreviewDecodeBound)
+                                            .scale(coil.size.Scale.FIT)
+                                            .precision(Precision.INEXACT).allowHardware(true).build()
                                     },
                                     filterQuality = FilterQuality.High,
                                     contentDescription = if (page == 0) "最新生成" else "历史生成",
