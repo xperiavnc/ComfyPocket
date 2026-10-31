@@ -322,7 +322,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         requestId: String, settings: AgentLlmSettings, messages: List<ChatMessageDto>,
         images: Map<Int, List<String>>, decisionSystem: String, streaming: Boolean = true,
         checkCurrent: suspend () -> Unit,
-        progress: suspend (AgentProgress) -> Unit = {}
+        progress: suspend (AgentProgress) -> Unit = {},
+        validate: ((String) -> String?)? = null
     ): AgentInteractionOutcome = AgentInteractionLoop(
         AgentInteractionModel { request, onProgress ->
             checkCurrent()
@@ -379,7 +380,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             vm.llmClient.useAutoToolChoice(settings.baseUrl, settings.model)
             vm.addLog("Agent 交互：当前服务保留原生工具，使用自动工具选择兼容协议", LogType.INFO)
         }
-    ).run(messages, decisionSystem, checkCurrent, progress)
+    ).run(messages, decisionSystem, checkCurrent, progress, validate)
 
     private fun Int?.orZero(): Int = this ?: 0
 

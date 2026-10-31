@@ -106,6 +106,20 @@ class AgentInteractionLoopTest {
         assertNull(result.output)
     }
 
+    @Test fun unreadableResultGetsOneRepairRoundThenIsReturnedAsIs() = runBlocking {
+        val broken = LlmCompletionOutput("""{"reply":"好嘞","prompt":"1girl, "wariza", closed mouth""")
+        val fixed = LlmCompletionOutput("""{"reply":"好嘞","prompt":"1girl, wariza, closed mouth"}""")
+        val validate: (String) -> String? = { if (it.endsWith("}")) null else "JSON 无法解析" }
+        val repaired = AgentInteractionLoop(Fixture(ready(), broken, fixed)).run(messages, "decision", validate = validate)
+        assertEquals(fixed.content, repaired.output!!.content)
+
+        val fixture = Fixture(ready(), broken, broken)
+        val stillBroken = AgentInteractionLoop(fixture).run(messages, "decision", validate = validate)
+        assertEquals(broken.content, stillBroken.output!!.content)
+        assertEquals(3, fixture.requests.size)
+        assertTrue(fixture.requests.last().messages.last().content!!.startsWith(AgentInteractionLoop.RESULT_REPAIR_PREFIX))
+    }
+
     @Test fun unknownActionGetsOneExplicitToolErrorAndThenTheModelCanAsk() = runBlocking {
         val fixture = Fixture(tool("invented_action", "{}"), tool(AgentInteractionProtocol.ASK, questions))
         val result = AgentInteractionLoop(fixture).run(messages, "decision")

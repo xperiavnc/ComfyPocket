@@ -40,7 +40,9 @@ class AgentInteractionLoop(
         messages: List<ChatMessageDto>,
         decisionSystem: String,
         checkCurrent: suspend () -> Unit = {},
-        onProgress: suspend (AgentProgress) -> Unit = {}
+        onProgress: suspend (AgentProgress) -> Unit = {},
+        /** Checks a plain-text result; a non-null error gets one repair round before giving up. */
+        validate: ((String) -> String?)? = null
     ): AgentInteractionOutcome {
         var textProtocol = initialTextProtocol
         var autoToolChoice = initialAutoToolChoice
@@ -171,6 +173,13 @@ class AgentInteractionLoop(
                         thinking = reasoning(decisionOutput, output), clarification = parsed.clarification,
                         action = AgentAction.ASK_USER), plan = plan)
                 if (output.content.isBlank()) throw AgentExecutionException("模型只返回了推理，尚无最终结果；本轮未提交。")
+                val invalid = if (attempt == 0) validate?.invoke(output.content) else null
+                if (invalid != null) {
+                    onProgress(AgentProgress("", "", "结果格式有误，正在让模型修正…"))
+                    transcript += ChatMessageDto("assistant", output.content)
+                    transcript += ChatMessageDto("user", RESULT_REPAIR_PREFIX + invalid + RESULT_REPAIR_RULES)
+                    continue
+                }
                 return AgentInteractionOutcome(output = output.copy(reasoning = reasoning(decisionOutput, output)), plan = plan)
             }
             try {
@@ -196,6 +205,9 @@ class AgentInteractionLoop(
 
     companion object {
         const val FALLBACK_SUMMARY = "按用户本轮原任务执行（决策动作未通过格式校验，已跳过）"
+        const val RESULT_REPAIR_PREFIX = "【结果格式修正，仅此一次】上一条结果无法解析："
+        const val RESULT_REPAIR_RULES = "。请按原任务重新输出一个完整、合法的 JSON 对象：" +
+            "字符串内的双引号写成 \\\"，不要在字符串里直接换行，不要截断，JSON 前后不要附加解释或代码块之外的文字。"
         fun explicitlyRejectsTools(error: LlmException): Boolean {
             if (error.httpCode !in listOf(400, 422, 501)) return false
             val detail = error.technicalDetail.orEmpty().lowercase()

@@ -1345,6 +1345,12 @@ object MainViewModelAgent {
                 progress = { progress ->
                     if (onAgentProgress != null) onAgentProgress(progress)
                     else onProgress?.invoke("", "", progress.reasoning, progress.content)
+                },
+                // A draw reply whose JSON can't be read used to end the turn with "未出图"; ask once for a fix.
+                validate = { content ->
+                    val check = com.comfyui.mobile.data.AgentReplyParser.parse(
+                        sanitizeThinkingContent(content), preserveNaturalLanguage = true)
+                    check.error.takeIf { it == "模型返回的 JSON 无法解析" && check.prompt.isBlank() && check.clarification == null }
                 })
             checkCurrent()
             val output = outcome.output
