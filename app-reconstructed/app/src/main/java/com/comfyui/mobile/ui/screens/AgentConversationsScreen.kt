@@ -140,7 +140,7 @@ internal fun AgentSessionDrawer(visible: Boolean, onDismiss: () -> Unit, content
         val scheme = MiuixTheme.colorScheme
         val scope = rememberCoroutineScope()
         val drag = remember { Animatable(0f) }
-        Scaffold(containerColor = Color.Transparent) {
+        DrawerPopupHost {
             Box(Modifier.fillMaxSize()) {
                 AnimatedVisibility(transition, enter = fadeIn(tween(220)), exit = fadeOut(tween(200))) {
                     // Strong enough to read as "behind" on dark themes too, so nothing looks tappable there.

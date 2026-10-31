@@ -320,6 +320,40 @@ class AgentConversationsUiTest {
         } finally { controller.pause().stop().destroy() }
     }
 
+    @Test fun dialogsOpenedFromTheDrawerRenderInTheDrawerWindowNotBehindIt() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        var created: String? = null
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(true, manageSystemBars = false) {
+                        Scaffold {
+                            TextButton("页面内容", onClick = {})
+                            AgentSessionDrawer(true, onDismiss = {}) {
+                                AgentConversationWorkspace(rows.take(3), "s0", AgentStorageStatus(AgentStorageMode.ROOM), null,
+                                    {}, {}, { created = it }, { _, _ -> }, {}, {}, {}, {}, showBack = false)
+                            }
+                        }
+                    }
+                }
+            } })
+            fun rootOf(node: androidx.compose.ui.semantics.SemanticsNode) =
+                generateSequence(node) { it.parent }.last().id
+            val drawerRoot = rootOf(compose.onNodeWithTag("agent-session-drawer", useUnmergedTree = true).fetchSemanticsNode())
+            val pageRoot = rootOf(compose.onNodeWithText("页面内容", useUnmergedTree = true).fetchSemanticsNode())
+            assertNotEquals(pageRoot, drawerRoot)
+            compose.onNodeWithContentDescription("返回 Agent").assertDoesNotExist()
+            compose.onNodeWithTag("agent-session-new").performClick()
+            compose.waitForIdle()
+            val field = compose.onNodeWithTag("agent-session-title", useUnmergedTree = true).fetchSemanticsNode()
+            assertEquals("The naming dialog must live in the drawer window", drawerRoot, rootOf(field))
+            compose.onNodeWithTag("agent-session-title").performTextReplacement("抽屉里新建")
+            compose.onNodeWithText("创建").performClick()
+            compose.waitForIdle()
+            assertEquals("抽屉里新建", created)
+        } finally { controller.pause().stop().destroy() }
+    }
+
     @Test fun rawJsonPreviewsShowOnlyTheReplyText() {
         assertEquals("已经提交生成（任务号 365aaea0）。这次", agentPreviewText(
             """{"reply": "已经提交生成（任务号 365aaea0）。这次"""))
