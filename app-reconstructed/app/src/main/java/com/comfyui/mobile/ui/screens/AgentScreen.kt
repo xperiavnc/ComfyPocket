@@ -4,7 +4,6 @@ import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.ui.screens.agent.AgentWorkspaceLayout
 import com.comfyui.mobile.ui.screens.agent.AgentActionDialog
 import com.comfyui.mobile.ui.screens.agent.agentControlFeedback
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -31,7 +30,6 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,7 +44,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -75,7 +72,6 @@ import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -84,7 +80,6 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.MediaType
@@ -432,51 +427,26 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             }
         }
 
-        AnimatedVisibility(
-            visible = showConversationDrawer,
-            enter = fadeIn(tween(180)) + slideInHorizontally(tween(240)) { -it / 4 },
-            exit = fadeOut(tween(140)) + slideOutHorizontally(tween(180)) { -it / 4 },
-            modifier = Modifier.fillMaxSize().zIndex(2f)
-        ) {
-            Box(Modifier.fillMaxSize()) {
-                Box(
-                    Modifier.fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.32f))
-                        .clickable { showConversationDrawer = false }
-                        .testTag("agent-conversation-drawer-scrim")
-                )
-                Box(
-                    Modifier
-                        .align(Alignment.CenterEnd)
-                        .fillMaxHeight()
-                        .fillMaxWidth(0.9f)
-                        .widthIn(max = 380.dp)
-                        .clip(RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp))
-                        .background(scheme.background)
-                        .testTag("agent-conversation-drawer")
-                ) {
-                    AgentConversationWorkspace(
-                        conversations = conversations,
-                        activeId = activeConversation?.id,
-                        status = storageStatus,
-                        deletion = conversationDeletion,
-                        onBack = { showConversationDrawer = false },
-                        onOpen = { id ->
-                            viewModel.openAgentConversation(id) { showConversationDrawer = false }
-                        },
-                        onNew = { title ->
-                            viewModel.newAgentConversation(title) { showConversationDrawer = false }
-                        },
-                        onRename = viewModel::renameAgentConversation,
-                        onRequestDelete = viewModel::requestDeleteAgentConversation,
-                        onDismissDelete = viewModel::dismissDeleteAgentConversation,
-                        onDelete = viewModel::deleteAgentConversation,
-                        onRetry = viewModel::retryAgentStorage,
-                        onDeleteMany = viewModel::deleteAgentConversations,
-                        drawer = true
-                    )
-                }
-            }
+        if (showConversationDrawer) {
+            AgentConversationDrawerDialog(
+                conversations = conversations,
+                activeId = activeConversation?.id,
+                status = storageStatus,
+                deletion = conversationDeletion,
+                onDismiss = { showConversationDrawer = false },
+                onOpen = { id ->
+                    viewModel.openAgentConversation(id)
+                },
+                onNew = { title ->
+                    viewModel.newAgentConversation(title)
+                },
+                onRename = viewModel::renameAgentConversation,
+                onRequestDelete = viewModel::requestDeleteAgentConversation,
+                onDismissDelete = viewModel::dismissDeleteAgentConversation,
+                onDelete = viewModel::deleteAgentConversation,
+                onDeleteMany = viewModel::deleteAgentConversations,
+                onRetry = viewModel::retryAgentStorage
+            )
         }
     }
 

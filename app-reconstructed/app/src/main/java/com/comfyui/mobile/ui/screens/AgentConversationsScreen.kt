@@ -2,10 +2,16 @@ package com.comfyui.mobile.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,12 +22,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.comfyui.mobile.agent.workspace.AgentConversation
 import com.comfyui.mobile.agent.workspace.AgentConversationDeleteInfo
@@ -35,11 +45,14 @@ import java.text.DateFormat
 import java.util.Date
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Back
+import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
+import kotlinx.coroutines.delay
 
 @Composable
 fun AgentConversationsScreen(navController: NavController, viewModel: MainViewModel) {
@@ -120,25 +133,45 @@ internal fun AgentConversationWorkspace(
             current + id
         }
     }
-    Scaffold(containerColor = scheme.background, topBar = {
-        TopAppBar(
-            title = if (!selectionMode) "会话" else "已选择 ${selectedIds.size} 个会话",
-            navigationIcon = {
-                IconButton(onClick = { if (selectionMode) selectedIds = emptyList() else onBack() }) {
-                    Icon(MiuixIcons.Back, if (!selectionMode) "返回 Agent" else "退出会话选择")
+    val drawerHeader: @Composable () -> Unit = {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { if (selectionMode) selectedIds = emptyList() else onBack() }) {
+                Icon(
+                    if (selectionMode) MiuixIcons.Back else MiuixIcons.Close,
+                    if (selectionMode) "退出会话选择" else "关闭会话侧边栏"
+                )
+            }
+            Text(
+                if (!selectionMode) "会话" else "已选择 ${selectedIds.size} 个会话",
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                style = MiuixTheme.textStyles.title3.copy(fontWeight = FontWeight.SemiBold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!selectionMode) {
+                IconButton(
+                    enabled = writable,
+                    onClick = { namingId = "new" },
+                    modifier = Modifier.testTag("agent-session-new")
+                ) {
+                    Icon(MiuixIcons.Add, "新建会话")
                 }
-            },
-            actions = {
-                if (!selectionMode) TextButton("新建", enabled = writable,
-                    onClick = { namingId = "new" }, modifier = Modifier.testTag("agent-session-new"))
-                else TextButton("删除", enabled = writable, onClick = {
+            } else {
+                TextButton("删除", enabled = writable, onClick = {
                     if (selectedIds.size == 1) onRequestDelete(selectedIds.single())
                     else batchDeleteIds = selectedIds.toList()
                 })
             }
-        )
-    }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).imePadding().padding(horizontal = 20.dp)) {
+        }
+    }
+    val workspaceBody: @Composable (Modifier) -> Unit = { bodyModifier ->
+        Column(
+            bodyModifier.fillMaxSize().imePadding()
+                .padding(horizontal = if (drawer) 16.dp else 20.dp)
+        ) {
             TextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
                 label = "搜索会话名称或摘要",
@@ -181,12 +214,13 @@ internal fun AgentConversationWorkspace(
                     val interactions = remember { MutableInteractionSource() }
                     val rowSelected = row.id in selectedIds
                     val rowColor by animateColorAsState(
-                        if (rowSelected) scheme.secondaryContainer else scheme.surfaceContainer,
+                        if (rowSelected) scheme.secondaryContainer else Color.Transparent,
                         tween(160), label = "agentSessionSelection"
                     )
                     Row(
-                        modifier = Modifier.animateItem().fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                            .background(rowColor).agentControlSurface(interactions)
+                        modifier = Modifier.animateItem().fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp)).background(rowColor)
+                            .agentControlSurface(interactions)
                             .semantics { this.selected = rowSelected }
                             .combinedClickable(enabled = writable, interactionSource = interactions, indication = null,
                                 onClick = { if (selectionMode) toggleSelection(row.id) else onOpen(row.id) },
@@ -221,6 +255,37 @@ internal fun AgentConversationWorkspace(
                     }
                 }
             }
+        }
+    }
+    if (drawer) {
+        Column(
+            Modifier.fillMaxSize().background(scheme.surfaceContainer)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .semantics { paneTitle = "会话管理" }
+        ) {
+            drawerHeader()
+            workspaceBody(Modifier.weight(1f))
+        }
+    } else {
+        Scaffold(containerColor = scheme.background, topBar = {
+            TopAppBar(
+                title = if (!selectionMode) "会话" else "已选择 ${selectedIds.size} 个会话",
+                navigationIcon = {
+                    IconButton(onClick = { if (selectionMode) selectedIds = emptyList() else onBack() }) {
+                        Icon(MiuixIcons.Back, if (!selectionMode) "返回 Agent" else "退出会话选择")
+                    }
+                },
+                actions = {
+                    if (!selectionMode) TextButton("新建", enabled = writable,
+                        onClick = { namingId = "new" }, modifier = Modifier.testTag("agent-session-new"))
+                    else TextButton("删除", enabled = writable, onClick = {
+                        if (selectedIds.size == 1) onRequestDelete(selectedIds.single())
+                        else batchDeleteIds = selectedIds.toList()
+                    })
+                }
+            )
+        }) { padding ->
+            workspaceBody(Modifier.padding(padding))
         }
     }
     conversations.firstOrNull { it.id == menuId }?.let { row ->
@@ -308,6 +373,108 @@ internal fun AgentConversationWorkspace(
                     TextButton("确认删除", enabled = writable, modifier = Modifier.weight(1f),
                         onClick = { confirmed = true; close() })
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A real modal drawer host. It lives in a Dialog window so the app shell's bottom
+ * navigation cannot render above the drawer or receive taps through its scrim.
+ */
+@Composable
+internal fun AgentConversationDrawerDialog(
+    conversations: List<AgentConversation>,
+    activeId: String?,
+    status: AgentStorageStatus,
+    deletion: AgentConversationDeleteInfo?,
+    onDismiss: () -> Unit,
+    onOpen: (String) -> Unit,
+    onNew: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onRequestDelete: (String) -> Unit,
+    onDismissDelete: () -> Unit,
+    onDelete: (String) -> Unit,
+    onDeleteMany: (List<String>) -> Unit,
+    onRetry: () -> Unit
+) {
+    val scheme = MiuixTheme.colorScheme
+    var visible by remember { mutableStateOf(false) }
+    var dismissing by remember { mutableStateOf(false) }
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
+    fun requestDismiss() {
+        if (!dismissing) {
+            dismissing = true
+            visible = false
+        }
+    }
+    LaunchedEffect(Unit) {
+        visible = true
+    }
+    LaunchedEffect(dismissing) {
+        if (dismissing) {
+            delay(220)
+            currentOnDismiss()
+        }
+    }
+    Dialog(
+        onDismissRequest = ::requestDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(Modifier.fillMaxSize().testTag("agent-conversation-drawer-window")) {
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(150)),
+                exit = fadeOut(tween(180)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    Modifier.fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.32f))
+                        .clickable(onClick = ::requestDismiss)
+                        .testTag("agent-conversation-drawer-scrim")
+                )
+            }
+            AnimatedVisibility(
+                visible = visible,
+                enter = fadeIn(tween(120)) + slideInHorizontally(tween(220)) { -it },
+                exit = fadeOut(tween(160)) + slideOutHorizontally(tween(180)) { -it },
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .widthIn(max = 360.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
+                    .background(scheme.surfaceContainer)
+                    .testTag("agent-conversation-drawer")
+            ) {
+                AgentConversationWorkspace(
+                    conversations = conversations,
+                    activeId = activeId,
+                    status = status,
+                    deletion = deletion,
+                    onBack = ::requestDismiss,
+                    onOpen = { id ->
+                        onOpen(id)
+                        requestDismiss()
+                    },
+                    onNew = { title ->
+                        onNew(title)
+                        requestDismiss()
+                    },
+                    onRename = onRename,
+                    onRequestDelete = onRequestDelete,
+                    onDismissDelete = onDismissDelete,
+                    onDelete = onDelete,
+                    onDeleteMany = onDeleteMany,
+                    onRetry = onRetry,
+                    drawer = true
+                )
             }
         }
     }

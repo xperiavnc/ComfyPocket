@@ -17,6 +17,7 @@ import com.comfyui.mobile.agent.workspace.AgentConversation
 import com.comfyui.mobile.agent.workspace.AgentConversationDeleteInfo
 import com.comfyui.mobile.ui.AgentStorageMode
 import com.comfyui.mobile.ui.AgentStorageStatus
+import com.comfyui.mobile.ui.screens.AgentConversationDrawerDialog
 import com.comfyui.mobile.ui.screens.AgentConversationWorkspace
 import com.comfyui.mobile.ui.theme.ComfyControllerTheme
 import java.io.File
@@ -249,6 +250,46 @@ class AgentConversationsUiTest {
             compose.waitForIdle()
             assertEquals(listOf("s0", "s1"), deletedIds)
             compose.onNodeWithText("已选择 2 个会话").assertDoesNotExist()
+        } finally { controller.pause().stop().destroy() }
+    }
+
+    @Test fun drawerUsesCompactHeaderAndMaterialWidth() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
+                CompositionLocalProvider(LocalSquircleEnabled provides false) {
+                    ComfyControllerTheme(true, manageSystemBars = false) {
+                        AgentConversationDrawerDialog(
+                            conversations = rows,
+                            activeId = "s0",
+                            status = AgentStorageStatus(AgentStorageMode.ROOM),
+                            deletion = null,
+                            onDismiss = {},
+                            onOpen = {},
+                            onNew = {},
+                            onRename = { _, _ -> },
+                            onRequestDelete = {},
+                            onDismissDelete = {},
+                            onDelete = {},
+                            onDeleteMany = {},
+                            onRetry = {}
+                        )
+                    }
+                }
+            } })
+            compose.onNodeWithTag("agent-conversation-drawer-window").assertIsDisplayed()
+            compose.onNodeWithTag("agent-conversation-drawer-scrim").assertIsDisplayed()
+            compose.onNodeWithTag("agent-conversation-drawer").assertIsDisplayed()
+            compose.onNodeWithTag("agent-session-new").assertHasClickAction()
+            val bounds = compose.onNodeWithTag("agent-conversation-drawer")
+                .fetchSemanticsNode().boundsInRoot
+            val rootBounds = compose.onNodeWithTag("agent-conversation-drawer-window")
+                .fetchSemanticsNode().boundsInRoot
+            assertTrue(
+                "drawer must stay within the standard compact width: drawer=${bounds.width}, root=${rootBounds.width}",
+                bounds.width <= rootBounds.width * 0.9f
+            )
+            assertTrue("drawer must start from the leading edge", bounds.left <= 1f)
         } finally { controller.pause().stop().destroy() }
     }
 
