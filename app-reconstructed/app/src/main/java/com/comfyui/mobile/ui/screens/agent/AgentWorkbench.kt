@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -76,6 +78,7 @@ fun AgentWorkspaceLayout(
     onOpenSessions: () -> Unit,
     onImageClick: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    headerTrailing: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(true) }
@@ -88,8 +91,12 @@ fun AgentWorkspaceLayout(
         val previewHeight = (maxHeight * 0.42f - 64.dp).coerceIn(48.dp, 300.dp)
         Column(Modifier.fillMaxSize()) {
             // Reads as a subtitle of the "Agent" title (breadcrumb), not as a second input field.
+            // Session on the left, the current model (switcher) on the right of the same line.
+            Row(Modifier.fillMaxWidth().padding(horizontal = sidePad - 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
             Row(
-                Modifier.padding(horizontal = sidePad - 8.dp)
+                Modifier.weight(1f, fill = false)
                     .clip(PocketTokens.Shape.Medium)
                     .testTag("agent-open-sessions")
                     .clickable(role = Role.Button, onClickLabel = "切换会话", onClick = onOpenSessions)
@@ -104,6 +111,11 @@ fun AgentWorkspaceLayout(
                     style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium))
                 Icon(androidx.compose.material.icons.Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp),
                     tint = scheme.onSurfaceVariantSummary)
+            }
+            if (headerTrailing != null) {
+                Spacer(Modifier.width(PocketTokens.Space.XS))
+                headerTrailing()
+            }
             }
             AgentWorkbench(
                 mediaList = mediaList, previewUrl = previewUrl, status = status, wfLabel = wfLabel,

@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -108,6 +109,7 @@ fun AgentImagePreviewCard(
     val canOpenImage = mediaList.isNotEmpty() && !overlayOn
     // Width / height of loaded images, keyed by URL; picks crop vs fit per page.
     val aspects = remember { mutableStateMapOf<String, Float>() }
+    val loadFailed = remember { mutableStateMapOf<String, Boolean>() }
     // Blur the picture itself while busy; a blurred scrim over a sharp image only looks grey.
     val imageBlur by animateDpAsState(if (overlayOn) 18.dp else 0.dp, tween(260), label = "preview_blur")
 
@@ -158,6 +160,15 @@ fun AgentImagePreviewCard(
                                 Modifier.fillMaxSize()
                                     .then(if (canOpenImage) Modifier.clickable { onImageClick(page) } else Modifier)
                             ) {
+                                // Shown until the bitmap arrives (old history can be slow) or when it fails.
+                                if (loadFailed[url] == true) Column(Modifier.align(Alignment.Center),
+                                    horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(MiuixIcons.Image, contentDescription = null, tint = scheme.onSurfaceVariantSummary)
+                                    Text("图片加载失败", style = MiuixTheme.textStyles.footnote1,
+                                        color = scheme.onSurfaceVariantSummary)
+                                } else Icon(MiuixIcons.Image, contentDescription = null,
+                                    modifier = Modifier.align(Alignment.Center).size(36.dp),
+                                    tint = scheme.onSurfaceVariantSummary.copy(alpha = 0.35f))
                                 // Ambient fill for letterbox areas (landscape / mixed sets only).
                                 if (!portrait) AsyncImage(
                                     model = url,
@@ -178,7 +189,9 @@ fun AgentImagePreviewCard(
                                     modifier = Modifier.fillMaxSize().blur(imageBlur),
                                     contentScale = if (portrait) ContentScale.Crop else ContentScale.Fit,
                                     alignment = if (portrait) PortraitFocus else Alignment.Center,
+                                    onError = { loadFailed[url] = true },
                                     onSuccess = { s ->
+                                        loadFailed.remove(url)
                                         val size = s.painter.intrinsicSize
                                         if (size != Size.Unspecified && size.height > 0f) aspects[url] = size.width / size.height
                                     }
@@ -303,8 +316,18 @@ fun AgentImagePreviewCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-                    val dots = mediaList.size.coerceAtMost(MaxDots)
-                    val selectedDot = pagerState.currentPage.coerceAtMost(dots - 1)
+                    // Dots only map 1:1 for short sets; with more pages a 6-dot strip pinned on the
+                    // last dot was misleading, so show a slim position track instead.
+                    if (mediaList.size > MaxDots) Box(
+                        Modifier.size(width = 36.dp, height = 3.dp).clip(PocketTokens.Shape.Pill)
+                            .background(Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Box(Modifier.fillMaxHeight()
+                            .fillMaxWidth((pagerState.currentPage + 1f) / mediaList.size)
+                            .clip(PocketTokens.Shape.Pill).background(Color.White.copy(alpha = 0.95f)))
+                    }
+                    val dots = if (mediaList.size > MaxDots) 0 else mediaList.size
+                    val selectedDot = pagerState.currentPage
                     repeat(dots) { i ->
                         val selected = i == selectedDot
                         val w by animateDpAsState(if (selected) 14.dp else 5.dp, tween(200), label = "dot_w")

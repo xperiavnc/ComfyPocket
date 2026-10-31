@@ -5,10 +5,8 @@ package com.comfyui.mobile.ui.navigation
 import androidx.activity.compose.PredictiveBackHandler
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.tween
@@ -37,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -66,6 +65,7 @@ import kotlin.math.roundToInt
 
 /** Bottom bar show/hide when entering or leaving a secondary page. */
 private const val PocketBarMillis = 250
+private const val PocketBarExitMillis = 160
 
 internal val pocketTabs = listOf(Screen.Dashboard, Screen.Control, Screen.Agent, Screen.AiApps, Screen.Gallery)
 internal val pocketSecondaryRoutes = listOf(
@@ -218,90 +218,93 @@ internal fun PocketNavigationShell(
             }
     }
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
-    val floating = showBar && bottomBarStyle == BottomBarStyle.CLASSIC
+    val density = LocalDensity.current
+    val classic = bottomBarStyle == BottomBarStyle.CLASSIC
     val bottomInset = WindowInsets.safeDrawing.asPaddingValues().calculateBottomPadding()
     val bottomGap = if (bottomInset > 0.dp) 4.dp else 24.dp
-    // The content already consumes the system bottom inset. Reserve only the
-    // capsule and its gap, and only while it is actually visible.
-    val floatingClearance = if (floating) 52.dp + 10.dp + bottomGap else 0.dp
-    CompositionLocalProvider(LocalFloatingNavClearance provides floatingClearance) {
-        Scaffold(
-            modifier = Modifier.fillMaxSize().imePadding().testTag("pocket-shell"),
-            contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-            bottomBar = {
-                if (!imeVisible && bottomBarStyle != BottomBarStyle.CLASSIC) AnimatedVisibility(
-                    visible = onTab,
-                    enter = expandVertically(tween(PocketBarMillis, easing = PocketEmphasizedDecelerate),
-                        expandFrom = Alignment.Top) + fadeIn(tween(PocketBarMillis)),
-                    exit = shrinkVertically(tween(PocketBarMillis, easing = PocketEmphasizedAccelerate),
-                        shrinkTowards = Alignment.Top) + fadeOut(tween(PocketBarMillis / 2))
-                ) {
-                    NavigationBar(
-                        modifier = Modifier.testTag("pocket-navigation"),
-                        windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-                    ) {
-                        PocketNavigationItems(barRoute, onTabSelected, focus, keyboard, navController)
-                    }
-                }
-            }
-        ) { padding ->
-            Box(Modifier.fillMaxSize()) {
-              Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding)
-                .clipToBounds().testTag("pocket-content")) {
-                NavHost(
-                    navController, startDestination = Screen.Dashboard.route,
-                    enterTransition = { pocketNavEnter(
-                        initialState.destination.route, targetState.destination.route, pop = false, rtl) },
-                    exitTransition = { pocketNavExit(
-                        initialState.destination.route, targetState.destination.route, pop = false, rtl) },
-                    popEnterTransition = { pocketNavEnter(
-                        initialState.destination.route, targetState.destination.route, pop = true, rtl) },
-                    popExitTransition = { pocketNavExit(
-                        initialState.destination.route, targetState.destination.route, pop = true, rtl) }
-                ) {
-                    (pocketTabs.map { it.route } + pocketSecondaryRoutes).forEach { destination ->
-                        composable(destination) { backStack ->
-                            val active = backStack.id == currentEntry?.id
-                            // Opaque pages: a push slides over the covered page instead of
-                            // blending two translucent layers during the transition.
-                            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-                            PocketDestination(active) {
-                                // Leaf handlers are composed later and take precedence over root Back.
-                                PredictiveBackHandler(enabled = active && destination != Screen.Dashboard.route &&
-                                    pocketTabs.any { it.route == destination }) { progress ->
-                                    progress.collect { }
-                                    if (navController.currentBackStackEntry?.id == backStack.id)
-                                        navController.selectPocketTab(Screen.Dashboard.route)
-                                }
-                                destinationContent(backStack)
+    // The bar is an overlay, not a Scaffold slot: hiding it for a secondary page must not
+    // relayout the page that is sliding away (that made the composer jump down mid-push).
+    // Each tab destination reserves the bar's space itself; secondary pages reserve none.
+    var materialBarHeight by remember { mutableStateOf(80.dp + bottomInset) }
+    val tabClearance = when {
+        imeVisible -> 0.dp
+        classic -> 0.dp
+        else -> (materialBarHeight - bottomInset).coerceAtLeast(0.dp)
+    }
+    val classicClearance = if (classic && !imeVisible) 52.dp + 10.dp + bottomGap else 0.dp
+    Scaffold(
+        modifier = Modifier.fillMaxSize().imePadding().testTag("pocket-shell"),
+        contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+    ) { padding ->
+        Box(Modifier.fillMaxSize()) {
+          Box(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding).clipToBounds()) {
+            NavHost(
+                navController, startDestination = Screen.Dashboard.route,
+                enterTransition = { pocketNavEnter(
+                    initialState.destination.route, targetState.destination.route, pop = false, rtl) },
+                exitTransition = { pocketNavExit(
+                    initialState.destination.route, targetState.destination.route, pop = false, rtl) },
+                popEnterTransition = { pocketNavEnter(
+                    initialState.destination.route, targetState.destination.route, pop = true, rtl) },
+                popExitTransition = { pocketNavExit(
+                    initialState.destination.route, targetState.destination.route, pop = true, rtl) }
+            ) {
+                (pocketTabs.map { it.route } + pocketSecondaryRoutes).forEach { destination ->
+                    composable(destination) { backStack ->
+                        val active = backStack.id == currentEntry?.id
+                        val isTab = pocketTabs.any { it.route == destination }
+                        // Fixed per destination, so a page keeps its layout while it animates out.
+                        CompositionLocalProvider(LocalFloatingNavClearance provides if (isTab) classicClearance else 0.dp) {
+                        // Opaque pages: a push slides over the covered page instead of
+                        // blending two translucent layers during the transition.
+                        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+                            .padding(bottom = if (isTab) tabClearance else 0.dp)
+                            .then(if (active) Modifier.testTag("pocket-content") else Modifier)) {
+                        PocketDestination(active) {
+                            // Leaf handlers are composed later and take precedence over root Back.
+                            PredictiveBackHandler(enabled = active && destination != Screen.Dashboard.route && isTab) { progress ->
+                                progress.collect { }
+                                if (navController.currentBackStackEntry?.id == backStack.id)
+                                    navController.selectPocketTab(Screen.Dashboard.route)
                             }
-                            }
+                            destinationContent(backStack)
+                        }
+                        }
                         }
                     }
                 }
-              }
-              if (!imeVisible && bottomBarStyle == BottomBarStyle.CLASSIC) AnimatedVisibility(
-                  visible = onTab,
-                  modifier = Modifier.align(Alignment.BottomCenter),
-                  enter = slideInVertically(tween(PocketBarMillis, easing = PocketEmphasizedDecelerate)) { it / 2 } +
-                      fadeIn(tween(PocketBarMillis)),
-                  exit = slideOutVertically(tween(PocketBarMillis, easing = PocketEmphasizedAccelerate)) { it / 2 } +
-                      fadeOut(tween(PocketBarMillis / 2))
-              ) {
-                  PocketClassicNavigation(
-                      barRoute, darkTheme, paletteId, bottomGap,
-                      onItemClick = { index ->
-                          val tab = pocketTabs[index]
-                          if (navController.currentDestination?.route != tab.route) {
-                              focus.clearFocus()
-                              keyboard?.hide()
-                              onTabSelected()
-                              navController.selectPocketTab(tab.route)
-                          }
-                      }
-                  )
-              }
             }
+          }
+          // Push: the bar drops away quickly under the incoming page. Pop: it rises back once
+          // the revealed tab page is mostly in place, so it never floats over a sliding page.
+          if (!imeVisible) AnimatedVisibility(
+              visible = onTab,
+              modifier = Modifier.align(Alignment.BottomCenter),
+              enter = slideInVertically(tween(PocketBarMillis, delayMillis = 90, easing = PocketEmphasizedDecelerate)) { it / 3 } +
+                  fadeIn(tween(PocketBarMillis - 50, delayMillis = 90)),
+              exit = slideOutVertically(tween(PocketBarExitMillis, easing = PocketEmphasizedAccelerate)) { it / 3 } +
+                  fadeOut(tween(PocketBarExitMillis))
+          ) {
+              if (!classic) NavigationBar(
+                  modifier = Modifier.testTag("pocket-navigation")
+                      .onSizeChanged { materialBarHeight = with(density) { it.height.toDp() } },
+                  windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+              ) {
+                  PocketNavigationItems(barRoute, onTabSelected, focus, keyboard, navController)
+              }
+              else PocketClassicNavigation(
+                  barRoute, darkTheme, paletteId, bottomGap,
+                  onItemClick = { index ->
+                      val tab = pocketTabs[index]
+                      if (navController.currentDestination?.route != tab.route) {
+                          focus.clearFocus()
+                          keyboard?.hide()
+                          onTabSelected()
+                          navController.selectPocketTab(tab.route)
+                      }
+                  }
+              )
+          }
         }
     }
 }

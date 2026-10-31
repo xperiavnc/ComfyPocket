@@ -39,6 +39,7 @@ import com.comfyui.mobile.ui.MainViewModel
 import com.comfyui.mobile.ui.rememberAppHaptics
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
@@ -76,11 +77,11 @@ fun AgentCapsuleBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-            AgentCapsule(
+            // The model switcher normally lives in the session header (AgentModelChip); it only
+            // shows here when a caller still passes a name (e.g. narrow previews/tests).
+            if (modelDisplayName.isNotBlank()) AgentCapsule(
                 label = modelDisplayName,
                 modifier = Modifier.weight(1f, fill = false),
-                // No chevron: the row is tight and the label alone reads as tappable; the
-                // description keeps it announced as the model switcher.
                 onClickLabel = "切换模型与 API",
                 onClick = { haptics.tick(); onModelSwitchClick() }
             )
@@ -101,6 +102,37 @@ fun AgentCapsuleBar(
     )
             }
         }
+    }
+}
+
+/**
+ * Current LLM model, shown at the end of the session line under the "Agent" title. Quiet
+ * text + chevron (same language as the session breadcrumb) so it never competes with input.
+ */
+@Composable
+fun AgentModelChip(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val scheme = MiuixTheme.colorScheme
+    val haptics = rememberAppHaptics()
+    Row(
+        modifier = modifier
+            .widthIn(max = 168.dp)
+            .clip(PocketTokens.Shape.Pill)
+            .background(scheme.surfaceContainerHigh)
+            .clickable(onClickLabel = "切换模型与 API", role = Role.Button) { haptics.tick(); onClick() }
+            .padding(start = 10.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = label.ifBlank { "选择模型" },
+            color = scheme.onSurfaceVariantSummary,
+            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.Medium),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        Icon(androidx.compose.material.icons.Icons.Default.KeyboardArrowDown, contentDescription = null,
+            modifier = Modifier.size(16.dp), tint = scheme.onSurfaceVariantSummary)
     }
 }
 

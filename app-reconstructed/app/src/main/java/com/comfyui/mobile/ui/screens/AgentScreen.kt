@@ -352,6 +352,10 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
             cardColors = cardColors,
             sidePad = sidePad,
             onOpenSessions = { navController.navigate("agent_sessions") },
+            headerTrailing = {
+                com.comfyui.mobile.ui.screens.agent.AgentModelChip(
+                    label = currentLlmProfile?.displayName ?: llmModel.ifBlank { "大模型" }, onClick = { showModelSwitchDialog = true })
+            },
             onImageClick = { index -> fullScreenMediaIndex = index; showImageViewer = true },
             modifier = Modifier
                 .fillMaxSize()
@@ -383,7 +387,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 framed = false,
                 toolbar = {
                     AgentCapsuleBar(
-                        modelDisplayName = modelDisplayName,
+                        modelDisplayName = "",
                         interactionMode = agentInteractionMode,
                         sidePad = 0.dp,
                         onModelSwitchClick = { showModelSwitchDialog = true },
