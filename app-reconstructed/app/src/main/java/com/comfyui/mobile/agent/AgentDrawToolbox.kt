@@ -18,7 +18,9 @@ class AgentDrawToolbox(
     private val snapshot: AgentWorkflowSnapshot,
     private val titles: Map<String, String> = emptyMap(),
     private val characters: List<CharacterLore> = emptyList(),
-    private val searchTags: (suspend (query: String, kind: String) -> List<LocalTagEntry>)? = null
+    private val searchTags: (suspend (query: String, kind: String) -> List<LocalTagEntry>)? = null,
+    /** Local LoRA metadata (user annotations + provider info); empty when the model index is unavailable. */
+    private val loras: List<AgentLoraInfo> = emptyList()
 ) : AgentToolbox {
     private val patchTool = PatchWorkflowTool()
     private val inspectTool = InspectWorkflowTool()
@@ -30,6 +32,12 @@ class AgentDrawToolbox(
 
     /** Validated edits to apply when the turn is submitted. */
     val changes: List<AgentFieldChange> get() = staged.values.toList()
+
+    private val allowedFields = snapshot.fields.associateBy { it.address }
+    /** LoRA loader slots whose file field is part of the snapshot; strength partners only when also present. */
+    private val loraSlots: List<AgentLoraSlot> = AgentLoraCatalog.slots(snapshot.workflow) { node, key ->
+        allowedFields["$node:$key"]?.options.orEmpty()
+    }.filter { it.id in allowedFields }.map { slot -> slot.copy(strengthKeys = slot.strengthKeys.filter { "${slot.nodeId}:$it" in allowedFields }) }
 
     override val definitions: List<ChatToolDefinition> = listOf(
         tool(INSPECT, "查看本轮开放给你的工作流参数（节点、字段、当前值、可选项和范围）。修改参数前先调用。", obj(emptyMap())),
@@ -60,7 +68,16 @@ class AgentDrawToolbox(
                     "custom_outfit" to mapOf("type" to "boolean")
                 ), "character_id"), 20)
             ), "reply"))
-    )
+    ) + (if (loraSlots.isEmpty()) emptyList() else listOf(
+        tool(LIST_LORAS, "列出工作流里的 LoRA 槽位，并检索本地 LoRA：文件名、触发词、底模、用户标注（标签/用途/角色/服装/备注/推荐强度）和简介。选 LoRA 前先调用。",
+            obj(mapOf("query" to text("检索词，可填角色名、画风、用途等，空格分隔多个词须同时命中；留空列出全部")))),
+        tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效。",
+            obj(mapOf(
+                "slot" to text("list_loras 返回的槽位地址，形如 \"10:lora_name\""),
+                "lora" to text("list_loras 返回的 file；空字符串表示停用"),
+                "strength" to mapOf("type" to "number", "description" to "强度，通常 0.4–1.2；不传则用推荐强度或 1.0")
+            ), "slot", "lora"))
+    ))
 
     override fun label(name: String): String = when (name) {
         INSPECT -> "查看工作流参数"
@@ -69,6 +86,8 @@ class AgentDrawToolbox(
         LOOKUP_TAGS -> "查询本地词库"
         PROFILE -> "读取角色档案"
         SUBMIT -> "提交结果"
+        LIST_LORAS -> "检索本地 LoRA"
+        SET_LORA -> "配置 LoRA"
         else -> name
     }
 
@@ -79,8 +98,12 @@ class AgentDrawToolbox(
         LOOKUP_TAGS -> lookup(arguments)
         PROFILE -> profile(arguments)
         SUBMIT -> submit(arguments)
-        else -> AgentToolResult(false, error = "未知工具：$name")
+        LIST_LORAS -> if (loraSlots.isEmpty()) unknown(name) else listLoras(arguments)
+        SET_LORA -> if (loraSlots.isEmpty()) unknown(name) else setLora(arguments)
+        else -> unknown(name)
     }
+
+    private fun unknown(name: String) = AgentToolResult(false, error = "未知工具：$name")
 
     private fun current(): AgentWorkflowSnapshot {
         if (staged.isEmpty()) return snapshot
@@ -121,6 +144,10 @@ class AgentDrawToolbox(
             val value = scalar(item.asJsonObject["value"]) ?: return AgentToolResult(false, error = "$field 的值必须是文本、数字或布尔")
             AgentFieldChange(parts[0], parts[1], value)
         }
+        return stage(requested)
+    }
+
+    private fun stage(requested: List<AgentFieldChange>, summary: String? = null): AgentToolResult {
         val merged = LinkedHashMap(staged).apply { requested.forEach { put("${it.nodeId}:${it.key}", it) } }
         val result = patchTool.execute(AgentPatchRequest(snapshot, merged.values.toList()))
             .getOrElse { return AgentToolResult(false, error = it.message) }
@@ -128,10 +155,80 @@ class AgentDrawToolbox(
         staged.putAll(merged)
         val changed = requested.map { "${it.nodeId}:${it.key}" }.toSet()
         return AgentToolResult(true, mapOf(
-            "summary" to "已暂存 ${changed.size} 项修改，提交时生效",
+            "summary" to (summary ?: "已暂存 ${changed.size} 项修改，提交时生效"),
             "changes" to result.diff.filter { "${it.nodeId}:${it.key}" in changed }
                 .map { mapOf("field" to "${it.nodeId}:${it.key}", "before" to it.before, "after" to it.after) }
         ))
+    }
+
+    private fun stagedValue(nodeId: String, key: String): Any? =
+        staged["$nodeId:$key"]?.value ?: ((snapshot.workflow[nodeId] as? Map<*, *>)?.get("inputs") as? Map<*, *>)?.get(key)
+
+    private fun listLoras(arguments: JsonObject): AgentToolResult {
+        val query = AgentInteractionProtocol.string(arguments, "query")
+        val offered = loraSlots.flatMap { it.options }.map(AgentLoraCatalog::normalize).toSet()
+        // Only LoRAs the server can actually load; without combo options trust the index.
+        val usable = if (offered.isEmpty()) loras else loras.filter { AgentLoraCatalog.normalize(it.file) in offered }
+        val hits = AgentLoraCatalog.search(usable, query, MAX_LORAS)
+        val known = usable.map { AgentLoraCatalog.normalize(it.file) }.toSet()
+        val bare = if (hits.size >= MAX_LORAS) emptyList() else loraSlots.flatMap { it.options }.distinct()
+            .filter { AgentLoraCatalog.normalize(it) !in known && (query.isBlank() || query.lowercase(Locale.ROOT).split(' ').filter(String::isNotBlank).all { term -> it.lowercase(Locale.ROOT).contains(term) }) }
+            .take(MAX_LORAS - hits.size)
+        return AgentToolResult(true, linkedMapOf(
+            "summary" to "${loraSlots.size} 个 LoRA 槽位，命中 ${hits.size + bare.size} 个 LoRA" + if (loras.isEmpty()) "（模型中心还没有本地 LoRA 资料，只有文件名）" else "",
+            "slots" to loraSlots.map { slot ->
+                linkedMapOf<String, Any?>(
+                    "slot" to slot.id,
+                    "node" to (titles[slot.nodeId] ?: (snapshot.workflow[slot.nodeId] as? Map<*, *>)?.get("class_type")),
+                    "current" to stagedValue(slot.nodeId, slot.nameKey),
+                    "strength" to slot.strengthKeys.associateWith { stagedValue(slot.nodeId, it) }
+                )
+            },
+            "loras" to hits.map { info ->
+                linkedMapOf<String, Any?>(
+                    "file" to info.file, "name" to info.name,
+                    "trigger_words" to info.triggerWords.takeIf { it.isNotEmpty() },
+                    "base_model" to info.baseModel.ifBlank { null },
+                    "tags" to info.tags.takeIf { it.isNotEmpty() },
+                    "use_cases" to info.useCases.takeIf { it.isNotEmpty() },
+                    "character" to info.character.ifBlank { null },
+                    "outfit" to info.outfit.ifBlank { null },
+                    "notes" to info.notes.ifBlank { null },
+                    "preferred_strength" to info.preferredStrength,
+                    "description" to info.description.ifBlank { null },
+                    "favorite" to info.favorite.takeIf { it }
+                ).filterValues { it != null }
+            } + bare.map { mapOf("file" to it, "note" to "没有本地资料") }
+        ))
+    }
+
+    private fun setLora(arguments: JsonObject): AgentToolResult {
+        val slotId = AgentInteractionProtocol.string(arguments, "slot")
+        val slot = loraSlots.firstOrNull { it.id == slotId || it.nodeId == slotId }
+            ?: return AgentToolResult(false, error = "没有槽位「$slotId」。可用：" + loraSlots.joinToString("、") { it.id })
+        val requested = AgentInteractionProtocol.string(arguments, "lora")
+        val strengthElement = arguments["strength"]
+        val strength = strengthElement?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble
+        if (strengthElement != null && !strengthElement.isJsonNull && strength == null) return AgentToolResult(false, error = "strength 必须是数字")
+        val disable = requested.isBlank() || requested.equals("none", ignoreCase = true) || strength == 0.0
+        if (disable) {
+            if (slot.strengthKeys.isEmpty()) return AgentToolResult(false, error = "这个槽位没有可修改的强度字段，无法停用；可以换成别的 LoRA")
+            return stage(slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, 0.0) }, "已暂存：停用 ${slot.id}")
+        }
+        val file = AgentLoraCatalog.resolve(requested, slot.options, loras)
+            ?: return AgentToolResult(false, error = "服务器上没有 LoRA「$requested」。先用 list_loras 检索，再填返回的 file")
+        val info = loras.firstOrNull { AgentLoraCatalog.normalize(it.file) == AgentLoraCatalog.normalize(file) }
+        val value = strength ?: info?.preferredStrength ?: 1.0
+        if (value < -4.0 || value > 4.0) return AgentToolResult(false, error = "strength 超出范围（-4 到 4）")
+        val changes = listOf(AgentFieldChange(slot.nodeId, slot.nameKey, file)) +
+            slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, value) }
+        val result = stage(changes, "已暂存：${slot.id} → ${info?.name ?: file}，强度 $value")
+        if (!result.ok) return result
+        val words = info?.triggerWords.orEmpty()
+        return result.copy(data = (result.data as Map<*, *>) + mapOf(
+            "trigger_words" to words.takeIf { it.isNotEmpty() },
+            "hint" to if (words.isNotEmpty()) "把需要的触发词写进 set_prompt 的正向提示词" else "这个 LoRA 没有登记触发词"
+        ).filterValues { it != null })
     }
 
     private fun setPrompt(arguments: JsonObject): AgentToolResult {
@@ -231,6 +328,9 @@ class AgentDrawToolbox(
         const val LOOKUP_TAGS = "lookup_tags"
         const val PROFILE = "get_character_profile"
         const val SUBMIT = "submit_workflow"
+        const val LIST_LORAS = "list_loras"
+        const val SET_LORA = "set_lora"
+        private const val MAX_LORAS = 20
         private const val MAX_OPTIONS = 40
         private const val MAX_TAGS = 12
         private const val MAX_PROMPT = 8000
@@ -240,6 +340,7 @@ class AgentDrawToolbox(
 【智能体工具模式】本轮通过工具完成任务，最多 $maxSteps 步，每步可调用一个或多个工具，工具结果会返回给你。
 建议流程：需要时 get_character_profile 核对角色、lookup_tags 查标签写法、inspect_workflow 查看参数并用 patch_workflow 修改；然后 set_prompt 写入提示词，最后 submit_workflow 提交。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
+工作流里有 LoRA 槽位时会提供 list_loras / set_lora：只有用户提到角色、画风、用途或明确要求时才检索并更换 LoRA，按本地标注和简介挑选，强度优先用推荐强度，并把触发词写进提示词；用户没提就保持原样。
 工具报错时按错误修正参数再试，不要重复同样的错误调用。只聊天不出图时，不调用工具，直接按系统中的格式回复。
 """.trim()
 

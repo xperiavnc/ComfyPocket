@@ -1212,6 +1212,20 @@ object MainViewModelAgent {
         return ""
     }
 
+    /** Local LoRA metadata from the Model Center cache of the current server; empty if never indexed. */
+    private suspend fun loadAgentLoraCatalog(vm: MainViewModel): List<com.comfyui.mobile.agent.AgentLoraInfo> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val id = vm._currentServerId.value
+                val server = vm._servers.value.firstOrNull { it.effectiveId == id || it.id == id }
+                val cache = com.comfyui.mobile.modelcenter.LocalModelCache(
+                    java.io.File(vm.getApplication<android.app.Application>().filesDir, "local-model-cache-v1"),
+                    "$id|${server?.baseUrl.orEmpty()}")
+                val snapshot = cache.load()
+                com.comfyui.mobile.agent.AgentLoraCatalog.from(snapshot.items, snapshot.phoneSources)
+            }.getOrDefault(emptyList())
+        }
+
     internal suspend fun expandPromptWithLlm(
         vm: MainViewModel,
         userText: String,
@@ -1363,10 +1377,18 @@ object MainViewModelAgent {
                 // silently skip the agent. Loading is idempotent and shared with prepare().
                 ensureAgentWorkflowLoaded(vm, silent = true)
                 checkCurrent()
+                val loras = loadAgentLoraCatalog(vm)
                 withContext(Dispatchers.Main) {
-                    runCatching { vm.agentRuntime.workflowSnapshot(emptyList()) }.getOrNull()?.let { snapshot ->
+                    runCatching {
+                        // LoRA loader fields are offered to the Agent even when not exposed as aux params.
+                        val loraFields = vm.agentWorkflow?.let { graph ->
+                            com.comfyui.mobile.agent.AgentLoraCatalog.slots(graph) { _, _ -> emptyList() }
+                                .flatMap { slot -> listOf(slot.id) + slot.strengthKeys.map { "${slot.nodeId}:$it" } }
+                        }.orEmpty()
+                        vm.agentRuntime.workflowSnapshot(emptyList(), loraFields)
+                    }.getOrNull()?.let { snapshot ->
                         com.comfyui.mobile.agent.AgentDrawToolbox(snapshot, vm._agentNodeTitles.value, settings.lores,
-                            if (settings.tagSettings.useLocalLibrary) vm::searchLocalTags else null)
+                            if (settings.tagSettings.useLocalLibrary) vm::searchLocalTags else null, loras)
                     }
                 }
             } else null
