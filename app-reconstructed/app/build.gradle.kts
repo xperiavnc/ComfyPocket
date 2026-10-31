@@ -1,3 +1,4 @@
+import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -14,8 +15,9 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 55
-        versionName = "0.0.53-agent-workbench"
+        // Installed 0.0.56-agent-drawer used versionCode 58; continue above it so updates install.
+        versionCode = 59
+        versionName = "0.0.57-ui-next"
     }
 
     buildFeatures {
@@ -32,13 +34,34 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // Optional local signing key, configured in the gitignored local.properties:
+    //   pocket.signing.storeFile=C:/path/to/key.keystore
+    //   pocket.signing.storePassword=...
+    //   pocket.signing.keyAlias=...
+    //   pocket.signing.keyPassword=...
+    // When present, debug and release APKs are both signed with it so builds can
+    // update each other on device. The key itself never lives in the repository.
+    val localProps = Properties().apply {
+        rootProject.file("local.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+    }
+    val pocketKey = localProps.getProperty("pocket.signing.storeFile")?.let { rootProject.file(it) }
+    val pocketSigning = if (pocketKey?.isFile == true) {
+        signingConfigs.create("pocket") {
+            storeFile = pocketKey
+            storePassword = localProps.getProperty("pocket.signing.storePassword")
+            keyAlias = localProps.getProperty("pocket.signing.keyAlias")
+            keyPassword = localProps.getProperty("pocket.signing.keyPassword")
+        }
+    } else null
+
     buildTypes {
         debug {
             isMinifyEnabled = false
+            pocketSigning?.let { signingConfig = it }
         }
         release {
             isMinifyEnabled = false
-            // Release signing is deliberately not reconstructed.
+            pocketSigning?.let { signingConfig = it }
         }
     }
 

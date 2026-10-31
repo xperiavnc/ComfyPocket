@@ -13,7 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import top.yukonga.miuix.kmp.icon.extended.Settings
+import top.yukonga.miuix.kmp.icon.extended.Tune
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
@@ -93,8 +93,9 @@ fun AgentCapsuleBar(
                     .clickable { haptics.tick(); onWorkbenchActionsClick() },
                 contentAlignment = Alignment.Center
     ) {
+                // Tune, not a gear: the top bar gear already means "Agent 设置".
                 Icon(
-                    MiuixIcons.Settings,
+                    MiuixIcons.Tune,
                     contentDescription = "绘图参数与操作",
                     modifier = Modifier.size(18.dp),
                     tint = MiuixTheme.colorScheme.onSurface

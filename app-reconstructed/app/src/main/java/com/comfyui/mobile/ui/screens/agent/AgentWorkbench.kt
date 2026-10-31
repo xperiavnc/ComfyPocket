@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.MediaOutput
 import top.yukonga.miuix.kmp.basic.CardColors
+import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -78,7 +79,8 @@ fun AgentWorkspaceLayout(
     val focus = LocalFocusManager.current
     val scheme = MiuixTheme.colorScheme
     BoxWithConstraints(modifier) {
-        val previewHeight = (maxHeight * 0.34f - 64.dp).coerceIn(48.dp, 216.dp)
+        // Whole images are fitted now, so give portraits real height; chat keeps the rest.
+        val previewHeight = (maxHeight * 0.42f - 64.dp).coerceIn(48.dp, 300.dp)
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
@@ -182,8 +184,10 @@ fun AgentWorkbench(
         ) {
             AgentImagePreviewCard(
                 mediaList = mediaList, previewUrl = previewUrl, status = status,
-                wfLabel = wfLabel, cardColors = cardColors, sidePad = 8.dp,
-                modifier = Modifier.height(previewHeight).testTag("agent-workbench-preview"),
+                wfLabel = wfLabel,
+                cardColors = CardDefaults.defaultColors(color = scheme.surfaceContainerHighest),
+                sidePad = 8.dp,
+                modifier = Modifier.height(previewHeight).padding(bottom = 2.dp).testTag("agent-workbench-preview"),
                 pagerState = pagerState,
                 showControls = false,
                 onImageClick = onImageClick,

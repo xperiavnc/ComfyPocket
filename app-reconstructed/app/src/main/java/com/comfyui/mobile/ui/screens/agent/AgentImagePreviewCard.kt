@@ -7,13 +7,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,7 +50,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.MediaOutput
-import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardColors
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
@@ -60,10 +59,11 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Report
 import top.yukonga.miuix.kmp.theme.MiuixTheme
-import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 /**
- * Agent image preview card — one frosted center overlay for all busy/complete phases.
+ * Agent image preview — fitted image over a blurred ambient copy of itself, so any aspect
+ * ratio shows completely (portraits are no longer cropped into a strip). Busy phases blur
+ * the image itself and float one status block on top.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -91,6 +91,8 @@ fun AgentImagePreviewCard(
         if (status.showOverlay) heldOverlayStatus = status
     }
     val canOpenImage = mediaList.isNotEmpty() && !overlayOn
+    // Blur the picture itself while busy; a blurred scrim over a sharp image only looks grey.
+    val imageBlur by animateDpAsState(if (overlayOn) 18.dp else 0.dp, tween(260), label = "preview_blur")
 
     val infiniteTransition = rememberInfiniteTransition(label = "agent_card_pulse")
     val pulseAlpha by infiniteTransition.animateFloat(
@@ -103,22 +105,13 @@ fun AgentImagePreviewCard(
         label = "pulse_alpha"
     )
 
-    Card(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = sidePad, vertical = 6.dp)
-            .border(
-                width = 1.dp,
-                color = scheme.outline.copy(alpha = 0.26f),
-                shape = RoundedCornerShape(28.dp)
-            ),
-        cornerRadius = 28.dp,
-        colors = cardColors,
-        onClick = { },
-        pressFeedbackType = PressFeedbackType.Sink,
-        showIndication = true
+            .clip(RoundedCornerShape(PreviewCorner))
+            .background(cardColors.color)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
             if (mediaList.isNotEmpty()) {
                 HorizontalPager(
                     state = pagerState,
@@ -139,17 +132,25 @@ fun AgentImagePreviewCard(
                                     style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                             }
                         } else {
-                        AsyncImage(
-                            model = url,
-                            contentDescription = if (page == 0) "最新生成" else "历史生成",
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .then(
-                                    if (canOpenImage) Modifier.clickable { onImageClick(page) }
-                                    else Modifier
-                                ),
-                            contentScale = ContentScale.Crop
-    )
+                            Box(
+                                Modifier.fillMaxSize().then(
+                                    if (canOpenImage) Modifier.clickable { onImageClick(page) } else Modifier
+                                )
+                            ) {
+                                // Ambient fill for letterbox areas: same image, cropped, heavily blurred and dimmed.
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize().blur(28.dp).alpha(0.55f),
+                                    contentScale = ContentScale.Crop
+                                )
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = if (page == 0) "最新生成" else "历史生成",
+                                    modifier = Modifier.fillMaxSize().blur(imageBlur),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
                         }
                     }
                 }
@@ -158,12 +159,20 @@ fun AgentImagePreviewCard(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
     ) {
-                    Icon(
-                        MiuixIcons.Image,
-                        contentDescription = null,
-                        modifier = Modifier.size(88.dp),
-                        tint = scheme.primary.copy(alpha = 0.45f)
-    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(
+                            MiuixIcons.Image,
+                            contentDescription = null,
+                            modifier = Modifier.size(44.dp),
+                            tint = scheme.onSurfaceVariantSummary.copy(alpha = 0.7f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            "生成的图片会显示在这里",
+                            color = scheme.onSurfaceVariantSummary,
+                            style = MiuixTheme.textStyles.footnote1
+                        )
+                    }
                 }
             }
 
@@ -199,16 +208,10 @@ fun AgentImagePreviewCard(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
+                            // Light veil keeps text legible over the blurred image.
+                            .background(scheme.surface.copy(alpha = if (mediaList.isNotEmpty()) 0.42f else 0f))
                             .clickable(onClick = { /* block open while overlay */ })
     ) {
-                        if (mediaList.isNotEmpty()) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(scheme.surface.copy(alpha = 0.68f))
-                                    .blur(16.dp)
-    )
-                        }
                         Column(
                             modifier = Modifier.fillMaxSize(),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -218,11 +221,11 @@ fun AgentImagePreviewCard(
                                 MiuixIcons.Image,
                                 contentDescription = null,
                                 modifier = Modifier
-                                    .size(72.dp)
+                                    .size(48.dp)
                                     .graphicsLayer { alpha = if (accentComplete) 1f else pulseAlpha },
                                 tint = titleColor.copy(alpha = 0.9f)
     )
-                            Spacer(modifier = Modifier.height(14.dp))
+                            Spacer(modifier = Modifier.height(12.dp))
                             Text(
                                 text = if (accentComplete) "✓  $title" else title,
                                 color = titleColor,
@@ -235,7 +238,7 @@ fun AgentImagePreviewCard(
                                 AgentStatusProgressBar(
                                     progress = progress,
                                     modifier = Modifier
-                                        .padding(horizontal = 28.dp)
+                                        .padding(horizontal = 40.dp)
                                         .fillMaxWidth()
     )
                             }
@@ -243,8 +246,8 @@ fun AgentImagePreviewCard(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = subtitle,
-                                    color = titleColor.copy(alpha = 0.92f),
-                                    style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.SemiBold),
+                                    color = scheme.onSurface.copy(alpha = 0.8f),
+                                    style = MiuixTheme.textStyles.body2,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
     )
@@ -254,30 +257,35 @@ fun AgentImagePreviewCard(
                 }
             }
 
-            if (!overlayOn && mediaList.isNotEmpty()) {
+            if (!overlayOn && mediaList.size > 1) {
+                // Compact page counter + dots; the "最新/历史" wording lives in the header row.
                 Row(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(10.dp)
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = if (showControls) 52.dp else 10.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(scheme.surface.copy(alpha = 0.78f))
+                        .background(Color.Black.copy(alpha = 0.32f))
                         .then(if (showControls) Modifier.clickable(onClick = onClearMediaListClick) else Modifier)
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-                    Text(
-                        text = if (pagerState.currentPage == 0) "最新生成" else "历史生成",
-                        color = scheme.onSurface,
-                        style = MiuixTheme.textStyles.body2
-    )
-                    if (mediaList.size > 1) {
-                        Text(
-                            text = "(${pagerState.currentPage + 1}/${mediaList.size})",
-                            color = scheme.primary,
-                            style = MiuixTheme.textStyles.footnote1.copy(fontWeight = FontWeight.SemiBold)
-    )
+                    val dots = mediaList.size.coerceAtMost(MaxDots)
+                    val selectedDot = pagerState.currentPage.coerceAtMost(dots - 1)
+                    repeat(dots) { i ->
+                        val selected = i == selectedDot
+                        val w by animateDpAsState(if (selected) 14.dp else 5.dp, tween(200), label = "dot_w")
+                        Box(
+                            Modifier.size(width = w, height = 5.dp).clip(RoundedCornerShape(50))
+                                .background(Color.White.copy(alpha = if (selected) 0.95f else 0.5f))
+                        )
                     }
+                    Text(
+                        text = "(${pagerState.currentPage + 1}/${mediaList.size})",
+                        color = Color.White,
+                        style = MiuixTheme.textStyles.footnote2.copy(fontWeight = FontWeight.SemiBold),
+                        modifier = Modifier.padding(start = 2.dp)
+    )
                 }
             }
 
@@ -336,9 +344,12 @@ fun AgentImagePreviewCard(
                     onClick = onPromptClick
     )
             }
-        }
     }
 }
+
+/** Inner preview radius: concentric with the 22dp workbench container minus its 8dp inset. */
+private val PreviewCorner = 14.dp
+private const val MaxDots = 6
 
 private data class AgentOverlayFrame(
     val phase: AgentCardPhase,
