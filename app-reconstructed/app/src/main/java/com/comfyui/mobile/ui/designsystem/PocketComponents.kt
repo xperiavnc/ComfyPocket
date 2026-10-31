@@ -39,16 +39,29 @@ fun PocketCard(
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(
-        modifier = modifier,
-        cornerRadius = PocketTokens.Radius.Large,
-        insideMargin = contentPadding,
-        colors = if (surface == PocketSurface.Base) PocketCardColors.base() else PocketCardColors.raised(),
-        onClick = onClick,
-        pressFeedbackType = if (onClick != null) PressFeedbackType.Sink else PressFeedbackType.None,
-        showIndication = onClick != null,
-        content = content
-    )
+    val colors = if (surface == PocketSurface.Base) PocketCardColors.base() else PocketCardColors.raised()
+    if (onClick == null) {
+        // Non-interactive overload: the clickable one installs a press detector that steals taps
+        // from fields and buttons inside the card.
+        Card(
+            modifier = modifier,
+            cornerRadius = PocketTokens.Radius.Large,
+            insideMargin = contentPadding,
+            colors = colors,
+            content = content
+        )
+    } else {
+        Card(
+            modifier = modifier,
+            cornerRadius = PocketTokens.Radius.Large,
+            insideMargin = contentPadding,
+            colors = colors,
+            onClick = onClick,
+            pressFeedbackType = PressFeedbackType.Sink,
+            showIndication = true,
+            content = content
+        )
+    }
 }
 
 /**
