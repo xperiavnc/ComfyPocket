@@ -207,7 +207,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     val selected = server.effectiveId == currentId
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        pressFeedbackType = PressFeedbackType.Tilt,
+                        pressFeedbackType = PressFeedbackType.Sink,
                         showIndication = true,
                         onClick = { viewModel.selectServer(server.effectiveId) },
                         colors = CardDefaults.defaultColors(

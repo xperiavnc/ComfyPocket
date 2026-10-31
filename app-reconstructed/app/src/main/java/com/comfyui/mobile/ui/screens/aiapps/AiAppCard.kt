@@ -55,7 +55,7 @@ fun AiAppEmptyCard(
         cornerRadius = 28.dp,
         colors = cardColors,
         onClick = null,
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = false
     ) {
         Column(
@@ -107,7 +107,7 @@ fun AiAppCard(
         cornerRadius = 28.dp,
         colors = cardColors,
         onClick = if (!isDragging) onClick else null,
-        pressFeedbackType = if (!isDragging) PressFeedbackType.Tilt else PressFeedbackType.None,
+        pressFeedbackType = if (!isDragging) PressFeedbackType.Sink else PressFeedbackType.None,
         showIndication = !isDragging
     ) {
         Column {

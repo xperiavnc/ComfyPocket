@@ -451,7 +451,7 @@ fun ControlScreen(viewModel: ControlUi) {
                                     scheme.secondaryContainer
                                 }
     ),
-                            pressFeedbackType = PressFeedbackType.Tilt,
+                            pressFeedbackType = PressFeedbackType.Sink,
                             showIndication = true,
                             onClick = {
                                 viewModel.loadLocalWorkflow(file)

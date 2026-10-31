@@ -73,7 +73,7 @@ fun ControlWorkflowHeaderCard(
                     color = scheme.primaryContainer.copy(alpha = 0.55f)
     ),
                 onClick = onLocalClick,
-                pressFeedbackType = PressFeedbackType.Tilt,
+                pressFeedbackType = PressFeedbackType.Sink,
                 showIndication = true
     ) {
                 Row(

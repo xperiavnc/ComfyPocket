@@ -47,7 +47,7 @@ fun ControlLatestMediaCard(
         cornerRadius = cornerRadius,
         colors = cardColors,
         onClick = null,
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true
     ) {
         Column(modifier = Modifier.padding(18.dp)) {

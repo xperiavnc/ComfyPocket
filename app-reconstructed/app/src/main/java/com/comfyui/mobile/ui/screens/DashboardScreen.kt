@@ -233,7 +233,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 cornerRadius = DashCardRadius,
                 colors = cardColors,
                 onClick = { navController.navigate("cloud_tasks") },
-                pressFeedbackType = PressFeedbackType.Tilt,
+                pressFeedbackType = PressFeedbackType.Sink,
                 showIndication = true
     ) {
                 Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
@@ -285,7 +285,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                 colors = cardColors,
             
                 onClick = null,
-                pressFeedbackType = PressFeedbackType.Tilt,
+                pressFeedbackType = PressFeedbackType.Sink,
                 showIndication = true
     ) {
                 Column(modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
@@ -346,7 +346,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
             colors = cardColors,
         
             onClick = null,
-            pressFeedbackType = PressFeedbackType.Tilt,
+            pressFeedbackType = PressFeedbackType.Sink,
             showIndication = true
     ) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {

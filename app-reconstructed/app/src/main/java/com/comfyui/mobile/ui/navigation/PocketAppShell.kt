@@ -3,6 +3,16 @@
 package com.comfyui.mobile.ui.navigation
 
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -52,6 +62,9 @@ import com.comfyui.mobile.ui.theme.ThemePaletteIds
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlin.math.roundToInt
+
+/** Bottom bar show/hide when entering or leaving a secondary page. */
+private const val PocketBarMillis = 250
 
 internal val pocketTabs = listOf(Screen.Dashboard, Screen.Control, Screen.Agent, Screen.AiApps, Screen.Gallery)
 internal val pocketSecondaryRoutes = listOf(
@@ -175,7 +188,16 @@ internal fun PocketNavigationShell(
     val currentEntry by rememberUpdatedState(entry)
     val destinationContent by rememberUpdatedState(content)
     val route = entry?.destination?.route
-    val showBar = pocketTabs.any { it.route == route } && !WindowInsets.isImeVisible
+    val onTab = pocketTabs.any { it.route == route }
+    // The keyboard hides the bar instantly (the IME already animates the layout);
+    // route changes animate it so content does not jump when a secondary page opens.
+    val imeVisible = WindowInsets.isImeVisible
+    val showBar = onTab && !imeVisible
+    // While the bar animates out for a secondary page, keep showing the tab it left from;
+    // otherwise its indicator would snap to the first item during the exit.
+    var lastTabRoute by rememberSaveable { mutableStateOf(Screen.Dashboard.route) }
+    if (onTab && route != null && route != lastTabRoute) lastTabRoute = route
+    val barRoute = if (onTab) route else lastTabRoute
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(entry?.id) { focus.clearFocus(); keyboard?.hide() }
@@ -206,11 +228,19 @@ internal fun PocketNavigationShell(
             modifier = Modifier.fillMaxSize().imePadding().testTag("pocket-shell"),
             contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
             bottomBar = {
-                if (showBar && !floating) NavigationBar(
-                    modifier = Modifier.testTag("pocket-navigation"),
-                    windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+                if (!imeVisible && bottomBarStyle != BottomBarStyle.CLASSIC) AnimatedVisibility(
+                    visible = onTab,
+                    enter = expandVertically(tween(PocketBarMillis, easing = PocketEmphasizedDecelerate),
+                        expandFrom = Alignment.Top) + fadeIn(tween(PocketBarMillis)),
+                    exit = shrinkVertically(tween(PocketBarMillis, easing = PocketEmphasizedAccelerate),
+                        shrinkTowards = Alignment.Top) + fadeOut(tween(PocketBarMillis / 2))
                 ) {
-                    PocketNavigationItems(route, onTabSelected, focus, keyboard, navController)
+                    NavigationBar(
+                        modifier = Modifier.testTag("pocket-navigation"),
+                        windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+                    ) {
+                        PocketNavigationItems(barRoute, onTabSelected, focus, keyboard, navController)
+                    }
                 }
             }
         ) { padding ->
@@ -219,18 +249,21 @@ internal fun PocketNavigationShell(
                 .clipToBounds().testTag("pocket-content")) {
                 NavHost(
                     navController, startDestination = Screen.Dashboard.route,
-                    enterTransition = { pocketPageEnter(pocketNavigationIsBackwards(
-                        initialState.destination.route, targetState.destination.route, pop = false), rtl) },
-                    exitTransition = { pocketPageExit(pocketNavigationIsBackwards(
-                        initialState.destination.route, targetState.destination.route, pop = false), rtl) },
-                    popEnterTransition = { pocketPageEnter(pocketNavigationIsBackwards(
-                        initialState.destination.route, targetState.destination.route, pop = true), rtl) },
-                    popExitTransition = { pocketPageExit(pocketNavigationIsBackwards(
-                        initialState.destination.route, targetState.destination.route, pop = true), rtl) }
+                    enterTransition = { pocketNavEnter(
+                        initialState.destination.route, targetState.destination.route, pop = false, rtl) },
+                    exitTransition = { pocketNavExit(
+                        initialState.destination.route, targetState.destination.route, pop = false, rtl) },
+                    popEnterTransition = { pocketNavEnter(
+                        initialState.destination.route, targetState.destination.route, pop = true, rtl) },
+                    popExitTransition = { pocketNavExit(
+                        initialState.destination.route, targetState.destination.route, pop = true, rtl) }
                 ) {
                     (pocketTabs.map { it.route } + pocketSecondaryRoutes).forEach { destination ->
                         composable(destination) { backStack ->
                             val active = backStack.id == currentEntry?.id
+                            // Opaque pages: a push slides over the covered page instead of
+                            // blending two translucent layers during the transition.
+                            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                             PocketDestination(active) {
                                 // Leaf handlers are composed later and take precedence over root Back.
                                 PredictiveBackHandler(enabled = active && destination != Screen.Dashboard.route &&
@@ -241,13 +274,21 @@ internal fun PocketNavigationShell(
                                 }
                                 destinationContent(backStack)
                             }
+                            }
                         }
                     }
                 }
               }
-              if (floating) {
+              if (!imeVisible && bottomBarStyle == BottomBarStyle.CLASSIC) AnimatedVisibility(
+                  visible = onTab,
+                  modifier = Modifier.align(Alignment.BottomCenter),
+                  enter = slideInVertically(tween(PocketBarMillis, easing = PocketEmphasizedDecelerate)) { it / 2 } +
+                      fadeIn(tween(PocketBarMillis)),
+                  exit = slideOutVertically(tween(PocketBarMillis, easing = PocketEmphasizedAccelerate)) { it / 2 } +
+                      fadeOut(tween(PocketBarMillis / 2))
+              ) {
                   PocketClassicNavigation(
-                      route, darkTheme, paletteId, bottomGap,
+                      barRoute, darkTheme, paletteId, bottomGap,
                       onItemClick = { index ->
                           val tab = pocketTabs[index]
                           if (navController.currentDestination?.route != tab.route) {
@@ -256,8 +297,7 @@ internal fun PocketNavigationShell(
                               onTabSelected()
                               navController.selectPocketTab(tab.route)
                           }
-                      },
-                      modifier = Modifier.align(androidx.compose.ui.Alignment.BottomCenter)
+                      }
                   )
               }
             }

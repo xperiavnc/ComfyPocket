@@ -42,7 +42,7 @@ fun ControlQueueCard(
         cornerRadius = 18.dp,
         colors = cardColors,
         onClick = null,
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true
     ) {
         Column(
@@ -71,7 +71,7 @@ fun ControlQueueCard(
                         }
     ),
                     onClick = null,
-                    pressFeedbackType = PressFeedbackType.Tilt,
+                    pressFeedbackType = PressFeedbackType.Sink,
                     showIndication = true
     ) {
                     Text(
@@ -86,7 +86,7 @@ fun ControlQueueCard(
                     colors = CardDefaults.defaultColors(
                         color = scheme.surfaceContainerHigh.copy(alpha = 0.95f)
     ),
-                    pressFeedbackType = PressFeedbackType.Tilt,
+                    pressFeedbackType = PressFeedbackType.Sink,
                     showIndication = true,
                     onClick = onRefreshQueue
     ) {
@@ -126,7 +126,7 @@ fun ControlQueueCard(
                             color = scheme.surfaceContainerHigh.copy(alpha = 0.92f)
     ),
                         onClick = null,
-                        pressFeedbackType = PressFeedbackType.Tilt,
+                        pressFeedbackType = PressFeedbackType.Sink,
                         showIndication = true
     ) {
                         Row(

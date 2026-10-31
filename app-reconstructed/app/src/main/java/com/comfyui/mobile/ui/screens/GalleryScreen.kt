@@ -422,7 +422,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             contentColor = scheme.onSecondaryContainer
     ),
                         onClick = null,
-                        pressFeedbackType = PressFeedbackType.Tilt,
+                        pressFeedbackType = PressFeedbackType.Sink,
                         showIndication = false
     ) {
                         Column(
@@ -640,7 +640,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                             modifier = Modifier.fillMaxWidth(),
                             cornerRadius = 14.dp,
                             colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
-                            pressFeedbackType = PressFeedbackType.Tilt
+                            pressFeedbackType = PressFeedbackType.Sink
     ) {
                             BasicComponent(
                                 title = cat.name,
@@ -1219,7 +1219,7 @@ fun MediaGridItem(
                 onLongClick = onLongClick
     ),
         cornerRadius = corner,
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = false,
         onClick = null,
         colors = CardDefaults.defaultColors(

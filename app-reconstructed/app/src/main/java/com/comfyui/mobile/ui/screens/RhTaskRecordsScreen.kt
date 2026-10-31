@@ -244,7 +244,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.defaultColors(color = scheme.surfaceContainer),
-                        pressFeedbackType = PressFeedbackType.Tilt,
+                        pressFeedbackType = PressFeedbackType.Sink,
                         showIndication = true,
                         onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

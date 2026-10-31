@@ -232,7 +232,7 @@ fun CompactParamCard(
     ),
                         insideMargin = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
                         onClick = { onDropdownClick(node) },
-                        pressFeedbackType = PressFeedbackType.Tilt,
+                        pressFeedbackType = PressFeedbackType.Sink,
                         showIndication = true
     ) {
                         Row(

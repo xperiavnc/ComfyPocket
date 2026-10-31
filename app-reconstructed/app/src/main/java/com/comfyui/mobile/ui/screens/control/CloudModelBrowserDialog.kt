@@ -319,7 +319,7 @@ fun CloudModelBrowserDialog(
                                 modifier = Modifier.fillMaxWidth(),
                                 cornerRadius = 12.dp,
                                 colors = CardDefaults.defaultColors(color = scheme.surfaceContainer),
-                                pressFeedbackType = PressFeedbackType.Tilt,
+                                pressFeedbackType = PressFeedbackType.Sink,
                                 showIndication = true,
                                 onClick = {
                                     pendingSelectedItem = item

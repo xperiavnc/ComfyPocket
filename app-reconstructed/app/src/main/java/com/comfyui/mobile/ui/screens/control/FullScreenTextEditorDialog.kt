@@ -68,7 +68,7 @@ fun FullScreenTextEditorDialog(
             cornerRadius = 0.dp,
             colors = CardDefaults.defaultColors(color = Color.Black),
             onClick = null,
-            pressFeedbackType = PressFeedbackType.Tilt,
+            pressFeedbackType = PressFeedbackType.Sink,
             showIndication = true
     ) {
             Column(modifier = Modifier.fillMaxSize()) {

@@ -705,7 +705,7 @@ fun ModelHubScreen(
                     modifier = Modifier.fillMaxWidth(),
                     cornerRadius = 12.dp,
                     colors = CardDefaults.defaultColors(color = if (downloadReady) scheme.primary else scheme.surfaceContainerHigh),
-                    pressFeedbackType = PressFeedbackType.Tilt,
+                    pressFeedbackType = PressFeedbackType.Sink,
                     showIndication = true,
                     onClick = {
                         if (!remoteReady) {

@@ -311,16 +311,24 @@ class PocketShellTest {
         } finally { activity.pause().stop().destroy() }
     }
 
-    @Test fun bothBarsUseOriginalWidthBasedPageMotionInBothDirections() {
+    @Test fun sharedAxisMotionIsShortFadeThroughInBothDirections() {
         val forward = pocketPageMotion(pop = false)
         val back = pocketPageMotion(pop = true)
-        assertEquals(280, forward.durationMillis)
-        assertEquals(220, forward.exitFadeMillis)
-        assertEquals(200, forward.enterOffset(1000))
-        assertEquals(-125, forward.exitOffset(1000))
-        assertEquals(-125, back.enterOffset(1000))
-        assertEquals(200, back.exitOffset(1000))
-        assertEquals(-200, pocketPageMotion(false, rtl = true).enterOffset(1000))
-        assertEquals(125, pocketPageMotion(true, rtl = true).enterOffset(1000))
+        assertEquals(300, forward.durationMillis)
+        // Outgoing fades out before the incoming fades in: no translucent overlap.
+        assertTrue(forward.exitFadeMillis < forward.durationMillis / 2)
+        assertEquals(83, forward.enterOffset(1000))
+        assertEquals(-83, forward.exitOffset(1000))
+        assertEquals(-83, back.enterOffset(1000))
+        assertEquals(83, back.exitOffset(1000))
+        assertEquals(-83, pocketPageMotion(false, rtl = true).enterOffset(1000))
+        assertEquals(83, pocketPageMotion(true, rtl = true).enterOffset(1000))
+    }
+
+    @Test fun onlyTabToTabIsALateralSwitch() {
+        assertTrue(pocketIsTabSwitch(Screen.Dashboard.route, Screen.Gallery.route))
+        assertFalse(pocketIsTabSwitch(Screen.Dashboard.route, "settings"))
+        assertFalse(pocketIsTabSwitch("settings", Screen.Dashboard.route))
+        assertFalse(pocketIsTabSwitch("settings", "theme"))
     }
 }

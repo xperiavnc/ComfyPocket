@@ -115,7 +115,7 @@ fun AgentImagePreviewCard(
         cornerRadius = 28.dp,
         colors = cardColors,
         onClick = { },
-        pressFeedbackType = PressFeedbackType.Tilt,
+        pressFeedbackType = PressFeedbackType.Sink,
         showIndication = true
     ) {
         Box(modifier = Modifier.fillMaxSize()) {

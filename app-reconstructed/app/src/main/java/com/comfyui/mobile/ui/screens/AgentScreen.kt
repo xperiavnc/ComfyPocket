@@ -487,7 +487,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                 scheme.surfaceContainerHigh
                             }
     ),
-                        pressFeedbackType = PressFeedbackType.Tilt,
+                        pressFeedbackType = PressFeedbackType.Sink,
                         showIndication = true,
                         onClick = {
                             viewModel.selectLlmProfile(item.id)
@@ -663,7 +663,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                         scheme.secondaryContainer
                                     }
     ),
-                                pressFeedbackType = PressFeedbackType.Tilt,
+                                pressFeedbackType = PressFeedbackType.Sink,
                                 showIndication = true,
                                 onClick = {
                                     viewModel.setAgentDefaultWorkflow(
