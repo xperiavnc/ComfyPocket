@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import com.comfyui.mobile.ui.designsystem.PocketSettingsGroup
+
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -174,7 +176,7 @@ fun AboutScreen(navController: NavController) {
             }
 
             // 2. 官方开源链接与图标署名
-            Card(modifier = Modifier.fillMaxWidth()) {
+            PocketSettingsGroup("项目与署名") {
                 ArrowPreference(
                     title = "开源主页",
                     summary = "GitHub (HAIGC/ComfyUI-APP)",
@@ -238,7 +240,7 @@ fun AboutScreen(navController: NavController) {
             }
 
             // 4. 技术栈与组件致谢
-            Card(modifier = Modifier.fillMaxWidth()) {
+            PocketSettingsGroup("致谢") {
                 ArrowPreference(
                     title = "Jetpack Compose",
                     summary = "Android 声明式 UI",

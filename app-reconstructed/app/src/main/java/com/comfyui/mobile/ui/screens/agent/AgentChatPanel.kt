@@ -2,6 +2,8 @@ package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.ui.unit.dp
 import com.comfyui.mobile.ui.designsystem.PocketTokens
+import com.comfyui.mobile.ui.designsystem.PocketIconButton
+import com.comfyui.mobile.ui.designsystem.PocketPill
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.animation.core.animateFloatAsState
@@ -269,43 +271,14 @@ private fun ChatRoundButton(
     onClick: () -> Unit,
     content: @Composable (tint: Color) -> Unit
 ) {
-    val scheme = MiuixTheme.colorScheme
-    // One step off the chat card (highest) so stadium chips read clearly in light and dark.
-    val capsule = scheme.surface
-    val bg = when {
-        filled && enabled -> scheme.primary
-        enabled -> capsule
-        else -> capsule.copy(alpha = 0.55f)
-    }
-    val tint = when {
-        filled && enabled -> scheme.onPrimary
-        enabled -> scheme.onSurface
-        else -> scheme.onSurface.copy(alpha = 0.38f)
-    }
-    Box(
-        modifier = Modifier
-            .size(ChatButtonSize)
-            .clip(CircleShape)
-            .background(bg)
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        content(tint)
-    }
+    // Surface disc one step off the chat card so it reads in light and dark.
+    PocketIconButton(onClick = onClick, filled = filled, enabled = enabled, size = ChatButtonSize,
+        idleColor = MiuixTheme.colorScheme.surface, content = content)
 }
 
 @Composable
 private fun AttachMenuChip(label: String, onClick: () -> Unit) {
-    val scheme = MiuixTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .clip(PocketTokens.Shape.Pill)
-            .background(scheme.surface)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-    ) {
-        Text(text = label, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurface)
-    }
+    PocketPill(label = label, idleColor = MiuixTheme.colorScheme.surface, onClick = onClick)
 }
 
 private val AgentStarters = listOf(
@@ -329,15 +302,7 @@ private fun AgentEmptyHint(enabled: Boolean, onPick: (String) -> Unit) {
             color = scheme.onSurfaceVariantSummary,
             modifier = Modifier.padding(bottom = PocketTokens.Space.XXS))
         AgentStarters.forEach { starter ->
-            Box(
-                modifier = Modifier
-                    .clip(PocketTokens.Shape.Pill)
-                    .background(scheme.surfaceContainer)
-                    .clickable(enabled = enabled, role = Role.Button) { onPick(starter) }
-                    .padding(horizontal = PocketTokens.Space.M, vertical = PocketTokens.Space.XS)
-            ) {
-                Text(starter, style = MiuixTheme.textStyles.footnote1, color = scheme.onSurface, maxLines = 1)
-            }
+            PocketPill(label = starter, enabled = enabled, idleColor = scheme.surfaceContainer) { onPick(starter) }
         }
     }
 }

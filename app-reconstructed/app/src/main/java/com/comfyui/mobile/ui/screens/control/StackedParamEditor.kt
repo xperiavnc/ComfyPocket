@@ -106,12 +106,12 @@ fun StackedParamCard(
     Card(
         modifier = modifier,
         cornerRadius = PocketTokens.Radius.Large,
-        insideMargin = PaddingValues(12.dp),
+        insideMargin = PaddingValues(PocketTokens.Space.S),
         colors = CardDefaults.defaultColors(
             color = if (isDragging) {
                 scheme.primaryContainer.copy(alpha = 0.95f)
             } else {
-                scheme.surfaceContainerHigh.copy(alpha = 0.92f)
+                scheme.surfaceContainerHigh
             }
     ),
         holdDownState = false,

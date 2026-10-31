@@ -3,6 +3,7 @@ package com.comfyui.mobile.ui.screens
 import com.comfyui.mobile.data.AppModule
 import com.comfyui.mobile.ui.designsystem.PocketCardColors
 import com.comfyui.mobile.ui.designsystem.PocketTokens
+import com.comfyui.mobile.ui.designsystem.PocketPill
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -1442,41 +1443,7 @@ fun CategoryChip(
     isSelected: Boolean,
     onClick: () -> Unit
     ) {
-    val scheme = MiuixTheme.colorScheme
-    val shape = PocketTokens.Shape.Pill
-    val bgColor = if (isSelected) {
-        scheme.primary
-    } else {
-        scheme.surfaceContainerHigh
-    }
-    val textColor = if (isSelected) {
-        scheme.onPrimary
-    } else {
-        scheme.onSurface.copy(alpha = 0.88f)
-    }
-    val borderColor = if (isSelected) {
-        Color.Transparent
-    } else {
-        scheme.outline.copy(alpha = 0.55f)
-    }
-    Box(
-        modifier = Modifier
-            .clip(shape)
-            .background(bgColor, shape)
-            .border(width = 1.dp, color = borderColor, shape = shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = label,
-            style = MiuixTheme.textStyles.footnote1.copy(
-                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
-                fontSize = 13.sp
-    ),
-            color = textColor,
-            maxLines = 1
-    )
-    }
+    // Filled when selected, quiet container otherwise; no outline (matches the rest of the app).
+    PocketPill(label = label, selected = isSelected, onClick = onClick)
 }
 

@@ -118,12 +118,12 @@ fun CompactParamCard(
     Card(
         modifier = modifier,
         cornerRadius = PocketTokens.Radius.Medium,
-        insideMargin = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+        insideMargin = PaddingValues(horizontal = PocketTokens.Space.S, vertical = PocketTokens.Space.S - 2.dp),
         colors = CardDefaults.defaultColors(
             color = when {
                 isHoverTarget -> scheme.primaryContainer.copy(alpha = 0.45f)
                 isDragging -> scheme.surfaceContainerHighest
-                else -> scheme.surfaceContainerHigh.copy(alpha = 0.92f)
+                else -> scheme.surfaceContainerHigh
             },
             contentColor = onCard
     ),
@@ -293,12 +293,12 @@ fun FullWidthParamCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         cornerRadius = PocketTokens.Radius.Medium,
-        insideMargin = PaddingValues(12.dp),
+        insideMargin = PaddingValues(PocketTokens.Space.S),
         colors = CardDefaults.defaultColors(
             color = when {
                 isHoverTarget -> scheme.primaryContainer.copy(alpha = 0.45f)
                 isDragging -> scheme.surfaceContainerHighest
-                else -> scheme.surfaceContainerHigh.copy(alpha = 0.92f)
+                else -> scheme.surfaceContainerHigh
             },
             contentColor = onCard
     ),
