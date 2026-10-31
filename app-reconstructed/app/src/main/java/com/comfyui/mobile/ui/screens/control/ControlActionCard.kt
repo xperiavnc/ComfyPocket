@@ -144,7 +144,7 @@ fun ControlRunCard(
                     onClick = { haptics.tick(); onStopClick() },
                     modifier = Modifier
                         .weight(1f)
-                        .height(42.dp),
+                        .height(PocketTokens.ControlHeight),
                     cornerRadius = PocketTokens.Radius.Medium,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.error.copy(alpha = 0.12f),
@@ -159,7 +159,7 @@ fun ControlRunCard(
                     onClick = { haptics.confirm(); onSaveClick() },
                     modifier = Modifier
                         .weight(1f)
-                        .height(42.dp),
+                        .height(PocketTokens.ControlHeight),
                     cornerRadius = PocketTokens.Radius.Medium,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.surfaceContainerHigh,
