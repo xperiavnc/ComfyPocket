@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import androidx.compose.animation.core.animateFloatAsState
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.core.spring
@@ -72,7 +74,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
@@ -188,7 +189,7 @@ fun StackedParamCard(
                                         overflow = TextOverflow.Ellipsis
     )
                                     Icon(
-                                        MiuixIcons.ExpandMore,
+                                        androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                                         contentDescription = null,
                                         tint = scheme.onSecondaryContainer
     )

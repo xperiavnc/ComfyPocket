@@ -418,23 +418,28 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
 
     OverlayDialog(show = showWorkbenchActions, title = "绘图参数与操作",
         onDismissRequest = { showWorkbenchActions = false }) {
-        Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton("工作流 · $wfLabel", modifier = Modifier.fillMaxWidth(), onClick = {
-                showWorkbenchActions = false; workflowSheetLevel = 1; showWorkflowSheet = true
-            })
-            TextButton("画风 / 画师与辅助参数", modifier = Modifier.fillMaxWidth(), onClick = {
-                showWorkbenchActions = false; showStyleParamsDialog = true
-            })
-            TextButton("正向 / 反向提示词", modifier = Modifier.fillMaxWidth(), onClick = {
-                showWorkbenchActions = false; showPromptDialog = true
-            })
-            TextButton("清空预览记录", modifier = Modifier.fillMaxWidth(), onClick = {
-                showWorkbenchActions = false; showClearMediaConfirmDialog = true
-            })
-            TextButton("重置当前对话", modifier = Modifier.fillMaxWidth(), onClick = {
-                showWorkbenchActions = false; showResetChatConfirm = true
-            })
+        Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(PocketTokens.Space.S)) {
+            // Settings-style list: parameters grouped, destructive actions in their own red group.
+            com.comfyui.mobile.ui.designsystem.PocketActionGroup {
+                com.comfyui.mobile.ui.designsystem.PocketActionRow("工作流", summary = wfLabel, onClick = {
+                    showWorkbenchActions = false; workflowSheetLevel = 1; showWorkflowSheet = true
+                })
+                com.comfyui.mobile.ui.designsystem.PocketActionRow("画风 / 画师与辅助参数", onClick = {
+                    showWorkbenchActions = false; showStyleParamsDialog = true
+                })
+                com.comfyui.mobile.ui.designsystem.PocketActionRow("正向 / 反向提示词", onClick = {
+                    showWorkbenchActions = false; showPromptDialog = true
+                })
+            }
+            com.comfyui.mobile.ui.designsystem.PocketActionGroup {
+                com.comfyui.mobile.ui.designsystem.PocketActionRow("清空预览记录", destructive = true, onClick = {
+                    showWorkbenchActions = false; showClearMediaConfirmDialog = true
+                })
+                com.comfyui.mobile.ui.designsystem.PocketActionRow("重置当前对话", destructive = true, onClick = {
+                    showWorkbenchActions = false; showResetChatConfirm = true
+                })
+            }
         }
     }
     OverlayDialog(show = showResetChatConfirm, title = "重置当前对话？",

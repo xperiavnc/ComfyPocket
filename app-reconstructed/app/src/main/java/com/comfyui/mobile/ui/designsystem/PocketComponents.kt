@@ -3,6 +3,14 @@ package com.comfyui.mobile.ui.designsystem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
@@ -140,4 +148,82 @@ fun PocketIconButton(
     ) {
         content(tint)
     }
+}
+
+/**
+ * Small "expand" chevron. Material's KeyboardArrowDown: the Miuix ExpandMore glyph renders as a
+ * corner-bracket shape below ~16dp, which looked broken next to pills and breadcrumbs.
+ */
+@Composable
+fun PocketChevron(tint: Color, modifier: Modifier = Modifier, size: Dp = 16.dp, contentDescription: String? = null) {
+    androidx.compose.material3.Icon(
+        imageVector = Icons.Default.KeyboardArrowDown,
+        contentDescription = contentDescription,
+        modifier = modifier.size(size),
+        tint = tint
+    )
+}
+
+/**
+ * One row in an action list (sheet/dialog): left-aligned label, optional summary, trailing chevron.
+ * [destructive] colours the label with the error colour and drops the chevron.
+ */
+@Composable
+fun PocketActionRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    summary: String? = null,
+    destructive: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit
+) {
+    val scheme = MiuixTheme.colorScheme
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 52.dp)
+            .clip(PocketTokens.Shape.Medium)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(horizontal = PocketTokens.Space.M, vertical = PocketTokens.Space.XS),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = when {
+                    !enabled -> scheme.onSurfaceVariantSummary.copy(alpha = 0.5f)
+                    destructive -> scheme.error
+                    else -> scheme.onSurface
+                },
+                style = MiuixTheme.textStyles.body1,
+                fontWeight = FontWeight.Medium
+            )
+            if (!summary.isNullOrBlank()) Text(
+                text = summary,
+                color = scheme.onSurfaceVariantSummary,
+                style = MiuixTheme.textStyles.footnote1,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (!destructive) androidx.compose.material3.Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = scheme.onSurfaceVariantSummary
+        )
+    }
+}
+
+/** Groups [PocketActionRow]s on one rounded surface; separate groups by placing several. */
+@Composable
+fun PocketActionGroup(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(PocketTokens.Shape.Large)
+            .background(MiuixTheme.colorScheme.surfaceContainerHigh)
+            .padding(PocketTokens.Space.XXS),
+        content = content
+    )
 }

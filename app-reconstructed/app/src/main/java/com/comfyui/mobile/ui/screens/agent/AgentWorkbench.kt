@@ -1,5 +1,8 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+
 import androidx.compose.animation.AnimatedVisibility
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.core.animateFloatAsState
@@ -58,7 +61,6 @@ import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Image
 import top.yukonga.miuix.kmp.icon.extended.Recent
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** One stable column: changing preview height never recreates the conversation content. */
@@ -100,7 +102,7 @@ fun AgentWorkspaceLayout(
                 Text(sessionTitle, Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = scheme.onSurfaceVariantSummary,
                     style = MiuixTheme.textStyles.body2.copy(fontWeight = FontWeight.Medium))
-                Icon(MiuixIcons.ExpandMore, contentDescription = null, modifier = Modifier.size(14.dp),
+                Icon(androidx.compose.material.icons.Icons.Default.KeyboardArrowDown, contentDescription = null, modifier = Modifier.size(18.dp),
                     tint = scheme.onSurfaceVariantSummary)
             }
             AgentWorkbench(
@@ -143,7 +145,17 @@ fun AgentWorkbench(
             .clip(PocketTokens.Shape.XLarge).background(scheme.surfaceContainer)
             .testTag("agent-workbench")
     ) {
-        Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        // The whole header toggles (full-width press highlight); the thumbnail keeps its own tap.
+        Row(
+            Modifier.fillMaxWidth()
+                .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
+                .testTag("agent-workbench-toggle")
+                .clickable(role = Role.Button, onClickLabel = if (expanded) "收起工作台" else "展开工作台") {
+                    onExpandedChange(!expanded)
+                }
+                .padding(start = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             val media = mediaList.firstOrNull()
             val url = media?.let(previewUrl).orEmpty()
             Box(
@@ -151,7 +163,12 @@ fun AgentWorkbench(
                     .background(scheme.surfaceContainerHighest)
                     .then(if (media != null && !status.showOverlay) Modifier.clickable(
                         role = Role.Button, onClickLabel = "全屏查看最新生成"
-                    ) { onImageClick(0) } else Modifier)
+                    ) { onImageClick(0) } else Modifier.pointerInput(Unit) {
+                        // Inert while generating: swallow taps so they do not toggle the header.
+                        detectTapGestures { }
+                    })
+                    // Own merge boundary so it stays a separate node inside the clickable header.
+                    .semantics(mergeDescendants = true) {}
                     .testTag("agent-workbench-thumbnail"),
                 contentAlignment = Alignment.Center
             ) {
@@ -159,12 +176,7 @@ fun AgentWorkbench(
                 else Icon(MiuixIcons.Image, contentDescription = null, tint = scheme.onSurfaceVariantSummary)
             }
             Row(
-                Modifier.weight(1f).height(64.dp)
-                    .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
-                    .testTag("agent-workbench-toggle")
-                    .clickable(role = Role.Button, onClickLabel = if (expanded) "收起工作台" else "展开工作台") {
-                        onExpandedChange(!expanded)
-                    }.padding(horizontal = 12.dp),
+                Modifier.weight(1f).height(64.dp).padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {

@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import com.comfyui.mobile.ui.feedback.AppToast
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.activity.compose.BackHandler
@@ -99,7 +101,6 @@ import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Download
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Folder
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
@@ -687,7 +688,7 @@ fun ModelHubScreen(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    Icon(MiuixIcons.ExpandMore, contentDescription = null, tint = scheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
+                    Icon(androidx.compose.material.icons.Icons.Default.KeyboardArrowDown, contentDescription = null, tint = scheme.onSecondaryContainer, modifier = Modifier.size(16.dp))
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))

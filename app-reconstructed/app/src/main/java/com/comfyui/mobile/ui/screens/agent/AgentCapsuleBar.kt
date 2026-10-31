@@ -1,5 +1,8 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import androidx.compose.ui.semantics.Role
+
+
 import androidx.compose.animation.core.spring
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.ui.unit.dp
@@ -37,7 +40,6 @@ import com.comfyui.mobile.ui.rememberAppHaptics
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 
 /** Keep only frequent controls visible; low-frequency actions live in the workbench sheet. */
@@ -77,15 +79,11 @@ fun AgentCapsuleBar(
             AgentCapsule(
                 label = modelDisplayName,
                 modifier = Modifier.weight(1f, fill = false),
+                // No chevron: the row is tight and the label alone reads as tappable; the
+                // description keeps it announced as the model switcher.
+                onClickLabel = "切换模型与 API",
                 onClick = { haptics.tick(); onModelSwitchClick() }
-    ) {
-                Icon(
-                    MiuixIcons.ExpandMore,
-                    contentDescription = "切换模型与 API",
-                    modifier = Modifier.size(12.dp),
-                    tint = MiuixTheme.colorScheme.primary
-    )
-            }
+            )
             Box(
                 modifier = Modifier
                     .size(CapsuleHeight)
@@ -179,6 +177,7 @@ fun AgentCapsule(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onClickLabel: String? = null,
     trailing: (@Composable RowScope.() -> Unit)? = null
     ) {
     val scheme = MiuixTheme.colorScheme
@@ -188,8 +187,8 @@ fun AgentCapsule(
             .widthIn(min = 52.dp)
             .clip(PocketTokens.Shape.Pill)
             .background(scheme.surfaceContainerHighest)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp),
+            .clickable(onClickLabel = onClickLabel, role = Role.Button, onClick = onClick)
+            .padding(horizontal = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
     ) {

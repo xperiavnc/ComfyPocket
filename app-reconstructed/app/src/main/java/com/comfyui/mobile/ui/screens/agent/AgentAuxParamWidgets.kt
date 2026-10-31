@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import androidx.compose.foundation.background
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
@@ -49,7 +51,6 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -161,7 +162,7 @@ fun AgentAuxDropdownWidget(
                     modifier = Modifier.weight(1f),
                     )
                 Icon(
-                    MiuixIcons.ExpandMore,
+                    androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                     contentDescription = if (expanded) "收起" else "展开",
                     tint = scheme.onSurfaceVariantSummary
     )

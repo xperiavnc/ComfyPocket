@@ -36,7 +36,8 @@ fun AgentRuleFilesPanel(
     var removal by remember { mutableStateOf<Pair<AgentRuleKind, AgentRuleDocument>?>(null) }
     val scheme = MiuixTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("提示词规则", style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
+        // Same header as "模型服务" / "可选资源" so the settings page reads as one grouped list.
+        com.comfyui.mobile.ui.designsystem.PocketSectionHeader("提示词规则")
         Text("导入自己的 TXT / Markdown 文件。未导入时留空；文件内容用于后续请求。",
             style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
         AgentRuleKind.entries.forEach { kind ->
@@ -45,7 +46,7 @@ fun AgentRuleFilesPanel(
             val reading = kind in importing
             Card(Modifier.fillMaxWidth().testTag("agent-prompt-$key")
                 .then(if (document != null) Modifier.clickable { preview = kind to document } else Modifier),
-                insideMargin = PaddingValues(16.dp)) {
+                insideMargin = PaddingValues(com.comfyui.mobile.ui.designsystem.PocketTokens.Space.M)) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(kind.title, style = MiuixTheme.textStyles.body1, fontWeight = FontWeight.SemiBold)

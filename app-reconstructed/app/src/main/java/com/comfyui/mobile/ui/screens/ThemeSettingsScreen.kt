@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import com.comfyui.mobile.ui.designsystem.PocketCard
 import com.comfyui.mobile.ui.designsystem.PocketSurface
 
@@ -71,7 +73,6 @@ import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.Info
 import top.yukonga.miuix.kmp.icon.extended.Layers
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Ok
 import top.yukonga.miuix.kmp.icon.extended.Tune
 import top.yukonga.miuix.kmp.preference.SliderPreference
@@ -215,7 +216,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
     )
                         }
                         Icon(
-                            imageVector = MiuixIcons.ExpandMore,
+                            imageVector = androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                             contentDescription = if (palettePickerExpanded) "收起色板" else "展开色板",
                             tint = scheme.onSurfaceVariantSummary,
                             modifier = Modifier

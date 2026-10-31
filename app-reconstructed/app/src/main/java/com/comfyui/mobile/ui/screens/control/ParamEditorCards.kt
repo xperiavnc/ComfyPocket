@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -51,7 +53,6 @@ import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Edit
 import top.yukonga.miuix.kmp.icon.extended.Image
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
@@ -251,7 +252,7 @@ fun CompactParamCard(
                     )
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(
-                                MiuixIcons.ExpandMore,
+                                androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
                                 tint = onCard.copy(alpha = 0.7f),
                                 modifier = Modifier.size(16.dp)

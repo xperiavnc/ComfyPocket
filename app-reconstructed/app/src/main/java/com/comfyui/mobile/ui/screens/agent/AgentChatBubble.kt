@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import androidx.compose.foundation.background
 import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.border
@@ -31,7 +33,6 @@ import com.comfyui.mobile.model.AgentClarification
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.icon.MiuixIcons
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.icon.extended.Report
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.ui.platform.testTag
@@ -161,7 +162,7 @@ fun AgentBubble(
                                 fontWeight = FontWeight.Medium
     )
                             Icon(
-                                MiuixIcons.ExpandMore,
+                                androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
                                 modifier = Modifier.size(12.dp),
                                 tint = scheme.primary

@@ -29,6 +29,7 @@ import java.text.DateFormat
 import java.util.Date
 import top.yukonga.miuix.kmp.basic.*
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import top.yukonga.miuix.kmp.icon.extended.Add
 import top.yukonga.miuix.kmp.icon.extended.Back
 import top.yukonga.miuix.kmp.icon.extended.More
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
@@ -91,19 +92,23 @@ internal fun AgentConversationWorkspace(
     Scaffold(containerColor = scheme.background, topBar = {
         TopAppBar(
             title = if (selected == null) "会话" else "已选择 1 个会话",
+            // Same colour as the page so the header does not read as a separate tinted band.
+            color = scheme.background,
             navigationIcon = {
                 IconButton(onClick = { if (selected != null) selectedId = null else onBack() }) {
                     Icon(MiuixIcons.Back, if (selected == null) "返回 Agent" else "退出会话选择")
                 }
             },
             actions = {
-                if (selected == null) TextButton("新建", enabled = writable,
-                    onClick = { namingId = "new" }, modifier = Modifier.testTag("agent-session-new"))
+                if (selected == null) IconButton(onClick = { namingId = "new" }, enabled = writable,
+                    modifier = Modifier.testTag("agent-session-new")) {
+                    Icon(MiuixIcons.Add, contentDescription = "新建会话")
+                }
                 else TextButton("删除", enabled = writable, onClick = { onRequestDelete(selected.id) })
             }
         )
     }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).imePadding().padding(horizontal = 20.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).imePadding().padding(horizontal = com.comfyui.mobile.ui.designsystem.PocketTokens.PagePadding)) {
             TextField(
                 value = query, onValueChange = { query = it }, singleLine = true,
                 label = "搜索会话名称或摘要",

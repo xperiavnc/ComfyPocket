@@ -1,5 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import com.comfyui.mobile.ui.feedback.AppToast
 import com.comfyui.mobile.ui.designsystem.PocketCardColors
 import com.comfyui.mobile.ui.designsystem.PocketTokens
@@ -56,7 +58,6 @@ import top.yukonga.miuix.kmp.basic.Switch
 import top.yukonga.miuix.kmp.icon.MiuixIcons
 import top.yukonga.miuix.kmp.icon.extended.Close
 import top.yukonga.miuix.kmp.icon.extended.Edit
-import top.yukonga.miuix.kmp.icon.extended.ExpandMore
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.theme.MiuixTheme
 import androidx.compose.foundation.layout.heightIn
@@ -140,7 +141,7 @@ fun AgentStyleAuxParamsDialog(
                                 overflow = TextOverflow.Ellipsis
     )
                             Icon(
-                                MiuixIcons.ExpandMore,
+                                androidx.compose.material.icons.Icons.Default.KeyboardArrowDown,
                                 contentDescription = "切换画师节点",
                                 modifier = Modifier.size(14.dp),
                                 tint = scheme.primary
