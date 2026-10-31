@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.foundation.clickable
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -54,7 +55,7 @@ fun ControlRunCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 18.dp,
+        cornerRadius = PocketTokens.Radius.Large,
         colors = cardColors,
         onClick = null,
         pressFeedbackType = PressFeedbackType.None,
@@ -125,7 +126,7 @@ fun ControlRunCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(40.dp),
-                cornerRadius = 12.dp,
+                cornerRadius = PocketTokens.Radius.Medium,
                 colors = ButtonDefaults.buttonColorsPrimary()
     ) {
                 Icon(MiuixIcons.Play, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -144,7 +145,7 @@ fun ControlRunCard(
                     modifier = Modifier
                         .weight(1f)
                         .height(42.dp),
-                    cornerRadius = 12.dp,
+                    cornerRadius = PocketTokens.Radius.Medium,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.error.copy(alpha = 0.12f),
                         contentColor = scheme.error
@@ -159,7 +160,7 @@ fun ControlRunCard(
                     modifier = Modifier
                         .weight(1f)
                         .height(42.dp),
-                    cornerRadius = 12.dp,
+                    cornerRadius = PocketTokens.Radius.Medium,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.surfaceContainerHigh,
                         contentColor = onCard

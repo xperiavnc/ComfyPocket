@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -27,7 +28,7 @@ internal fun AgentChoiceChip(
         .then(if (action) Modifier.clickable(role = Role.Button, onClick = onClick)
         else Modifier.selectable(selected, role = Role.RadioButton, onClick = onClick))
         .padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
-        Box(Modifier.clip(RoundedCornerShape(10.dp))
+        Box(Modifier.clip(PocketTokens.Shape.Medium)
             .background(if (selected) colors.primary.copy(alpha = .15f) else colors.surfaceContainerHigh)
             .heightIn(min = 36.dp).padding(horizontal = 12.dp, vertical = 7.dp),
             contentAlignment = Alignment.Center) {

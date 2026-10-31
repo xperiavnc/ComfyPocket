@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import android.content.ClipData
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.foundation.background
@@ -270,7 +271,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
     ) {
                                     Box(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
+                                            .clip(PocketTokens.Shape.Small)
                                             .background(scheme.primary.copy(alpha = 0.12f))
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
@@ -350,7 +351,7 @@ fun RhTaskRecordsScreen(navController: NavController, viewModel: MainViewModel) 
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(PocketTokens.Shape.Small)
                                     .background(scheme.surfaceContainerHigh)
                                     .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {

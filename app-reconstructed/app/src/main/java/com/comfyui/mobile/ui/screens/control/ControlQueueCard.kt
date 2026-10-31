@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.foundation.layout.Arrangement
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -39,7 +40,7 @@ fun ControlQueueCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 18.dp,
+        cornerRadius = PocketTokens.Radius.Large,
         colors = cardColors,
         onClick = null,
         pressFeedbackType = PressFeedbackType.Sink,
@@ -120,7 +121,7 @@ fun ControlQueueCard(
                 queueList.forEachIndexed { index, qItem ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 12.dp,
+                        cornerRadius = PocketTokens.Radius.Medium,
                         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                         colors = CardDefaults.defaultColors(
                             color = scheme.surfaceContainerHigh.copy(alpha = 0.92f)

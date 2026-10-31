@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
 import android.content.ClipData
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -92,7 +94,7 @@ internal fun DanbooruDetailScreen(
             val ratio = if ((post.width ?: 0) > 0 && (post.height ?: 0) > 0)
                 (post.width!!.toFloat() / post.height!!).coerceIn(0.6f, 1.8f) else 1.2f
             Box(Modifier.fillMaxWidth().heightIn(min = 180.dp, max = 440.dp).aspectRatio(ratio)
-                .clip(RoundedCornerShape(18.dp)).background(MiuixTheme.colorScheme.surfaceContainerHigh)
+                .clip(PocketTokens.Shape.Large).background(MiuixTheme.colorScheme.surfaceContainerHigh)
                 .then(if (post.isImage) Modifier.clickable(onClickLabel = "全屏查看图片") { imageFullscreen = true } else Modifier)) {
                 if (post.isVideo && playVideo) {
                     DanbooruVideoPlayer(post, runtime.videoCalls, namespace, videoFullscreen,
@@ -118,7 +120,7 @@ internal fun DanbooruDetailScreen(
             if (state.detailLoading) Text("正在更新帖子信息…", style = MiuixTheme.textStyles.footnote1)
         }
         item {
-            Card(colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainerHigh), cornerRadius = 14.dp) {
+            Card(colors = PocketCardColors.raised(), cornerRadius = PocketTokens.Radius.Medium) {
                 Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("画师  ${post.tags[TagGroup.ARTIST].orEmpty().joinToString(" / ").ifBlank { "未标注" }}",
                         style = MiuixTheme.textStyles.body2)

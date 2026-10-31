@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.modelcenter
 
 import androidx.compose.animation.core.animateFloatAsState
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -100,7 +101,7 @@ fun ModelCenterSearch(
         cursorBrush = SolidColor(colors.primary),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-        modifier = modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(14.dp))
+        modifier = modifier.heightIn(min = 48.dp).clip(PocketTokens.Shape.Medium)
             .background(colors.surfaceContainer),
         decorationBox = { input ->
             Row(Modifier.padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -120,7 +121,7 @@ fun ModelCenterSearch(
 @Composable
 internal fun ModelAction(text: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val colors = MiuixTheme.colorScheme
-    Box(modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
+    Box(modifier.heightIn(min = 44.dp).clip(PocketTokens.Shape.Medium)
         .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
         .padding(horizontal = 10.dp, vertical = 10.dp), contentAlignment = Alignment.Center) {
         Text(text, style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium,
@@ -135,7 +136,7 @@ internal fun ModelStatusBadge(text: String, positive: Boolean = false) {
     Text(text, style = MiuixTheme.textStyles.footnote2,
         color = if (positive) colors.primary else colors.onSecondaryContainer,
         maxLines = 1, overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp))
+        modifier = Modifier.clip(PocketTokens.Shape.Small)
             .background(if (positive) colors.primary.copy(alpha = .12f) else colors.surfaceContainerHigh)
             .padding(horizontal = 7.dp, vertical = 3.dp))
 }
@@ -179,7 +180,7 @@ internal fun LocalModelCover(
                 .crossfade(150).build()
         }
     }
-    Box(modifier.clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(
+    Box(modifier.clip(PocketTokens.Shape.Medium).background(Brush.linearGradient(listOf(
         colors.primary.copy(alpha = .10f), colors.surfaceContainerHigh)))
         .testTag("model-cover-${item.id}").semantics {
             stateDescription = if (loaded) "预览已加载" else if (failed) "预览加载失败"

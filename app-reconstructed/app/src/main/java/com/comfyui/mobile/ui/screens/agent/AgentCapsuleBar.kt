@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.animation.core.spring
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.background
 import androidx.compose.animation.core.Spring
@@ -123,7 +124,7 @@ private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
     Box(
         modifier = Modifier
             .size(width = SegmentWidth * 2, height = CapsuleHeight)
-            .clip(RoundedCornerShape(50))
+            .clip(PocketTokens.Shape.Pill)
             .background(scheme.surfaceContainerHighest)
             .pointerInput(mode) {
                 var total = 0f
@@ -144,7 +145,7 @@ private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
                 .offset(x = thumbOffset)
                 .padding(2.dp)
                 .size(width = SegmentWidth - 4.dp, height = CapsuleHeight - 4.dp)
-                .clip(RoundedCornerShape(50))
+                .clip(PocketTokens.Shape.Pill)
                 .background(scheme.primary)
     )
         Row(modifier = Modifier.fillMaxSize()) {
@@ -153,7 +154,7 @@ private fun AgentModeToggle(mode: String, onModeChange: (String) -> Unit) {
                 Box(
                     modifier = Modifier
                         .size(width = SegmentWidth, height = CapsuleHeight)
-                        .clip(RoundedCornerShape(50))
+                        .clip(PocketTokens.Shape.Pill)
                         .clickable { onModeChange(m) },
                     contentAlignment = Alignment.Center
     ) {
@@ -183,7 +184,7 @@ fun AgentCapsule(
         modifier = modifier
             .height(CapsuleHeight)
             .widthIn(min = 52.dp)
-            .clip(RoundedCornerShape(50))
+            .clip(PocketTokens.Shape.Pill)
             .background(scheme.surfaceContainerHighest)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp),

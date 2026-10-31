@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.modelcenter
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -132,10 +133,10 @@ fun ModelMarketPage(
             }
         }
         items(content.items, key = { "market-model-${it.id}" }) { item ->
-            Card(onClick = { onOpen(item) }, cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth()) {
+            Card(onClick = { onOpen(item) }, cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth()) {
                 Column {
                     Box(Modifier.padding(6.dp).fillMaxWidth().aspectRatio(.95f)
-                        .clip(RoundedCornerShape(12.dp)).background(colors.surfaceContainerHigh)) {
+                        .clip(PocketTokens.Shape.Medium).background(colors.surfaceContainerHigh)) {
                         previewUrl(item)?.let { url ->
                             AsyncImage(imageRequest(url), null, imageLoader = imageLoader,
                                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

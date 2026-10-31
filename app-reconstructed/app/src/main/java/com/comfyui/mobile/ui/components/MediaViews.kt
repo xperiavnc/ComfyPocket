@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.components
 
 import android.content.ActivityNotFoundException
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -354,7 +355,7 @@ fun MediaInputRow(
         Box(
             modifier = Modifier
                 .size(64.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(PocketTokens.Shape.Medium)
                 .background(MiuixTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)),
             contentAlignment = Alignment.Center
     ) {

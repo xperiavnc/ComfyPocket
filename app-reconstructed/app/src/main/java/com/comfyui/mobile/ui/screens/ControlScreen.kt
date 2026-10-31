@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import com.comfyui.mobile.ui.screens.control.ControlWorkflowHeaderCard
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import com.comfyui.mobile.ui.screens.control.ControlRunCard
 import com.comfyui.mobile.ui.screens.control.ControlLatestMediaCard
 import com.comfyui.mobile.ui.components.NodeIdChip
@@ -103,7 +104,7 @@ private val ControlCardRadius = 28.dp
 private val KsuInnerRadius = 22.dp
 private val ControlCardShape = RoundedCornerShape(ControlCardRadius)
 private val KsuInnerShape = RoundedCornerShape(KsuInnerRadius)
-private val PillShape = RoundedCornerShape(999.dp)
+private val PillShape = PocketTokens.Shape.Pill
 private val PillCornerRadius = 999.dp
 
 
@@ -188,7 +189,7 @@ fun ControlScreen(viewModel: ControlUi) {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(scheme.secondaryContainer, RoundedCornerShape(8.dp)),
+                            .background(scheme.secondaryContainer, PocketTokens.Shape.Small),
                         contentAlignment = Alignment.Center
     ) {
                         val uri = aiAppCoverUri
@@ -437,13 +438,13 @@ fun ControlScreen(viewModel: ControlUi) {
                                         Modifier.border(
                                             1.5.dp,
                                             scheme.primary.copy(alpha = 0.5f),
-                                            RoundedCornerShape(16.dp)
+                                            PocketTokens.Shape.Large
     )
                                     } else {
                                         Modifier
                                     }
                                 ),
-                            cornerRadius = 16.dp,
+                            cornerRadius = PocketTokens.Radius.Large,
                             colors = CardDefaults.defaultColors(
                                 color = if (current) {
                                     scheme.secondaryContainer.copy(alpha = 0.7f)
@@ -794,16 +795,16 @@ fun ControlScreen(viewModel: ControlUi) {
                             .zIndex(if (isDragging) 10f else 0f)
                             .graphicsLayer {
                                 translationY = realVisualOffset
-                                shape = RoundedCornerShape(14.dp)
+                                shape = PocketTokens.Shape.Medium
                                 clip = true
                                 if (isDragging) {
                                     shadowElevation = 6f
                                 }
                             }
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(PocketTokens.Shape.Medium)
                             .then(
-                                if (isDragging) Modifier.border(1.5.dp, scheme.primary, RoundedCornerShape(14.dp))
-                                else Modifier.border(1.dp, scheme.outline.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
+                                if (isDragging) Modifier.border(1.5.dp, scheme.primary, PocketTokens.Shape.Medium)
+                                else Modifier.border(1.dp, scheme.outline.copy(alpha = 0.28f), PocketTokens.Shape.Medium)
                             )
                             .onGloballyPositioned { coords ->
                                 if (filterDraggingKey == null) {
@@ -886,7 +887,7 @@ fun ControlScreen(viewModel: ControlUi) {
                                     }
     )
                             },
-                        cornerRadius = 14.dp,
+                        cornerRadius = PocketTokens.Radius.Medium,
                         insideMargin = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                         colors = CardDefaults.defaultColors(
                             color = when {
@@ -911,7 +912,7 @@ fun ControlScreen(viewModel: ControlUi) {
     ) {
                                 Box(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .clip(PocketTokens.Shape.Small)
                                         .background(scheme.primary.copy(alpha = 0.12f))
                                         .padding(horizontal = 6.dp, vertical = 3.dp)
     ) {
@@ -998,9 +999,9 @@ fun ControlScreen(viewModel: ControlUi) {
             .overScrollVertical()
             .nestedScroll(scrollBehavior.nestedScrollConnection),
         contentPadding = PaddingValues(
-            start = 20.dp,
+            start = PocketTokens.PagePadding,
             top = innerPadding.calculateTopPadding() + 8.dp,
-            end = 20.dp,
+            end = PocketTokens.PagePadding,
             bottom = 24.dp + floatingNavClearance
     ),
         verticalArrangement = Arrangement.spacedBy(16.dp)

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import androidx.activity.compose.PredictiveBackHandler
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -143,7 +144,7 @@ internal fun AgentConversationWorkspace(
                 }
                 items(shown, key = { it.id }) { row ->
                     Row(
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+                        modifier = Modifier.fillMaxWidth().clip(PocketTokens.Shape.Large)
                             .background(if (row.id == selectedId) scheme.secondaryContainer else scheme.surfaceContainer)
                             .combinedClickable(enabled = writable,
                                 onClick = { if (selected != null) selectedId = row.id else onOpen(row.id) },

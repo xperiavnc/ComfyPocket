@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
 import androidx.compose.foundation.layout.*
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -142,7 +143,7 @@ private fun DanbooruInput(
     transform: VisualTransformation = VisualTransformation.None, keyboardType: KeyboardType = KeyboardType.Text
 ) {
     TextField(value, onChange, label = label, enabled = enabled, singleLine = true, useLabelAsPlaceholder = true,
-        textStyle = MiuixTheme.textStyles.body2, insideMargin = DpSize(14.dp, 12.dp), cornerRadius = 12.dp,
+        textStyle = MiuixTheme.textStyles.body2, insideMargin = DpSize(14.dp, 12.dp), cornerRadius = PocketTokens.Radius.Medium,
         visualTransformation = transform, keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         modifier = Modifier.fillMaxWidth())
 }

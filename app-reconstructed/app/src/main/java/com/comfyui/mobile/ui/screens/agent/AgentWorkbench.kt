@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.animation.AnimatedVisibility
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -84,7 +85,7 @@ fun AgentWorkspaceLayout(
         Column(Modifier.fillMaxSize()) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
-                    .clip(RoundedCornerShape(14.dp)).background(scheme.surfaceContainer)
+                    .clip(PocketTokens.Shape.Medium).background(scheme.surfaceContainer)
                     .testTag("agent-open-sessions")
                     .clickable(role = Role.Button, onClick = onOpenSessions)
                     .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -132,14 +133,14 @@ fun AgentWorkbench(
     val rotation by animateFloatAsState(if (expanded) 180f else 0f, tween(220), label = "workbenchChevron")
     Column(
         modifier = modifier.fillMaxWidth().padding(horizontal = sidePad, vertical = 4.dp)
-            .clip(RoundedCornerShape(22.dp)).background(scheme.surfaceContainer)
+            .clip(PocketTokens.Shape.XLarge).background(scheme.surfaceContainer)
             .testTag("agent-workbench")
     ) {
         Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             val media = mediaList.firstOrNull()
             val url = media?.let(previewUrl).orEmpty()
             Box(
-                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                Modifier.size(40.dp).clip(PocketTokens.Shape.Medium)
                     .background(scheme.surfaceContainerHighest)
                     .then(if (media != null && !status.showOverlay) Modifier.clickable(
                         role = Role.Button, onClickLabel = "全屏查看最新生成"

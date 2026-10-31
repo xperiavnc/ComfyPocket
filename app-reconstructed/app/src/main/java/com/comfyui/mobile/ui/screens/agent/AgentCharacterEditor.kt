@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -126,8 +128,8 @@ internal fun AgentCharacterEditor(
                 Text("对话命中预设名称或下方 AI 对话触发词时，App 自动选中预设并将绘画标签交给 AI；续改沿用已选预设。默认服装仅作未命中时的回退。",
                     style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
                 outfits.forEach { outfit ->
-                    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = 14.dp, insideMargin = PaddingValues(10.dp),
-                        colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh)) {
+                    Card(modifier = Modifier.fillMaxWidth(), cornerRadius = PocketTokens.Radius.Medium, insideMargin = PaddingValues(10.dp),
+                        colors = PocketCardColors.raised()) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(outfit.name, fontWeight = FontWeight.Medium)
                             Text("对话触发词：${outfit.dialogueTriggers.orEmpty().ifEmpty { listOf(outfit.name) }.joinToString("、")}",
@@ -185,7 +187,7 @@ private fun LoreFieldLabel(text: String) {
 @Composable
 private fun LoreDefaultChoice(label: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val scheme = MiuixTheme.colorScheme
-    Row(modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
+    Row(modifier.fillMaxWidth().heightIn(min = 44.dp).clip(PocketTokens.Shape.Medium)
         .background(if (selected) scheme.primaryContainer else scheme.surface)
         .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
         .padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {

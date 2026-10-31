@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens
 
 import android.content.Intent
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import android.os.Build
 import com.comfyui.mobile.diagnostics.NavigationDiagnostics
 import kotlinx.coroutines.Dispatchers
@@ -269,7 +271,7 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = PocketTokens.PagePadding)
                 .padding(
                     top = innerPadding.calculateTopPadding(),
                     bottom = 28.dp + floatingNavClearance
@@ -648,8 +650,8 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 14.dp,
-                    colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                    cornerRadius = PocketTokens.Radius.Medium,
+                    colors = PocketCardColors.raised(),
                     insideMargin = PaddingValues(12.dp)
     ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -719,8 +721,8 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                 if (importRestoreWorkflows || workflowCount != 0 || parsed.hasPackage) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
-                        colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                        cornerRadius = PocketTokens.Radius.Medium,
+                        colors = PocketCardColors.raised(),
                         insideMargin = PaddingValues(12.dp)
     ) {
                         Row(
@@ -745,8 +747,8 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                 if (backup.includeAiApps || parsed.hasPackage) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
-                        colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                        cornerRadius = PocketTokens.Radius.Medium,
+                        colors = PocketCardColors.raised(),
                         insideMargin = PaddingValues(12.dp)
     ) {
                         Row(
@@ -771,8 +773,8 @@ fun SettingsScreen(navController: NavController, viewModel: MainViewModel) {
                 if (backup.includeTaskHistory || parsed.hasPackage) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
-                        colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                        cornerRadius = PocketTokens.Radius.Medium,
+                        colors = PocketCardColors.raised(),
                         insideMargin = PaddingValues(12.dp)
     ) {
                         Row(
@@ -865,8 +867,8 @@ private fun BackupToggleRow(
     val scheme = MiuixTheme.colorScheme
     Card(
         modifier = Modifier.fillMaxWidth(),
-        cornerRadius = 14.dp,
-        colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+        cornerRadius = PocketTokens.Radius.Medium,
+        colors = PocketCardColors.raised(),
         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(

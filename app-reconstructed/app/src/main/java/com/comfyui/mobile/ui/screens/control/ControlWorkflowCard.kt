@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.foundation.layout.Arrangement
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -68,7 +69,7 @@ fun ControlWorkflowHeaderCard(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 18.dp,
+                cornerRadius = PocketTokens.Radius.Large,
                 colors = CardDefaults.defaultColors(
                     color = scheme.primaryContainer.copy(alpha = 0.55f)
     ),
@@ -85,7 +86,7 @@ fun ControlWorkflowHeaderCard(
     ) {
                     Card(
                         modifier = Modifier.size(40.dp),
-                        cornerRadius = 12.dp,
+                        cornerRadius = PocketTokens.Radius.Medium,
                         colors = CardDefaults.defaultColors(
                             color = scheme.primary.copy(alpha = 0.18f)
     ),

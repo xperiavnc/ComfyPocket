@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.foundation.gestures.detectTapGestures
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -116,7 +117,7 @@ fun CompactParamCard(
 
     Card(
         modifier = modifier,
-        cornerRadius = 14.dp,
+        cornerRadius = PocketTokens.Radius.Medium,
         insideMargin = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
         colors = CardDefaults.defaultColors(
             color = when {
@@ -226,7 +227,7 @@ fun CompactParamCard(
                 is EditableNode.TextInput -> {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 10.dp,
+                        cornerRadius = PocketTokens.Radius.Medium,
                         colors = CardDefaults.defaultColors(
                             color = scheme.secondaryContainer.copy(alpha = 0.65f)
     ),
@@ -291,7 +292,7 @@ fun FullWidthParamCard(
 
     Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 14.dp,
+        cornerRadius = PocketTokens.Radius.Medium,
         insideMargin = PaddingValues(12.dp),
         colors = CardDefaults.defaultColors(
             color = when {

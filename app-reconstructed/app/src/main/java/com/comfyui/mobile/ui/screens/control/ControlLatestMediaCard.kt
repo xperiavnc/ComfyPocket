@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +41,7 @@ fun ControlLatestMediaCard(
     onItemClick: (Int) -> Unit
     ) {
     val scheme = MiuixTheme.colorScheme
-    val innerShape = RoundedCornerShape(12.dp)
+    val innerShape = PocketTokens.Shape.Medium
 
     Card(
         modifier = modifier.fillMaxWidth(),

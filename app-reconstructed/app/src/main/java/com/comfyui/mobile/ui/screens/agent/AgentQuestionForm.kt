@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -84,7 +85,7 @@ internal fun AgentQuestionForm(
                         val checked = option.id in choices[index]
                         Row(
                             modifier = Modifier.fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
+                                .clip(PocketTokens.Shape.Medium)
                                 .background(if (checked) scheme.primaryContainer else scheme.surfaceContainerHigh)
                                 .clickable(enabled = active,
                                     role = if (question.allowMultiple) Role.Checkbox else Role.RadioButton) {
@@ -127,9 +128,9 @@ internal fun AgentQuestionForm(
                     cursorBrush = SolidColor(scheme.primary),
                     maxLines = 4,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(PocketTokens.Shape.Medium)
                         .background(scheme.surfaceContainerHigh)
-                        .border(1.dp, scheme.outline.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                        .border(1.dp, scheme.outline.copy(alpha = 0.3f), PocketTokens.Shape.Medium)
                         .padding(10.dp)
                         .bringIntoViewRequester(requester)
                         .onFocusEvent { if (it.isFocused) scope.launch { requester.bringIntoView() } }
@@ -159,7 +160,7 @@ internal fun AgentQuestionForm(
 private fun QuestionFormButton(label: String, enabled: Boolean, primary: Boolean, tag: String, onClick: () -> Unit) {
     val scheme = MiuixTheme.colorScheme
     Box(
-        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+        modifier = Modifier.fillMaxWidth().clip(PocketTokens.Shape.Medium)
             .background(if (primary && enabled) scheme.primary else scheme.surfaceContainerHigh)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
             .heightIn(min = 44.dp).padding(10.dp).testTag(tag),

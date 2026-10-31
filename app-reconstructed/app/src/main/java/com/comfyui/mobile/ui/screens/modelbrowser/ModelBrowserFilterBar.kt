@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens.modelbrowser
 
 import android.content.Context
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,7 +60,7 @@ fun ModelBrowserTypeTabs(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(PocketTokens.Shape.Small)
                     .background(
                         if (isSelected) scheme.primary else scheme.surfaceContainerHigh
                     )
@@ -124,7 +126,7 @@ fun ModelBrowserFilterChipBar(
 
         Box(
             modifier = Modifier
-                .clip(RoundedCornerShape(999.dp))
+                .clip(PocketTokens.Shape.Pill)
                 .background(scheme.surfaceContainerHigh)
                 .clickable(onClick = onManageClick)
                 .padding(horizontal = 10.dp, vertical = 6.dp),
@@ -159,7 +161,7 @@ private fun FilterCapsule(
     val scheme = MiuixTheme.colorScheme
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
+            .clip(PocketTokens.Shape.Pill)
             .background(
                 if (selected) scheme.primary.copy(alpha = 0.15f)
                 else scheme.surfaceContainerHigh
@@ -167,7 +169,7 @@ private fun FilterCapsule(
             .border(
                 width = 1.dp,
                 color = if (selected) scheme.primary else Color.Transparent,
-                shape = RoundedCornerShape(999.dp)
+                shape = PocketTokens.Shape.Pill
             )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
@@ -237,8 +239,8 @@ fun ModelBrowserManageFilterDialog(
                         )
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            cornerRadius = 12.dp,
-                            colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh)
+                            cornerRadius = PocketTokens.Radius.Medium,
+                            colors = PocketCardColors.raised()
                         ) {
                             Column(
                                 modifier = Modifier

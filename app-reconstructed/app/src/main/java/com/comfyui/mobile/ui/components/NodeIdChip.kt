@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.components
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -23,7 +24,7 @@ fun NodeIdChip(nodeId: String, modifier: Modifier = Modifier) {
     val scheme = MiuixTheme.colorScheme
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(PocketTokens.Shape.Small)
             .background(scheme.onSecondaryContainer.copy(alpha = 0.10f))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.modelbrowser
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -69,7 +70,7 @@ fun CloudModelBrowseRow(
         modifier = modifier
             .fillMaxWidth()
             .padding(top = 6.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(PocketTokens.Shape.Medium)
             .background(scheme.primary.copy(alpha = 0.08f))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)

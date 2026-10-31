@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens
 
 import com.comfyui.mobile.model.CharacterLore
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import com.comfyui.mobile.ui.screens.agent.AgentWorkspaceLayout
 import com.comfyui.mobile.ui.screens.agent.AgentCardStatusFactory
 import com.comfyui.mobile.ui.screens.agent.AgentCapsuleBar
@@ -257,7 +259,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
         color = scheme.surfaceContainerHighest,
         contentColor = scheme.onSurface
     )
-    val sidePad = 20.dp
+    val sidePad = PocketTokens.PagePadding
     val isDrawMode = agentInteractionMode == MainViewModel.AGENT_MODE_DRAW
 
     // 0.8s "完成" micro-feedback when an image run ends.
@@ -475,11 +477,11 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                     Modifier.border(
                                         1.5.dp,
                                         scheme.primary.copy(alpha = 0.5f),
-                                        RoundedCornerShape(16.dp)
+                                        PocketTokens.Shape.Large
     )
                                 } else Modifier
                             ),
-                        cornerRadius = 16.dp,
+                        cornerRadius = PocketTokens.Radius.Large,
                         colors = CardDefaults.defaultColors(
                             color = if (isChosen) {
                                 scheme.secondaryContainer.copy(alpha = 0.7f)
@@ -575,8 +577,8 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 if (workflowLabel.isNotBlank()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
-                        colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                        cornerRadius = PocketTokens.Radius.Medium,
+                        colors = PocketCardColors.raised(),
                         insideMargin = PaddingValues(12.dp)
     ) {
                         Row(
@@ -599,7 +601,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                             }
                             Row(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(50))
+                                    .clip(PocketTokens.Shape.Pill)
                                     .background(scheme.primaryContainer)
                                     .clickable { workflowSheetLevel = 2 }
                                     .padding(horizontal = 10.dp, vertical = 5.dp),
@@ -649,13 +651,13 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                                             Modifier.border(
                                                 1.5.dp,
                                                 scheme.primary.copy(alpha = 0.5f),
-                                                RoundedCornerShape(16.dp)
+                                                PocketTokens.Shape.Large
     )
                                         } else {
                                             Modifier
                                         }
                                     ),
-                                cornerRadius = 16.dp,
+                                cornerRadius = PocketTokens.Radius.Large,
                                 colors = CardDefaults.defaultColors(
                                     color = if (current) {
                                         scheme.secondaryContainer.copy(alpha = 0.7f)
@@ -964,7 +966,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                     val isChosen = agentArtistNodeId.isBlank()
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 16.dp,
+                        cornerRadius = PocketTokens.Radius.Large,
                         colors = CardDefaults.defaultColors(
                             color = if (isChosen) scheme.secondaryContainer.copy(alpha = 0.7f) else scheme.surfaceContainerHigh
     ),
@@ -991,7 +993,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                     val preview = node.text.trim().replace("\n", " ").take(40).ifBlank { "(空)" }
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 16.dp,
+                        cornerRadius = PocketTokens.Radius.Large,
                         colors = CardDefaults.defaultColors(
                             color = if (isChosen) scheme.secondaryContainer.copy(alpha = 0.7f) else scheme.surfaceContainerHigh
     ),
@@ -1087,7 +1089,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
 
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
+                        cornerRadius = PocketTokens.Radius.Medium,
                         colors = CardDefaults.defaultColors(
                             color = if (isChecked) scheme.secondaryContainer.copy(alpha = 0.5f) else scheme.surfaceContainerHigh
     ),

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.staggeredgrid.*
@@ -66,7 +67,7 @@ internal fun DanbooruImageTile(post: DanbooruPost, imageLoader: ImageLoader, nam
     val ratio = if ((post.width ?: 0) > 0 && (post.height ?: 0) > 0)
         (post.width!!.toFloat() / post.height!!).coerceIn(0.6f, 1.6f) else 0.8f
     Box(
-        Modifier.fillMaxWidth().aspectRatio(ratio).clip(RoundedCornerShape(14.dp))
+        Modifier.fillMaxWidth().aspectRatio(ratio).clip(PocketTokens.Shape.Medium)
             .background(MiuixTheme.colorScheme.surfaceContainerHigh)
             .clickable(onClick = onClick).testTag("danbooru-image-${post.id}"),
         contentAlignment = Alignment.Center
@@ -74,7 +75,7 @@ internal fun DanbooruImageTile(post: DanbooruPost, imageLoader: ImageLoader, nam
         DanbooruMediaPreview(post, imageLoader, namespace, Modifier.fillMaxSize(), ContentScale.Crop, compact = true)
         if (post.isVideo) {
             Box(Modifier.align(Alignment.BottomEnd).padding(8.dp).size(28.dp)
-                .clip(RoundedCornerShape(14.dp)).background(MiuixTheme.colorScheme.background.copy(alpha = 0.8f)),
+                .clip(PocketTokens.Shape.Medium).background(MiuixTheme.colorScheme.background.copy(alpha = 0.8f)),
                 contentAlignment = Alignment.Center) {
                 Icon(Icons.Default.PlayArrow, contentDescription = "视频", modifier = Modifier.size(18.dp),
                     tint = MiuixTheme.colorScheme.onSurface)

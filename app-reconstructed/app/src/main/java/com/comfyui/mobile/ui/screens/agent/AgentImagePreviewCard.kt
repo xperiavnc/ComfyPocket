@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.animation.AnimatedContent
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -203,7 +204,7 @@ fun AgentImagePreviewCard(
                     val showProgress = frame.showProgress
                     val progress = frame.progress
                     val accentComplete = frame.phase == AgentCardPhase.BriefComplete
-                    val titleColor = if (accentComplete) Color(0xFF2E7D32) else scheme.primary
+                    val titleColor = if (accentComplete) PocketTokens.Success else scheme.primary
 
                     Box(
                         modifier = Modifier
@@ -263,7 +264,7 @@ fun AgentImagePreviewCard(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .padding(bottom = if (showControls) 52.dp else 10.dp)
-                        .clip(RoundedCornerShape(50))
+                        .clip(PocketTokens.Shape.Pill)
                         .background(Color.Black.copy(alpha = 0.32f))
                         .then(if (showControls) Modifier.clickable(onClick = onClearMediaListClick) else Modifier)
                         .padding(horizontal = 8.dp, vertical = 5.dp),
@@ -276,7 +277,7 @@ fun AgentImagePreviewCard(
                         val selected = i == selectedDot
                         val w by animateDpAsState(if (selected) 14.dp else 5.dp, tween(200), label = "dot_w")
                         Box(
-                            Modifier.size(width = w, height = 5.dp).clip(RoundedCornerShape(50))
+                            Modifier.size(width = w, height = 5.dp).clip(PocketTokens.Shape.Pill)
                                 .background(Color.White.copy(alpha = if (selected) 0.95f else 0.5f))
                         )
                     }
@@ -295,7 +296,7 @@ fun AgentImagePreviewCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(10.dp)
-                        .clip(RoundedCornerShape(50))
+                        .clip(PocketTokens.Shape.Pill)
                         .background(scheme.error.copy(alpha = 0.16f))
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -379,7 +380,7 @@ internal fun AgentStatusProgressBar(
             progress = progress.coerceIn(0f, 1f),
             modifier = modifier
                 .height(h)
-                .clip(RoundedCornerShape(99.dp)),
+                .clip(PocketTokens.Shape.Pill),
             colors = ProgressIndicatorDefaults.progressIndicatorColors(
                 foregroundColor = scheme.primary,
                 backgroundColor = scheme.surface.copy(alpha = 0.35f)
@@ -400,7 +401,7 @@ internal fun AgentStatusProgressBar(
         BoxWithConstraints(
             modifier = modifier
                 .height(h)
-                .clip(RoundedCornerShape(99.dp))
+                .clip(PocketTokens.Shape.Pill)
                 .background(scheme.surface.copy(alpha = 0.35f))
     ) {
             val travel = (maxWidth * 0.66f).coerceAtLeast(0.dp)
@@ -409,7 +410,7 @@ internal fun AgentStatusProgressBar(
                     .fillMaxWidth(0.34f)
                     .height(h)
                     .graphicsLayer { translationX = with(density) { (travel * shift).toPx() } }
-                    .clip(RoundedCornerShape(99.dp))
+                    .clip(PocketTokens.Shape.Pill)
                     .background(scheme.primary)
     )
         }

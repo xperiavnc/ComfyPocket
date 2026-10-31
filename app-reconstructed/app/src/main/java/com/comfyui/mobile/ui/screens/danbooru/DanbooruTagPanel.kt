@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -48,7 +50,7 @@ internal fun DanbooruTagPanel(
             Spacer(Modifier.weight(1f))
             DanbooruPill("选项", optionsOpen) { optionsOpen = !optionsOpen }
         }
-        if (optionsOpen) Card(colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh), cornerRadius = 14.dp) {
+        if (optionsOpen) Card(colors = PocketCardColors.raised(), cornerRadius = PocketTokens.Radius.Medium) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 DanbooruSettingSwitch("下划线转空格", spaces) { spaces = it }
                 DanbooruSettingSwitch("括号转义", escape) { escape = it }
@@ -79,7 +81,7 @@ internal fun DanbooruTagPanel(
                 var expanded by rememberSaveable(post.id, group) { mutableStateOf(true) }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Row(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { expanded = !expanded }
+                        Row(Modifier.weight(1f).clip(PocketTokens.Shape.Medium).clickable { expanded = !expanded }
                             .padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("${if (expanded) "▾" else "▸"}  ${group.title}", style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.Medium)
                             Text("  ${tags.size}", style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceSecondary)
@@ -89,7 +91,7 @@ internal fun DanbooruTagPanel(
                     if (expanded) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         tags.forEach { tag ->
                             val checked = tag in selected
-                            Box(Modifier.clip(RoundedCornerShape(8.dp))
+                            Box(Modifier.clip(PocketTokens.Shape.Small)
                                 .background(if (checked) scheme.primary.copy(alpha = 0.16f) else scheme.surfaceContainerHigh)
                                 .semantics { this.selected = checked }
                                 .combinedClickable(

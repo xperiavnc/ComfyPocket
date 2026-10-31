@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import com.comfyui.mobile.ui.feedback.AppToast
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -107,8 +109,8 @@ fun AgentStyleAuxParamsDialog(
             // 1. 画师串与常用候选画师栏
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 18.dp,
-                colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                cornerRadius = PocketTokens.Radius.Large,
+                colors = PocketCardColors.raised(),
                 insideMargin = PaddingValues(12.dp)
     ) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -123,7 +125,7 @@ fun AgentStyleAuxParamsDialog(
     )
                         Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(50))
+                                .clip(PocketTokens.Shape.Pill)
                                 .background(scheme.primary.copy(alpha = 0.12f))
                                 .clickable(onClick = onSelectArtistNodeClick)
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -188,7 +190,7 @@ fun AgentStyleAuxParamsDialog(
                                     }
                                 },
                                 modifier = Modifier.height(42.dp),
-                                cornerRadius = 12.dp,
+                                cornerRadius = PocketTokens.Radius.Medium,
                                 colors = ButtonDefaults.buttonColorsPrimary()
     ) {
                                 Text("收藏", fontSize = 13.sp)
@@ -213,7 +215,7 @@ fun AgentStyleAuxParamsDialog(
                                 val isChosen = artistInput.text.contains(artist, ignoreCase = true)
                                 Row(
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .clip(PocketTokens.Shape.Small)
                                         .background(
                                             if (isChosen) scheme.primary.copy(alpha = 0.15f)
                                             else scheme.surface
@@ -221,7 +223,7 @@ fun AgentStyleAuxParamsDialog(
                                         .border(
                                             1.dp,
                                             if (isChosen) scheme.primary else scheme.outline.copy(alpha = 0.2f),
-                                            RoundedCornerShape(8.dp)
+                                            PocketTokens.Shape.Small
     )
                                         .clickable {
                                             onArtistChange(boundArtistNode.nodeId, boundArtistNode.key, artist)
@@ -243,7 +245,7 @@ fun AgentStyleAuxParamsDialog(
                                         contentDescription = "删除候选",
                                         modifier = Modifier
                                             .size(13.dp)
-                                            .clip(RoundedCornerShape(50))
+                                            .clip(PocketTokens.Shape.Pill)
                                             .clickable {
                                                 onRemoveFavoriteArtist(artist)
                                             },
@@ -265,8 +267,8 @@ fun AgentStyleAuxParamsDialog(
             // 2. 角色 / LoRA 触发词库
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 18.dp,
-                colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                cornerRadius = PocketTokens.Radius.Large,
+                colors = PocketCardColors.raised(),
                 insideMargin = PaddingValues(12.dp)
     ) {
                 val enabledCount = remember(characterLores) { characterLores.count { it.isEnabled } }
@@ -293,7 +295,7 @@ fun AgentStyleAuxParamsDialog(
                         }
                         Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(50))
+                                .clip(PocketTokens.Shape.Pill)
                                 .background(scheme.secondaryContainer)
                                 .clickable(onClick = onManageCharacterLoresClick)
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -331,7 +333,7 @@ fun AgentStyleAuxParamsDialog(
                             characterLores.forEach { lore ->
                                 Column(
                                     modifier = Modifier.fillMaxWidth()
-                                        .clip(RoundedCornerShape(12.dp))
+                                        .clip(PocketTokens.Shape.Medium)
                                         .background(scheme.surface.copy(alpha = 0.55f))
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -391,8 +393,8 @@ fun AgentStyleAuxParamsDialog(
             // 3. 辅助参数区域（支持用户自由勾选显示）
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 18.dp,
-                colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                cornerRadius = PocketTokens.Radius.Large,
+                colors = PocketCardColors.raised(),
                 insideMargin = PaddingValues(12.dp)
     ) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -407,7 +409,7 @@ fun AgentStyleAuxParamsDialog(
     )
                         Row(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(50))
+                                .clip(PocketTokens.Shape.Pill)
                                 .background(scheme.secondaryContainer)
                                 .clickable(onClick = onManageAuxNodesClick)
                                 .padding(horizontal = 8.dp, vertical = 4.dp),

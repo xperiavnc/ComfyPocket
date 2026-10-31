@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -144,7 +145,7 @@ fun FullScreenTextEditorDialog(
                                             scope.launch { scrollState.scrollTo(target) }
                                         }
                                     }
-                                    .background(Color.White.copy(alpha = 0.45f), shape = RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.45f), shape = PocketTokens.Shape.Small)
     ) {}
                         }
                     }

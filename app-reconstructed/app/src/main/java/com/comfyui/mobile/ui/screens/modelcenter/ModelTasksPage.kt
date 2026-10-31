@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.modelcenter
 
 import androidx.compose.foundation.layout.*
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
@@ -50,7 +51,7 @@ fun ModelTasksPage(vm: ModelCenterViewModel, state: ModelCenterState, market: Ma
             items(state.sourceTasks.entries.toList(), key = { "phone-${it.key}" }) { (hash, task) ->
                 val model = state.page.items.firstOrNull { modelHash(it.sha256) == hash }
                     ?: state.detail?.takeIf { modelHash(it.sha256) == hash }
-                Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth()) {
+                Card(cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(model?.displayName ?: "${hash.take(16)}…", style = MiuixTheme.textStyles.body2,
@@ -87,7 +88,7 @@ internal fun EnrichmentTaskCard(task: ModelEnrichmentTask, name: String, connect
         "unmatched" -> "未匹配"; "paused" -> "已暂停"; "cancelled" -> "已取消"; "failed" -> "失败"
         else -> task.status
     }
-    Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth()) {
+    Card(cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(name, style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.SemiBold,

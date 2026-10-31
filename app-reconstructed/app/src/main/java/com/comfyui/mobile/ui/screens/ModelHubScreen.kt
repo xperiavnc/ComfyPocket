@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import com.comfyui.mobile.ui.feedback.AppToast
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -383,7 +384,7 @@ fun ModelHubScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(horizontal = 16.dp)
+                            .padding(horizontal = PocketTokens.PagePadding)
                     ) {
                         if (plugins.isEmpty()) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -399,7 +400,7 @@ fun ModelHubScreen(
                                 items(plugins, key = { it.id.ifBlank { it.name } }) { plugin ->
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
-                                        cornerRadius = 12.dp,
+                                        cornerRadius = PocketTokens.Radius.Medium,
                                         colors = CardDefaults.defaultColors(color = scheme.surfaceContainer)
                                     ) {
                                         Row(
@@ -543,7 +544,7 @@ fun ModelHubScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(150.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(PocketTokens.Shape.Medium)
                             .background(scheme.surfaceContainerHigh)
                     ) {
                         AsyncImage(
@@ -599,9 +600,9 @@ fun ModelHubScreen(
                             val isVerSel = ver.id == version?.id
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(PocketTokens.Shape.Small)
                                     .background(if (isVerSel) scheme.primary.copy(alpha = 0.15f) else scheme.surfaceContainerHigh)
-                                    .border(1.dp, if (isVerSel) scheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .border(1.dp, if (isVerSel) scheme.primary else Color.Transparent, PocketTokens.Shape.Small)
                                     .clickable { selectedVersion = ver; selectedFile = ver.preferredFile() }
                                     .padding(horizontal = 10.dp, vertical = 5.dp)
                             ) {
@@ -631,9 +632,9 @@ fun ModelHubScreen(
                             val isFileSel = f.id == file?.id
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(PocketTokens.Shape.Small)
                                     .background(if (isFileSel) scheme.primary.copy(alpha = 0.15f) else scheme.surfaceContainerHigh)
-                                    .border(1.dp, if (isFileSel) scheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .border(1.dp, if (isFileSel) scheme.primary else Color.Transparent, PocketTokens.Shape.Small)
                                     .clickable { selectedFile = f }
                                     .padding(horizontal = 10.dp, vertical = 5.dp)
                             ) {
@@ -665,7 +666,7 @@ fun ModelHubScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
+                        .clip(PocketTokens.Shape.Small)
                         .background(scheme.surfaceContainerHigh)
                         .clickable { if (remoteReady) showFolderPicker = true }
                         .padding(horizontal = 10.dp, vertical = 8.dp),
@@ -703,7 +704,7 @@ fun ModelHubScreen(
                 // 3. 底部固定操作栏（始终贴底可见，无需滚动）
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 12.dp,
+                    cornerRadius = PocketTokens.Radius.Medium,
                     colors = CardDefaults.defaultColors(color = if (downloadReady) scheme.primary else scheme.surfaceContainerHigh),
                     pressFeedbackType = PressFeedbackType.Sink,
                     showIndication = true,
@@ -799,9 +800,9 @@ fun ModelHubScreen(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(PocketTokens.Shape.Small)
                                     .background(if (isSelected) scheme.primary.copy(alpha = 0.12f) else scheme.surfaceContainerHigh)
-                                    .border(1.dp, if (isSelected) scheme.primary else Color.Transparent, RoundedCornerShape(8.dp))
+                                    .border(1.dp, if (isSelected) scheme.primary else Color.Transparent, PocketTokens.Shape.Small)
                                     .clickable {
                                         selectedFolder = fItem
                                         showFolderPicker = false

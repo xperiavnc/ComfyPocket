@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import top.yukonga.miuix.kmp.icon.MiuixIcons
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import top.yukonga.miuix.kmp.icon.extended.Refresh
 import top.yukonga.miuix.kmp.icon.extended.Settings
 import com.comfyui.mobile.ui.screens.dashboard.UserProfileCard
@@ -176,7 +177,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
             .overScrollVertical()
             .nestedScroll(scrollBehavior.nestedScrollConnection)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp)
+            .padding(horizontal = PocketTokens.PagePadding)
             .padding(top = innerPadding.calculateTopPadding() + 8.dp, bottom = 24.dp + floatingNavClearance)
     ) {
 
@@ -317,7 +318,7 @@ fun DashboardScreen(navController: NavController, viewModel: MainViewModel) {
                         progress = if (progress > 0f) progress.coerceIn(0f, 1f) else 0.35f,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(99.dp)),
+                            .clip(PocketTokens.Shape.Pill),
                         colors = ProgressIndicatorDefaults.progressIndicatorColors(
                             foregroundColor = scheme.primary,
                             backgroundColor = scheme.surfaceContainer.copy(alpha = 0.92f)
@@ -513,7 +514,7 @@ internal fun StatProgressRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("system-progress:$label")
-                .clip(RoundedCornerShape(99.dp)),
+                .clip(PocketTokens.Shape.Pill),
             colors = ProgressIndicatorDefaults.progressIndicatorColors(
                 foregroundColor = barColor,
                 backgroundColor = contentColor.copy(alpha = 0.12f)
@@ -592,7 +593,7 @@ private fun RhMetricTile(
     ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(PocketTokens.Shape.Medium)
             .background(MiuixTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f))
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {

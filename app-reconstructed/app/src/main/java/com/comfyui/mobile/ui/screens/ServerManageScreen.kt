@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -170,8 +171,8 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
             contentPadding = PaddingValues(
-                start = 20.dp,
-                end = 20.dp,
+                start = PocketTokens.PagePadding,
+                end = PocketTokens.PagePadding,
                 top = innerPadding.calculateTopPadding() + 8.dp,
                 bottom = 24.dp + floatingNavClearance
     ),
@@ -241,7 +242,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                                     val isRh = server.isRunningHub
                                     Box(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
+                                            .clip(PocketTokens.Shape.Small)
                                             .background(
                                                 if (isRh) schemeColors.primary.copy(alpha = 0.15f)
                                                 else schemeColors.surfaceContainerHigh
@@ -343,7 +344,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(PocketTokens.Shape.Medium)
                             .background(
                                 if (isSelected) schemeColors.primary else schemeColors.surfaceContainerHigh
                             )
@@ -394,7 +395,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(11.dp))
+                                .clip(PocketTokens.Shape.Medium)
                                 .background(
                                     if (isSelected) schemeColors.primary else schemeColors.surfaceContainerHigh
                                 )
@@ -474,7 +475,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(11.dp))
+                                .clip(PocketTokens.Shape.Medium)
                                 .background(
                                     if (isSelected) schemeColors.primary else schemeColors.surfaceContainerHigh
                                 )
@@ -513,7 +514,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .clip(RoundedCornerShape(11.dp))
+                                .clip(PocketTokens.Shape.Medium)
                                 .background(
                                     if (isSelected) schemeColors.primary else schemeColors.surfaceContainerHigh
                                 )
@@ -603,7 +604,7 @@ fun ServerManageScreen(navController: NavController, viewModel: MainViewModel) {
                     testStatusCode?.let { code ->
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(PocketTokens.Shape.Small)
                                 .background(
                                     when {
                                         code == "CONNECTING" -> schemeColors.surfaceContainerHigh

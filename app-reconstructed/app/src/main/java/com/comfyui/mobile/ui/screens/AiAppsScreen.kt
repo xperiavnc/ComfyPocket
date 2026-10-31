@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.border
@@ -196,7 +197,7 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = PocketTokens.PagePadding)
                     .padding(top = 12.dp)
     ) {
                 val list = if (isDragging) localApps else apps
@@ -228,7 +229,7 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
                                     .border(
                                         1.dp,
                                         scheme.outline.copy(alpha = 0.38f),
-                                        RoundedCornerShape(28.dp)
+                                        PocketTokens.Shape.XLarge
     )
                                     .pointerInput(app.id) {
                                         detectDragGesturesAfterLongPress(
@@ -299,7 +300,7 @@ fun AiAppsScreen(navController: NavController, viewModel: MainViewModel) {
                                         if (draggingAppId == app.id) {
                                             translationX = draggingOffset.x
                                             translationY = draggingOffset.y
-                                            shape = RoundedCornerShape(28.dp)
+                                            shape = PocketTokens.Shape.XLarge
                                             clip = true
                                         }
                                     }

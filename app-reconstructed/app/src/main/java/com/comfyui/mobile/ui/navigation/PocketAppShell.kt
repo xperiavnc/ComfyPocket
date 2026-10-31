@@ -3,6 +3,7 @@
 package com.comfyui.mobile.ui.navigation
 
 import androidx.activity.compose.PredictiveBackHandler
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -133,7 +134,7 @@ private fun PocketNavigationItems(
                         }
                         .width(indicatorWidth)
                         .height(32.dp)
-                        .clip(RoundedCornerShape(50))
+                        .clip(PocketTokens.Shape.Pill)
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                         .testTag("pocket-navigation-indicator")
                 )

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.danbooru
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -47,7 +48,7 @@ internal fun DanbooruBrowseControls(
         TextField(
             input, onInput, label = "搜索标签 / Danbooru 语法", useLabelAsPlaceholder = true,
             singleLine = true, textStyle = MiuixTheme.textStyles.body2,
-            insideMargin = DpSize(14.dp, 10.dp), cornerRadius = 16.dp,
+            insideMargin = DpSize(14.dp, 10.dp), cornerRadius = PocketTokens.Radius.Large,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { onSearch() }),
             trailingIcon = {
@@ -135,11 +136,11 @@ private fun DanbooruBrowseChip(
     // A single painted surface replaces the default outer indication plus inner selected slab.
     val touch = if (dropdown) Modifier.clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
         else Modifier.selectable(selected = selected, interactionSource = interaction, indication = null, role = Role.Tab, onClick = onClick)
-    Box(modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(RoundedCornerShape(12.dp)).then(touch),
+    Box(modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(PocketTokens.Shape.Medium).then(touch),
         contentAlignment = Alignment.Center) {
-        Row(Modifier.clip(RoundedCornerShape(12.dp))
+        Row(Modifier.clip(PocketTokens.Shape.Medium)
             .background(background)
-            .then(if (dropdown) Modifier.border(1.dp, scheme.onSurfaceSecondary.copy(alpha = 0.22f), RoundedCornerShape(12.dp)) else Modifier)
+            .then(if (dropdown) Modifier.border(1.dp, scheme.onSurfaceSecondary.copy(alpha = 0.22f), PocketTokens.Shape.Medium) else Modifier)
             .padding(horizontal = if (dropdown) 8.dp else 4.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(text, style = MiuixTheme.textStyles.footnote2.copy(fontSize = 14.sp),
@@ -155,7 +156,7 @@ private fun DanbooruBrowseChip(
 internal fun DanbooruPill(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val scheme = MiuixTheme.colorScheme
     Box(
-        modifier.clip(RoundedCornerShape(12.dp))
+        modifier.clip(PocketTokens.Shape.Medium)
             .background(if (selected) scheme.primary.copy(alpha = 0.14f) else scheme.surfaceContainerHigh)
             .selectable(selected = selected, role = Role.Tab, onClick = onClick)
             .defaultMinSize(minHeight = 40.dp)
@@ -174,14 +175,14 @@ internal fun DanbooruSmallAction(
     enabled: Boolean = true, onClick: () -> Unit
 ) {
     TextButton(text, onClick, modifier = modifier, enabled = enabled, minHeight = 40.dp, minWidth = 0.dp,
-        cornerRadius = 12.dp, insideMargin = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
+        cornerRadius = PocketTokens.Radius.Medium, insideMargin = PaddingValues(horizontal = 12.dp, vertical = 9.dp),
         textStyle = MiuixTheme.textStyles.footnote1,
         colors = if (primary) ButtonDefaults.textButtonColorsPrimary() else ButtonDefaults.textButtonColors())
 }
 
 @Composable
 internal fun DanbooruInlineAction(text: String, enabled: Boolean = true, onClick: () -> Unit) {
-    Box(Modifier.clip(RoundedCornerShape(10.dp)).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+    Box(Modifier.clip(PocketTokens.Shape.Medium).clickable(enabled = enabled, role = Role.Button, onClick = onClick)
         .heightIn(min = 40.dp).padding(horizontal = 10.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
         Text(text, style = MiuixTheme.textStyles.footnote1,
             color = MiuixTheme.colorScheme.primary.copy(alpha = if (enabled) 1f else 0.4f))

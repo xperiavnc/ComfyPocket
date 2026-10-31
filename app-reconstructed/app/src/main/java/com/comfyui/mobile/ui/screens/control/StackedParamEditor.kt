@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.animation.core.animateFloatAsState
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -104,7 +105,7 @@ fun StackedParamCard(
 
     Card(
         modifier = modifier,
-        cornerRadius = 20.dp,
+        cornerRadius = PocketTokens.Radius.Large,
         insideMargin = PaddingValues(12.dp),
         colors = CardDefaults.defaultColors(
             color = if (isDragging) {
@@ -164,7 +165,7 @@ fun StackedParamCard(
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                cornerRadius = 16.dp,
+                                cornerRadius = PocketTokens.Radius.Large,
                                 colors = CardDefaults.defaultColors(
                                     color = scheme.secondaryContainer.copy(alpha = 0.65f)
     ),
@@ -201,9 +202,9 @@ fun StackedParamCard(
                                         .border(
                                             1.dp,
                                             scheme.outline.copy(alpha = 0.25f),
-                                            RoundedCornerShape(16.dp)
+                                            PocketTokens.Shape.Large
     ),
-                                    cornerRadius = 16.dp,
+                                    cornerRadius = PocketTokens.Radius.Large,
                                     colors = CardDefaults.defaultColors(
                                         color = scheme.surface.copy(alpha = 0.95f)
     ),
@@ -580,16 +581,16 @@ fun StackedParamEditorList(
                             .zIndex(if (isDragging) 10f else 0f)
                             .graphicsLayer {
                                 translationY = realVisualOffset
-                                shape = RoundedCornerShape(20.dp)
+                                shape = PocketTokens.Shape.Large
                                 clip = true
                                 if (isDragging) {
                                     shadowElevation = 6f
                                 }
                             }
-                            .clip(RoundedCornerShape(20.dp))
+                            .clip(PocketTokens.Shape.Large)
                             .then(
                                 if (isDragging) {
-                                    Modifier.border(2.dp, scheme.primary, RoundedCornerShape(20.dp))
+                                    Modifier.border(2.dp, scheme.primary, PocketTokens.Shape.Large)
                                 } else {
                                     Modifier
                                 }

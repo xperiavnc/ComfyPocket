@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.control
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -231,7 +232,7 @@ fun CloudModelBrowserDialog(
                 Spacer(modifier = Modifier.width(8.dp))
                 Card(
                     modifier = Modifier.size(46.dp),
-                    cornerRadius = 12.dp,
+                    cornerRadius = PocketTokens.Radius.Medium,
                     colors = CardDefaults.defaultColors(color = scheme.primary),
                     onClick = { search() }
                 ) {
@@ -268,7 +269,7 @@ fun CloudModelBrowserDialog(
                     modifier = Modifier.weight(1f).testTag("model-picker-count")
                 )
                 Box(
-                    modifier = Modifier.clip(RoundedCornerShape(10.dp))
+                    modifier = Modifier.clip(PocketTokens.Shape.Medium)
                         .clickable(enabled = !isLoading) { search() }
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                         .testTag("model-picker-refresh")
@@ -317,7 +318,7 @@ fun CloudModelBrowserDialog(
                         itemsIndexed(resources, key = { index, item -> "${item.effectiveId}_$index" }) { _, item ->
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
-                                cornerRadius = 12.dp,
+                                cornerRadius = PocketTokens.Radius.Medium,
                                 colors = CardDefaults.defaultColors(color = scheme.surfaceContainer),
                                 pressFeedbackType = PressFeedbackType.Sink,
                                 showIndication = true,
@@ -330,7 +331,7 @@ fun CloudModelBrowserDialog(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(110.dp)
-                                            .clip(RoundedCornerShape(8.dp))
+                                            .clip(PocketTokens.Shape.Small)
                                             .background(scheme.surfaceContainerHigh)
                                     ) {
                                         val rawImgUrl = item.thumbnailUrl ?: item.posterUrl

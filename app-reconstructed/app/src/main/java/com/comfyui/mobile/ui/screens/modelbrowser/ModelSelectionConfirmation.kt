@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.modelbrowser
 
 import android.content.ClipData
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
@@ -189,7 +190,7 @@ private fun ModelSelectionHeader(
             AsyncImage(model = if (direct) phoneImageRequest(image) else image,
                 imageLoader = if (direct) phoneImages else context.imageLoader,
                 contentDescription = null, contentScale = ContentScale.Crop,
-                modifier = Modifier.width(64.dp).height(80.dp).clip(RoundedCornerShape(12.dp))
+                modifier = Modifier.width(64.dp).height(80.dp).clip(PocketTokens.Shape.Medium)
                     .background(scheme.surfaceContainer).testTag("model-picker-confirm-cover"))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -215,7 +216,7 @@ private fun ModelSelectionHeader(
 private fun ConfirmationSection(
     title: String, action: (@Composable () -> Unit)? = null, content: @Composable ColumnScope.() -> Unit
 ) {
-    Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth(),
+    Card(cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surfaceContainer)) {
         Column(Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -235,7 +236,7 @@ private fun ConfirmationDisclosure(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val scheme = MiuixTheme.colorScheme
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp))
+    Column(Modifier.fillMaxWidth().clip(PocketTokens.Shape.Large)
         .then(if (surface) Modifier.background(scheme.surfaceContainer) else Modifier)) {
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp)
             .clickable(role = Role.Button) { expanded = !expanded }

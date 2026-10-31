@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.modelcenter
 
 import android.content.ClipData
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import android.content.ClipboardManager
 import android.content.Context
 import com.comfyui.mobile.ui.feedback.AppToast
@@ -118,7 +119,7 @@ internal fun LocalModelDetails(
 
 @Composable
 private fun DetailAction(label: String, enabled: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    Card(cornerRadius = 12.dp, modifier = modifier) {
+    Card(cornerRadius = PocketTokens.Radius.Medium, modifier = modifier) {
         ModelAction(label, enabled, Modifier.fillMaxWidth(), onClick)
     }
 }
@@ -180,7 +181,7 @@ private fun AnnotationSummary(vm: ModelCenterViewModel, item: LocalModel, writab
 @Composable
 private fun FileInformation(item: LocalModel, cached: Boolean) {
     var expanded by remember(item.id) { mutableStateOf(false) }
-    Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth().animateContentSize()) {
+    Card(cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth().animateContentSize()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("文件信息", style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.SemiBold,
@@ -214,7 +215,7 @@ internal fun ExpandableModelText(text: String, label: String) {
 
 @Composable
 private fun DetailSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth()) {
+    Card(cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(title, style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.SemiBold)
             content()

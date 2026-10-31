@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import android.content.Intent
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import com.comfyui.mobile.ui.feedback.AppToast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -152,7 +153,7 @@ fun ConsoleScreen(navController: NavController? = null, viewModel: MainViewModel
                     .fillMaxSize()
                     .overScrollVertical()
                     .nestedScroll(scrollBehavior.nestedScrollConnection)
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = PocketTokens.PagePadding),
                 contentPadding = PaddingValues(
                     top = innerPadding.calculateTopPadding() + 6.dp,
                     bottom = 24.dp + floatingNavClearance

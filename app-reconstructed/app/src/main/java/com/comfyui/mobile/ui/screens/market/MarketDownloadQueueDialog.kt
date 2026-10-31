@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.market
 
 import androidx.compose.foundation.layout.*
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.*
@@ -128,7 +129,7 @@ internal fun DownloadTaskCard(
         else -> task.status.orEmpty().ifBlank { "状态未知" }
     }
     val completed = task.status == "completed"
-    Card(cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth().testTag("download-task-${task.download_id}")) {
+    Card(cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth().testTag("download-task-${task.download_id}")) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(task.effectiveName, style = MiuixTheme.textStyles.body2, fontWeight = FontWeight.SemiBold,

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.ui.unit.dp
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.animation.core.animateFloatAsState
@@ -288,7 +289,7 @@ private fun AttachMenuChip(label: String, onClick: () -> Unit) {
     val scheme = MiuixTheme.colorScheme
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(50))
+            .clip(PocketTokens.Shape.Pill)
             .background(scheme.surface)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -314,7 +315,7 @@ fun AgentAttachmentStrip(
             Box(
                 modifier = Modifier
                     .then(if (att.isImage) Modifier.size(56.dp) else Modifier.height(40.dp).widthIn(max = 180.dp))
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(PocketTokens.Shape.Medium)
                     .background(scheme.surfaceContainerHigh),
                 contentAlignment = Alignment.CenterStart
     ) {

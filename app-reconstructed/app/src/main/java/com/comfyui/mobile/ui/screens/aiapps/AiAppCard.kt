@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.aiapps
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -52,7 +53,7 @@ fun AiAppEmptyCard(
     )
     Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 28.dp,
+        cornerRadius = PocketTokens.Radius.XLarge,
         colors = cardColors,
         onClick = null,
         pressFeedbackType = PressFeedbackType.Sink,
@@ -104,7 +105,7 @@ fun AiAppCard(
 
     Card(
         modifier = modifier,
-        cornerRadius = 28.dp,
+        cornerRadius = PocketTokens.Radius.XLarge,
         colors = cardColors,
         onClick = if (!isDragging) onClick else null,
         pressFeedbackType = if (!isDragging) PressFeedbackType.Sink else PressFeedbackType.None,

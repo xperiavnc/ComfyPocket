@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.modelcenter
 
 import androidx.compose.animation.AnimatedContent
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -61,7 +62,7 @@ internal fun ModelChip(label: String, selected: Boolean = false, onClick: () -> 
         style = MiuixTheme.textStyles.footnote1,
         modifier = Modifier.background(
             if (selected) colors.primary.copy(alpha = .12f) else colors.surfaceContainerHigh,
-            RoundedCornerShape(999.dp)).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp))
+            PocketTokens.Shape.Pill).clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp))
 }
 
 @Composable
@@ -131,7 +132,7 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
                 val stats = state.page.stats
                 val scan = state.tasks.scan.takeIf { it.active } ?: state.page.scan
                 val roots = state.capabilities?.roots.orEmpty()
-                Card(cornerRadius = 14.dp, modifier = Modifier.fillMaxWidth()) {
+                Card(cornerRadius = PocketTokens.Radius.Medium, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f).padding(vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -209,7 +210,7 @@ internal fun LocalModelList(vm: ModelCenterViewModel, state: ModelCenterState,
 @Composable
 internal fun LocalModelCard(model: LocalModel, previewUrl: String?, compact: Boolean, cached: Boolean, onClick: () -> Unit) {
     val colors = MiuixTheme.colorScheme
-    Card(onClick = onClick, cornerRadius = 16.dp, modifier = Modifier.fillMaxWidth().testTag("model-card-${model.id}")) {
+    Card(onClick = onClick, cornerRadius = PocketTokens.Radius.Large, modifier = Modifier.fillMaxWidth().testTag("model-card-${model.id}")) {
         if (compact) Row(Modifier.padding(10.dp), horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically) {
             LocalModelCover(model, previewUrl, cached, Modifier.width(64.dp).height(80.dp))

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -358,12 +359,12 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                     scaleX = 0.97f
                     scaleY = 0.97f
                 }
-                shape = RoundedCornerShape(14.dp)
+                shape = PocketTokens.Shape.Medium
                 clip = false
             }
             .then(
                 if (isDragging || isHoverTarget) {
-                    Modifier.border(2.dp, scheme.primary, RoundedCornerShape(14.dp))
+                    Modifier.border(2.dp, scheme.primary, PocketTokens.Shape.Medium)
                 } else {
                     Modifier
                 }
@@ -436,7 +437,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                 item(key = "reimport_alert") {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
+                        cornerRadius = PocketTokens.Radius.Medium,
                         colors = CardDefaults.defaultColors(
                             color = scheme.errorContainer.copy(alpha = 0.4f),
                             contentColor = onCard
@@ -466,7 +467,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
             item(key = "run_card") {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 16.dp,
+                    cornerRadius = PocketTokens.Radius.Large,
                     colors = cardColors
     ) {
                     Column(
@@ -485,8 +486,8 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                     contentDescription = null,
                                     modifier = Modifier
                                         .size(38.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .border(1.dp, scheme.outline.copy(alpha = 0.2f), RoundedCornerShape(10.dp)),
+                                        .clip(PocketTokens.Shape.Medium)
+                                        .border(1.dp, scheme.outline.copy(alpha = 0.2f), PocketTokens.Shape.Medium),
                                     contentScale = ContentScale.Crop
     )
                             }
@@ -572,7 +573,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(42.dp),
-                            cornerRadius = 12.dp,
+                            cornerRadius = PocketTokens.Radius.Medium,
                             colors = if (rhBusy) {
                                 ButtonDefaults.buttonColors(
                                     color = scheme.error.copy(alpha = 0.15f),
@@ -606,7 +607,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                     progress = 0.35f,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(99.dp)),
+                                        .clip(PocketTokens.Shape.Pill),
                                     colors = ProgressIndicatorDefaults.progressIndicatorColors(
                                         foregroundColor = scheme.primary,
                                         backgroundColor = scheme.surfaceContainerHigh
@@ -627,7 +628,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                     progress = if (p > 0f) p else 0.35f,
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .clip(RoundedCornerShape(99.dp)),
+                                        .clip(PocketTokens.Shape.Pill),
                                     colors = ProgressIndicatorDefaults.progressIndicatorColors(
                                         foregroundColor = scheme.primary,
                                         backgroundColor = scheme.surfaceContainerHigh
@@ -672,7 +673,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                 if (visibleNodes.isEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 14.dp,
+                        cornerRadius = PocketTokens.Radius.Medium,
                         colors = cardColors
     ) {
                         Text(
@@ -855,12 +856,12 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                                                 .then(
                                                     if (isSlotHover) {
                                                         Modifier
-                                                            .border(2.dp, scheme.primary, RoundedCornerShape(14.dp))
-                                                            .background(scheme.primaryContainer.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                                                            .border(2.dp, scheme.primary, PocketTokens.Shape.Medium)
+                                                            .background(scheme.primaryContainer.copy(alpha = 0.45f), PocketTokens.Shape.Medium)
                                                     } else if (draggingKey != null && draggingKey != kh) {
                                                         Modifier
-                                                            .border(1.5.dp, scheme.outline.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
-                                                            .background(scheme.surfaceContainerHigh.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                                                            .border(1.5.dp, scheme.outline.copy(alpha = 0.3f), PocketTokens.Shape.Medium)
+                                                            .background(scheme.surfaceContainerHigh.copy(alpha = 0.35f), PocketTokens.Shape.Medium)
                                                     } else {
                                                         Modifier
                                                     }
@@ -897,7 +898,7 @@ fun AiAppDetailScreen(navController: NavController, viewModel: AiAppUi, appId: S
                         latestGenerationList = latestGenerationList,
                         cardColors = cardColors,
                         onCard = onCard,
-                        cornerRadius = 16.dp,
+                        cornerRadius = PocketTokens.Radius.Large,
                         getViewUrl = { viewModel.getViewUrl(it) },
                         onItemClick = { index ->
                             selectedResultMedia = latestGenerationList.getOrNull(index)

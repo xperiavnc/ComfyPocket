@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.dashboard
 
 import androidx.compose.foundation.Image
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -215,7 +216,7 @@ fun UserProfileCard(
                         val badgeText = if (isRh) "云端模式" else "本地模式"
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
+                                .clip(PocketTokens.Shape.Small)
                                 .background(badgeBg)
                                 .padding(horizontal = 7.dp, vertical = 2.dp)
     ) {
@@ -254,7 +255,7 @@ fun UserProfileCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
+                    .clip(PocketTokens.Shape.Large)
                     .background(scheme.surfaceContainer.copy(alpha = 0.55f))
                     .clickable(onClick = onServerClick)
                     .padding(horizontal = 14.dp, vertical = 10.dp)
@@ -273,7 +274,7 @@ fun UserProfileCard(
                             modifier = Modifier
                                 .size(8.dp)
                                 .clip(CircleShape)
-                                .background(if (statusOk) Color(0xFF4CAF50) else scheme.error)
+                                .background(if (statusOk) PocketTokens.Success else scheme.error)
     )
                         Text(
                             text = statusText,
@@ -314,7 +315,7 @@ fun UserProfileCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(PocketTokens.Shape.Large)
                             .background(scheme.surfaceContainer.copy(alpha = 0.45f))
                             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
@@ -363,7 +364,7 @@ fun UserProfileCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(PocketTokens.Shape.Large)
                             .background(scheme.surfaceContainer.copy(alpha = 0.45f))
                             .clickable(onClick = onRhTasksClick)
                             .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -421,7 +422,7 @@ fun UserProfileCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(PocketTokens.Shape.Large)
                             .background(scheme.surfaceContainer.copy(alpha = 0.45f))
                             .then(if (onLatestClick != null) Modifier.clickable(onClick = onLatestClick) else Modifier)
                             .padding(horizontal = 14.dp, vertical = 12.dp)
@@ -442,7 +443,7 @@ fun UserProfileCard(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-                                    val dotColor = if (!statusOk) scheme.error else if (isBusy) scheme.primary else Color(0xFF4CAF50)
+                                    val dotColor = if (!statusOk) scheme.error else if (isBusy) scheme.primary else PocketTokens.Success
                                     Box(
                                         modifier = Modifier
                                             .size(6.dp)
@@ -514,7 +515,7 @@ fun UserProfileCard(
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
+                            .clip(PocketTokens.Shape.Large)
                             .background(scheme.surfaceContainer.copy(alpha = 0.45f))
                             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {

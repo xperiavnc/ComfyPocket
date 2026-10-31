@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens
 
 import com.comfyui.mobile.data.AppModule
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -314,7 +316,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 20.dp)
+                .padding(horizontal = PocketTokens.PagePadding)
                 .padding(top = innerPadding.calculateTopPadding() + 12.dp)
     ) {
             sourcePicker()
@@ -416,7 +418,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     ) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        cornerRadius = 28.dp,
+                        cornerRadius = PocketTokens.Radius.XLarge,
                         colors = CardDefaults.defaultColors(
                             color = cardColor,
                             contentColor = scheme.onSecondaryContainer
@@ -476,7 +478,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     ) {
                 FloatingToolbar(
                     color = scheme.surfaceContainer.copy(alpha = 0.94f),
-                    cornerRadius = 22.dp,
+                    cornerRadius = PocketTokens.Radius.XLarge,
                     shadowElevation = 6.dp,
                     outSidePadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)
     ) {
@@ -588,8 +590,8 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                 // 新建分类：圆角输入 + 主色文字按钮
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 16.dp,
-                    colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                    cornerRadius = PocketTokens.Radius.Large,
+                    colors = PocketCardColors.raised(),
                     insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
     ) {
                     Row(
@@ -638,8 +640,8 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
                     items(categories, key = { it.id }) { cat ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            cornerRadius = 14.dp,
-                            colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                            cornerRadius = PocketTokens.Radius.Medium,
+                            colors = PocketCardColors.raised(),
                             pressFeedbackType = PressFeedbackType.Sink
     ) {
                             BasicComponent(
@@ -720,7 +722,7 @@ fun GalleryScreen(navController: NavController, viewModel: GalleryUi, sourcePick
     ) {
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                    colors = PocketCardColors.raised(),
                     insideMargin = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
     ) {
                     TextField(
@@ -994,7 +996,7 @@ fun FullScreenPreview(
     ) {
                     FloatingToolbar(
                         color = scheme.surfaceContainer.copy(alpha = 0.94f),
-                        cornerRadius = 22.dp,
+                        cornerRadius = PocketTokens.Radius.XLarge,
                         shadowElevation = 6.dp,
                         outSidePadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp)
     ) {
@@ -1083,7 +1085,7 @@ private fun PreviewActionButton(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .widthIn(min = 44.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(PocketTokens.Shape.Medium)
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 4.dp)
     ) {
@@ -1363,7 +1365,7 @@ fun CategoryChip(
     onClick: () -> Unit
     ) {
     val scheme = MiuixTheme.colorScheme
-    val shape = RoundedCornerShape(50)
+    val shape = PocketTokens.Shape.Pill
     val bgColor = if (isSelected) {
         scheme.primary
     } else {

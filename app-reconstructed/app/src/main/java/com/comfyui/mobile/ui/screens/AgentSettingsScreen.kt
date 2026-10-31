@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -220,7 +221,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         ).forEach { (label, url, defaultModel) ->
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(PocketTokens.Shape.Small)
                                     .background(scheme.surfaceContainerHigh)
                                     .clickable {
                                         baseUrl = url

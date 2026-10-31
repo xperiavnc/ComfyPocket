@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -48,12 +49,12 @@ fun FrostedChip(
     Box(
         modifier = modifier
             .height(34.dp)
-            .clip(RoundedCornerShape(50))
+            .clip(PocketTokens.Shape.Pill)
             .background(scheme.surfaceContainerHighest.copy(alpha = 0.92f))
             .border(
                 width = 1.dp,
                 color = scheme.outline.copy(alpha = 0.28f),
-                shape = RoundedCornerShape(50)
+                shape = PocketTokens.Shape.Pill
             )
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier),
         contentAlignment = Alignment.Center
@@ -134,7 +135,7 @@ fun AgentBubble(
     ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(PocketTokens.Shape.Medium)
                                     .background(scheme.surfaceContainerHigh.copy(alpha = 0.5f))
                                     .padding(8.dp)
     )
@@ -144,7 +145,7 @@ fun AgentBubble(
                     // 2. 思考完成：收拢为优雅折叠胶囊
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(PocketTokens.Shape.Medium)
                             .background(scheme.surfaceContainerHigh.copy(alpha = 0.7f))
                             .clickable { thinkingExpanded = !thinkingExpanded }
                             .padding(horizontal = 8.dp, vertical = 4.dp)
@@ -179,7 +180,7 @@ fun AgentBubble(
     ),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
+                                    .clip(PocketTokens.Shape.Medium)
                                     .background(scheme.surfaceContainerHigh.copy(alpha = 0.5f))
                                     .padding(8.dp)
     )
@@ -234,7 +235,7 @@ fun AgentBubble(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(PocketTokens.Shape.Medium)
                             .background(scheme.error.copy(alpha = 0.12f))
                             .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -280,7 +281,7 @@ internal fun AgentClarificationChoices(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
+                    .clip(PocketTokens.Shape.Medium)
                     .background(if (enabled) scheme.primaryContainer.copy(alpha = 0.5f) else scheme.surfaceContainerHigh)
                     .clickable(enabled = enabled, role = Role.Button) { onSelect(option) }
                     .heightIn(min = 44.dp)

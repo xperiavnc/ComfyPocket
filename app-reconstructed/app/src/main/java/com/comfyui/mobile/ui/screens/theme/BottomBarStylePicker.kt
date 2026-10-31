@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.theme
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -41,10 +42,10 @@ internal fun BottomBarStylePicker(selected: BottomBarStyle, onSelect: (BottomBar
                 BottomBarStyle.entries.forEach { style ->
                     val active = style == selected
                     Column(
-                        Modifier.weight(1f).clip(RoundedCornerShape(16.dp))
+                        Modifier.weight(1f).clip(PocketTokens.Shape.Large)
                             .border(if (active) 2.dp else 1.dp,
                                 if (active) scheme.primary else scheme.outline.copy(alpha = 0.35f),
-                                RoundedCornerShape(16.dp))
+                                PocketTokens.Shape.Large)
                             .selectable(active, role = Role.RadioButton, onClick = { if (!active) onSelect(style) })
                             .testTag("bottom-bar-style-${style.id}")
                             .padding(10.dp),
@@ -71,7 +72,7 @@ private fun BottomBarStylePreview(style: BottomBarStyle) {
     val classic = style == BottomBarStyle.CLASSIC
     val icons = listOf(MiuixIcons.Home, MiuixIcons.Tune, MiuixIcons.Create, MiuixIcons.GridView, MiuixIcons.Photos)
     Box(
-        Modifier.fillMaxWidth().height(72.dp).clip(RoundedCornerShape(10.dp))
+        Modifier.fillMaxWidth().height(72.dp).clip(PocketTokens.Shape.Medium)
             .background(scheme.background).clearAndSetSemantics { },
         contentAlignment = Alignment.BottomCenter
     ) {

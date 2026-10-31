@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -110,7 +111,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 .overScrollVertical()
                 .nestedScroll(scrollBehavior.nestedScrollConnection)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = PocketTokens.PagePadding)
                 .padding(
                     top = innerPadding.calculateTopPadding(),
                     bottom = 28.dp + floatingNavClearance
@@ -187,7 +188,7 @@ fun ThemeSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(PocketTokens.Shape.Medium)
                             .background(scheme.surfaceContainerHigh.copy(alpha = 0.65f))
                             .clickable {
                                 haptics.tick()
@@ -360,7 +361,7 @@ private fun PaletteSwatchCell(
     )
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(PocketTokens.Shape.Medium)
             .clickable(onClick = onClick)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -429,7 +430,7 @@ private fun AppearanceModeMockup(
 
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(16.dp))
+            .clip(PocketTokens.Shape.Large)
             .clickable(onClick = onClick)
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -440,11 +441,11 @@ private fun AppearanceModeMockup(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(108.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(PocketTokens.Shape.Medium)
                 .border(
                     width = if (isSelected) 2.5.dp else 1.dp,
                     color = if (isSelected) borderColor else scheme.outline.copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(14.dp)
+                    shape = PocketTokens.Shape.Medium
     )
                 .background(
                     when (mode) {
@@ -558,8 +559,8 @@ private fun MockupContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(44.dp)
-                .shadow(1.dp, RoundedCornerShape(6.dp))
-                .background(cardColor, RoundedCornerShape(6.dp))
+                .shadow(1.dp, PocketTokens.Shape.Small)
+                .background(cardColor, PocketTokens.Shape.Small)
                 .padding(6.dp)
     ) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

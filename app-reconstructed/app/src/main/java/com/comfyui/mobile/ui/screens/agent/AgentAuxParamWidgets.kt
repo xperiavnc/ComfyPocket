@@ -1,6 +1,7 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.foundation.background
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -141,7 +142,7 @@ fun AgentAuxDropdownWidget(
     )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            cornerRadius = 12.dp,
+            cornerRadius = PocketTokens.Radius.Medium,
             colors = CardDefaults.defaultColors(color = scheme.surface),
             onClick = { expanded = !expanded }
     ) {
@@ -171,14 +172,14 @@ fun AgentAuxDropdownWidget(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(max = 180.dp)
-                    .clip(RoundedCornerShape(12.dp)),
-                cornerRadius = 12.dp,
+                    .clip(PocketTokens.Shape.Medium),
+                cornerRadius = PocketTokens.Radius.Medium,
                 colors = CardDefaults.defaultColors(color = scheme.surface)
     ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
+                        .clip(PocketTokens.Shape.Medium)
                         .verticalScroll(rememberScrollState())
                         .padding(6.dp)
     ) {
@@ -187,7 +188,7 @@ fun AgentAuxDropdownWidget(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(PocketTokens.Shape.Small)
                                 .background(
                                     if (isChosen) scheme.primaryContainer.copy(alpha = 0.5f)
                                     else Color.Transparent
@@ -327,7 +328,7 @@ fun AgentAuxSeedWidget(
                         onValueCommit(if (node.value is Long) -1L else -1)
                     },
                     modifier = Modifier.height(26.dp),
-                    cornerRadius = 8.dp,
+                    cornerRadius = PocketTokens.Radius.Small,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.secondaryContainer,
                         contentColor = scheme.onSecondaryContainer
@@ -345,7 +346,7 @@ fun AgentAuxSeedWidget(
                         onValueCommit(if (node.value is Long) randSeed else randSeed.toInt())
                     },
                     modifier = Modifier.height(26.dp),
-                    cornerRadius = 8.dp,
+                    cornerRadius = PocketTokens.Radius.Small,
                     colors = ButtonDefaults.buttonColors(
                         color = scheme.primaryContainer,
                         contentColor = scheme.primary
@@ -514,7 +515,7 @@ fun AgentAuxBooleanWidget(
     ) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        cornerRadius = 12.dp,
+        cornerRadius = PocketTokens.Radius.Medium,
         colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.surface),
         onClick = { onCheckedChange(!node.value) }
     ) {

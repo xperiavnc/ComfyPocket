@@ -1,6 +1,8 @@
 package com.comfyui.mobile.ui.screens.agent
 
 import androidx.compose.foundation.layout.Arrangement
+import com.comfyui.mobile.ui.designsystem.PocketCardColors
+import com.comfyui.mobile.ui.designsystem.PocketTokens
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -97,8 +99,8 @@ fun AgentCharacterLoreDialog(
                 visible.forEach { lore ->
                     Card(
                         modifier = Modifier.fillMaxWidth().testTag("lore-card-${lore.id}"),
-                        cornerRadius = 16.dp, insideMargin = PaddingValues(12.dp),
-                        colors = CardDefaults.defaultColors(color = scheme.surfaceContainerHigh),
+                        cornerRadius = PocketTokens.Radius.Large, insideMargin = PaddingValues(12.dp),
+                        colors = PocketCardColors.raised(),
                         onClick = { target = lore; isNew = false; editorOpen = true }
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
