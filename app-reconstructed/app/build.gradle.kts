@@ -14,8 +14,8 @@ android {
         applicationId = "com.comfyui.mobile.rebuilt"
         minSdk = 33
         targetSdk = 36
-        versionCode = 57
-        versionName = "0.0.55-agent-interactions"
+        versionCode = 58
+        versionName = "0.0.56-agent-drawer"
     }
 
     buildFeatures {

@@ -253,7 +253,7 @@ class AgentConversationsUiTest {
         } finally { controller.pause().stop().destroy() }
     }
 
-    @Test fun drawerUsesCompactHeaderAndMaterialWidth() {
+    @Test fun drawerUsesCompactHeaderAndLeadingPanelWidth() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         try {
             controller.get().setContentView(ComposeView(controller.get()).apply { setContent {
@@ -286,8 +286,12 @@ class AgentConversationsUiTest {
             val rootBounds = compose.onNodeWithTag("agent-conversation-drawer-window")
                 .fetchSemanticsNode().boundsInRoot
             assertTrue(
-                "drawer must stay within the standard compact width: drawer=${bounds.width}, root=${rootBounds.width}",
+                "drawer should leave the underlying page visible: drawer=${bounds.width}, root=${rootBounds.width}",
                 bounds.width <= rootBounds.width * 0.9f
+            )
+            assertTrue(
+                "drawer should remain a usable leading panel: drawer=${bounds.width}, root=${rootBounds.width}",
+                bounds.width >= rootBounds.width * 0.7f
             )
             assertTrue("drawer must start from the leading edge", bounds.left <= 1f)
         } finally { controller.pause().stop().destroy() }

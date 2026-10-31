@@ -260,11 +260,12 @@ internal fun AgentConversationWorkspace(
     if (drawer) {
         Column(
             Modifier.fillMaxSize().background(scheme.surfaceContainer)
-                .windowInsetsPadding(WindowInsets.safeDrawing)
                 .semantics { paneTitle = "会话管理" }
         ) {
-            drawerHeader()
-            workspaceBody(Modifier.weight(1f))
+            Box(Modifier.fillMaxWidth().statusBarsPadding()) {
+                drawerHeader()
+            }
+            workspaceBody(Modifier.weight(1f).navigationBarsPadding())
         }
     } else {
         Scaffold(containerColor = scheme.background, topBar = {
@@ -447,9 +448,8 @@ internal fun AgentConversationDrawerDialog(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .fillMaxHeight()
-                    .widthIn(max = 360.dp)
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(topEnd = 16.dp, bottomEnd = 16.dp))
+                    .fillMaxWidth(0.82f)
+                    .widthIn(max = 420.dp)
                     .background(scheme.surfaceContainer)
                     .testTag("agent-conversation-drawer")
             ) {
