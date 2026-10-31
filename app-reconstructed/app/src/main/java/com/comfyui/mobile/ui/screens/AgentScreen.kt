@@ -105,6 +105,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
     val messages by viewModel.agentMessages.collectAsState()
     val busy by viewModel.agentBusy.collectAsState()
     val agentLlmBusy by viewModel.agentLlmBusy.collectAsState()
+    val agentLlmStats by viewModel.agentLlmStats.collectAsState()
     val agentImageBusy by viewModel.agentImageBusy.collectAsState()
     val agentInteractionMode by viewModel.agentInteractionMode.collectAsState()
     val agentAttachments by viewModel.agentPendingAttachments.collectAsState()
@@ -386,6 +387,7 @@ fun AgentScreen(navController: NavController, viewModel: MainViewModel) {
                 listState = listState,
                 modifier = Modifier.weight(1f),
                 framed = false,
+                llmStats = agentLlmStats,
                 toolbar = {
                     AgentCapsuleBar(
                         modelDisplayName = "",

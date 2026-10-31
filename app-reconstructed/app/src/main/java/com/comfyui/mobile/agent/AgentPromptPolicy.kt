@@ -5,7 +5,7 @@ import com.comfyui.mobile.model.CharacterLore
 /** App transport only. Persona and drawing instructions come exclusively from user rule files. */
 object AgentPromptPolicy {
     /** Placed before the imported files so the model reads them as binding, not as background. */
-    internal const val RULE_PRIORITY = "【规则优先级】下方用户导入的规则是必须遵守的硬性要求，优先于你的默认写法与习惯：语气、格式、提示词词序、权重语法、禁用词、构图与分镜要求都以规则为准。只有外层 JSON 传输协议高于规则；用户本轮明确提出的要求与规则冲突时，以用户本轮要求为准。"
+    internal const val RULE_PRIORITY = "【规则优先级】下方用户导入的规则是必须遵守的硬性要求，优先于你的默认写法与习惯：语气、格式、提示词词序、权重语法、禁用词、构图与分镜要求都以规则为准。只有外层 JSON 传输协议高于规则；用户本轮要求与规则冲突时先用 ask_user_question 确认，用户已明确说按本轮来或交给你决定时才直接以本轮为准。"
     internal const val RULE_SELF_CHECK = "【输出前自检】逐条对照上方导入规则检查 reply、prompt 与 negative_prompt，有不符合的先改正再输出。"
 
     fun system(persona: String, rules: String, lores: List<CharacterLore>): String = buildString {

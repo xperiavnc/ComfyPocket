@@ -336,16 +336,38 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 if (cost + settings.generationLimits.outputReserve > budget) throw AgentExecutionException(
                     "本轮交互上下文约需 $cost tokens，连同输出预留超过预算 $budget；未截断原任务或工具答案。")
             }
-            if (streaming) vm.llmClient.chatCompletionsStream(
+            val promptEstimate = AgentLlmStats.estimatePrompt(request.messages, images.values.sumOf { it.size },
+                request.tools?.let { vm.gson.toJson(it) })
+            val contextLimit = settings.generationLimits.contextTokens
+            val started = System.nanoTime()
+            var firstToken = 0L
+            var lastLive = 0L
+            val output = if (streaming) vm.llmClient.chatCompletionsStream(
                 settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
                 requestId = requestId, reasoningEffort = settings.effort,
                 generationLimits = settings.generationLimits, tools = request.tools, toolChoice = request.toolChoice
-            ) { _, _, reasoning, content -> onProgress(AgentProgress(reasoning, content,
-                if (request.deciding) "正在核对任务与待确认项…" else "正在编写结果…")) }.getOrThrow()
+            ) { _, _, reasoning, content ->
+                val now = System.nanoTime()
+                if (firstToken == 0L) firstToken = now
+                if (now - lastLive > 400_000_000L) {
+                    // Live estimate while streaming; replaced by server usage when the call ends.
+                    lastLive = now
+                    val out = AgentLlmStats.estimateOutput(content, reasoning)
+                    vm._agentLlmStats.value = AgentLlmStats(settings.model, promptEstimate, out,
+                        contextLimit = contextLimit,
+                        tokensPerSecond = AgentLlmStats.speed(out, (firstToken - started) / 1_000_000,
+                            (now - started) / 1_000_000),
+                        estimated = true, live = true)
+                }
+                onProgress(AgentProgress(reasoning, content,
+                    if (request.deciding) "正在核对任务与待确认项…" else "正在编写结果…"))
+            }.getOrThrow()
             else vm.llmClient.chatCompletions(
                 settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
                 requestId = requestId, reasoningEffort = settings.effort, generationLimits = settings.generationLimits,
                 tools = request.tools, toolChoice = request.toolChoice).getOrThrow()
+            vm._agentLlmStats.value = AgentLlmStats.from(settings.model, output, promptEstimate, contextLimit)
+            output
         },
         initialTextProtocol = vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model),
         onTextProtocol = {

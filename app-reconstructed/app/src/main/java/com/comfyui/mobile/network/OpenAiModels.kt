@@ -18,12 +18,31 @@ data class ChatCompletionRequest(
     val tool_choice: String? = null,
     val parallel_tool_calls: Boolean? = null,
     val max_completion_tokens: Int? = null,
-    val max_tokens: Int? = null
+    val max_tokens: Int? = null,
+    /** Asks OpenAI-compatible servers to append a final usage chunk to the stream. */
+    val stream_options: ChatStreamOptions? = null
     )
+
+data class ChatStreamOptions(val include_usage: Boolean = true)
+
+/** Token accounting; cache fields differ per provider (OpenAI details vs DeepSeek hit/miss). */
+data class ChatUsageDto(
+    val prompt_tokens: Int? = null,
+    val completion_tokens: Int? = null,
+    val total_tokens: Int? = null,
+    val prompt_tokens_details: ChatPromptTokensDetails? = null,
+    val prompt_cache_hit_tokens: Int? = null,
+    val prompt_cache_miss_tokens: Int? = null
+) {
+    val cachedTokens: Int? get() = prompt_tokens_details?.cached_tokens ?: prompt_cache_hit_tokens
+}
+
+data class ChatPromptTokensDetails(val cached_tokens: Int? = null)
 
 data class ChatCompletionResponse(
     val choices: List<ChatChoiceDto>? = null,
-    val error: ChatErrorDto? = null
+    val error: ChatErrorDto? = null,
+    val usage: ChatUsageDto? = null
     )
 
 data class ChatChoiceDto(
@@ -33,7 +52,8 @@ data class ChatChoiceDto(
 
 data class ChatStreamChunk(
     val choices: List<ChatStreamChoice>? = null,
-    val error: ChatErrorDto? = null
+    val error: ChatErrorDto? = null,
+    val usage: ChatUsageDto? = null
     )
 
 data class ChatStreamChoice(

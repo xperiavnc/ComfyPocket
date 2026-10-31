@@ -2772,6 +2772,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         WorkflowGraph.generatePromptSummary(nodes)
     // ===== Agent / LLM State & Delegations =====
     internal val llmClient = LlmClient(gson)
+    /** Last Agent model call: context use, speed, model id (shown above the composer). */
+    internal val _agentLlmStats = MutableStateFlow<com.comfyui.mobile.agent.AgentLlmStats?>(null)
+    val agentLlmStats: StateFlow<com.comfyui.mobile.agent.AgentLlmStats?> = _agentLlmStats.asStateFlow()
     internal val agentSession = com.comfyui.mobile.agent.AgentSessionController(llmClient::cancelRequest)
     internal val agentWorkflowLoadVersion = java.util.concurrent.atomic.AtomicLong()
     internal val agentRuntime by lazy { MainViewModelAgentRuntime(this) }

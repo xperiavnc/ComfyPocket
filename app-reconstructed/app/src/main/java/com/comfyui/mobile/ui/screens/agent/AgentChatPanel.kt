@@ -52,6 +52,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
 import com.comfyui.mobile.model.AgentChatMessage
@@ -90,6 +93,7 @@ fun AgentChatPanel(
     framed: Boolean = true,
     toolbar: (@Composable () -> Unit)? = null,
     onAnswerQuestions: ((String, List<com.comfyui.mobile.model.AgentQuestionAnswer>) -> Boolean)? = null,
+    llmStats: com.comfyui.mobile.agent.AgentLlmStats? = null,
     onSendMessage: (String) -> Unit
     ) {
     val haptics = rememberAppHaptics()
@@ -151,6 +155,7 @@ fun AgentChatPanel(
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
+            if (llmStats != null) AgentLlmStatsLine(llmStats, Modifier.padding(horizontal = PocketTokens.Space.S, vertical = 2.dp))
             val canSend = inputEnabled && !busy && (input.text.isNotBlank() || attachments.isNotEmpty())
             // One composer surface: attachments + field on top, a single control row underneath.
             // Replaces the old separate toolbar row + input row so the bottom reads as one block.
@@ -338,5 +343,33 @@ fun AgentAttachmentStrip(
                 }
             }
         }
+    }
+}
+
+/** Model id + context use + speed of the last call; ≈ marks client-side estimates. */
+@Composable
+internal fun AgentLlmStatsLine(stats: com.comfyui.mobile.agent.AgentLlmStats, modifier: Modifier = Modifier) {
+    val scheme = MiuixTheme.colorScheme
+    val summary = stats.summary()
+    Row(
+        modifier = modifier.fillMaxWidth().testTag("agent-llm-stats")
+            .semantics(mergeDescendants = true) { contentDescription = "模型 ${stats.model}，$summary" },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            stats.model,
+            modifier = Modifier.weight(1f, fill = false),
+            style = MiuixTheme.textStyles.footnote2,
+            color = scheme.onSurfaceVariantSummary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            "  ·  $summary",
+            style = MiuixTheme.textStyles.footnote2,
+            color = scheme.onSurfaceVariantSummary,
+            maxLines = 1,
+            softWrap = false
+        )
     }
 }

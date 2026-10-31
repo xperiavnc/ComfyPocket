@@ -35,7 +35,12 @@ data class LlmCompletionOutput(
     val reasoning: String? = null,
     val requestId: String = "",
     val toolCalls: List<com.comfyui.mobile.network.ChatToolCall> = emptyList(),
-    val finishReason: String? = null
+    val finishReason: String? = null,
+    /** Server-reported usage, when the provider sends it. */
+    val usage: com.comfyui.mobile.network.ChatUsageDto? = null,
+    /** Milliseconds from request start to the first streamed token (null for non-stream calls). */
+    val firstTokenMillis: Long? = null,
+    val totalMillis: Long? = null
 )
 
 class LlmClient(
@@ -225,6 +230,7 @@ class LlmClient(
                 max_tokens = generationLimits.outputTokens.takeIf {
                     generationLimits.outputParameter == OutputTokenParameter.LEGACY }
             ), images, messageImages)
+            val started = System.nanoTime()
             val output = executeCall(requestId, request(endpoint, apiKey, body, false)) { response ->
                 connecting = false
                 checkHttp(response, endpoint)
@@ -249,7 +255,8 @@ class LlmClient(
                 if (content.isBlank() && reasoning.isBlank() && calls.isEmpty()) {
                     throw LlmException(LlmErrorType.EMPTY_RESPONSE, "大模型返回了空响应。", endpoint = endpoint)
                 }
-                LlmCompletionOutput(content, reasoning.ifBlank { null }, requestId, calls, choice?.finish_reason)
+                LlmCompletionOutput(content, reasoning.ifBlank { null }, requestId, calls, choice?.finish_reason,
+                    usage = parsed?.usage, totalMillis = (System.nanoTime() - started) / 1_000_000)
             }
             Result.success(output)
         } catch (e: CancellationException) {
@@ -284,12 +291,14 @@ class LlmClient(
                 model, messages, temperature = if (reasoningEffort == AgentReasoningEffort.DEFAULT) 0.7 else null,
                 stream = true, reasoning_effort = reasoningEffort.wireValue,
                 tools = tools, tool_choice = toolChoice,
+                stream_options = com.comfyui.mobile.network.ChatStreamOptions(),
                 parallel_tool_calls = if (tools.isNullOrEmpty()) null else false,
                 max_completion_tokens = generationLimits.outputTokens.takeIf {
                     generationLimits.outputParameter == OutputTokenParameter.COMPLETION },
                 max_tokens = generationLimits.outputTokens.takeIf {
                     generationLimits.outputParameter == OutputTokenParameter.LEGACY }
             ), images, messageImages)
+            val started = System.nanoTime()
             val output = executeCall(requestId, request(endpoint, apiKey, body, true)) { response ->
                 connecting = false
                 checkHttp(response, endpoint)
@@ -300,7 +309,9 @@ class LlmClient(
                 val toolCalls = LlmToolCallAccumulator()
                 var finished = false
                 var finishReason: String? = null
-                while (!source.exhausted()) {
+                var usage: com.comfyui.mobile.network.ChatUsageDto? = null
+                var firstToken: Long? = null
+                streamLoop@ while (!source.exhausted()) {
                     currentCoroutineContext().ensureActive()
                     val line = source.readUtf8Line()?.trim() ?: break
                     if (!line.startsWith("data:")) continue
@@ -315,6 +326,7 @@ class LlmClient(
                     if (chunk.error != null) {
                         throw LlmException(LlmErrorType.SERVER_ERROR, "模型在流式输出中返回错误。", endpoint = endpoint)
                     }
+                    chunk.usage?.let { usage = it }
                     val choice = chunk.choices?.firstOrNull()
                     val finish = choice?.finish_reason
                     val r = choice?.delta?.reasoning_content.orEmpty()
@@ -323,6 +335,9 @@ class LlmClient(
                     catch (_: Exception) { throw incomplete(endpoint) }
                     reasoning.append(r)
                     content.append(c)
+                    if (r.isNotEmpty() || c.isNotEmpty() || !choice?.delta?.tool_calls.isNullOrEmpty()) {
+                        if (firstToken == null) firstToken = System.nanoTime()
+                    }
                     if (r.isNotEmpty() || c.isNotEmpty()) {
                         onProgress(r, c, reasoning.toString(), content.toString())
                     }
@@ -330,7 +345,8 @@ class LlmClient(
                         if (finish != "stop" && finish != "tool_calls") throw incomplete(endpoint)
                         finishReason = finish
                         finished = true
-                        break
+                        if (usage == null) usage = readTrailingUsage(source)
+                        break@streamLoop
                     }
                 }
                 val calls = try { toolCalls.completed() } catch (_: Exception) { throw incomplete(endpoint) }
@@ -344,7 +360,10 @@ class LlmClient(
                 }
                 if (!finished) throw incomplete(endpoint)
                 // A reasoning-only result is not a final answer and never becomes a prompt/action.
-                LlmCompletionOutput(finalContent, finalReasoning.ifBlank { null }, requestId, calls, finishReason)
+                val now = System.nanoTime()
+                LlmCompletionOutput(finalContent, finalReasoning.ifBlank { null }, requestId, calls, finishReason,
+                    usage = usage, firstTokenMillis = firstToken?.let { (it - started) / 1_000_000 },
+                    totalMillis = (now - started) / 1_000_000)
             }
             Result.success(output)
         } catch (e: CancellationException) {
@@ -352,6 +371,34 @@ class LlmClient(
         } catch (e: Exception) {
             currentCoroutineContext().ensureActive()
             Result.failure(mapFailure(e, endpoint, connecting))
+        }
+    }
+
+    /**
+     * With include_usage the usage arrives in a separate chunk after finish_reason. Read briefly
+     * for it; a server that never sends [DONE] must not hold the turn open, and the answer is
+     * already complete, so any read problem here only costs the statistics.
+     */
+    private fun readTrailingUsage(source: okio.BufferedSource): com.comfyui.mobile.network.ChatUsageDto? {
+        val timeout = source.timeout()
+        val previous = timeout.timeoutNanos()
+        timeout.timeout(1500, TimeUnit.MILLISECONDS)
+        return try {
+            var lines = 0
+            while (lines++ < 8 && !source.exhausted()) {
+                val line = source.readUtf8Line()?.trim() ?: break
+                if (!line.startsWith("data:")) continue
+                val data = line.removePrefix("data:").trim()
+                if (data == "[DONE]") break
+                if (data.isEmpty()) continue
+                val usage = runCatching { gson.fromJson(data, ChatStreamChunk::class.java)?.usage }.getOrNull()
+                if (usage != null) return usage
+            }
+            null
+        } catch (_: java.io.IOException) {
+            null
+        } finally {
+            timeout.timeout(previous, TimeUnit.NANOSECONDS)
         }
     }
 
