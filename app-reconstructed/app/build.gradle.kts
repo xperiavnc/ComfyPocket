@@ -16,8 +16,8 @@ android {
         minSdk = 33
         targetSdk = 36
         // Installed 0.0.56-agent-drawer used versionCode 58; continue above it so updates install.
-        versionCode = 74
-        versionName = "0.0.72-ui-next"
+        versionCode = 75
+        versionName = "0.0.73-ui-next"
     }
 
     buildFeatures {

@@ -111,7 +111,9 @@ class AgentInteractionLoop(
                 val call = output.toolCalls.singleOrNull()
                 val obj = AgentInteractionProtocol.objectValue(call?.function?.arguments ?: output.content)
                     ?: error("请返回明确的 ask_user_question 或 continue_task 动作，而不是普通文字或推理")
-                val action = call?.function?.name ?: AgentInteractionProtocol.string(obj, "action")
+                val action = call?.function?.name ?: AgentInteractionProtocol.string(obj, "action").ifBlank {
+                    if (obj.has("questions")) AgentInteractionProtocol.ASK else AgentInteractionProtocol.CONTINUE
+                }
                 if (action in listOf(AgentInteractionProtocol.ASK, "ask_user")) {
                     val question = AgentInteractionProtocol.question(obj, call).copy(thinking = output.reasoning.orEmpty())
                     if (call == null && !textProtocol) { textProtocol = true; onTextProtocol() }
@@ -124,8 +126,12 @@ class AgentInteractionLoop(
                 break
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
-                if (attempt == 1) throw AgentExecutionException(
-                    "模型没有返回可执行的交互动作，本轮未修改工作流。已尝试一次结构化格式兼容重试。")
+                if (attempt == 1) {
+                    // The decision step is only a gate. If the model still can't produce an action,
+                    // go on to the result step (which can still ask) rather than failing the turn.
+                    onProgress(AgentProgress("", "", "决策格式未通过，直接编写结果…"))
+                    break
+                }
                 if (output.toolCalls.isEmpty()) {
                     // A compatible endpoint/model may accept tools but ignore required tool_choice.
                     // Retry once with a model-selected JSON action; never mine prose/reasoning for questions
@@ -142,8 +148,12 @@ class AgentInteractionLoop(
                 }
             }
         }
-        val decisionOutput = checkNotNull(ready)
-        if (decisionOutput.toolCalls.isNotEmpty()) {
+        val decisionOutput = ready ?: LlmCompletionOutput("")
+        if (ready == null) {
+            plan = AgentTaskPlan(FALLBACK_SUMMARY)
+            transcript += ChatMessageDto("user", "【执行说明】按用户本轮原任务直接完成；" +
+                "若存在会实质改变结果的冲突，调用 ask_user_question 或返回 ask_user 动作，不要猜。")
+        } else if (decisionOutput.toolCalls.isNotEmpty()) {
             transcript += assistant(decisionOutput)
             transcript += ChatMessageDto("tool", gson.toJson(mapOf(
                 "status" to "ready", "next" to "compose_result", "plan" to plan,
@@ -185,6 +195,7 @@ class AgentInteractionLoop(
         listOfNotNull(first.reasoning?.takeIf(String::isNotBlank), last.reasoning?.takeIf(String::isNotBlank)).joinToString("\n\n")
 
     companion object {
+        const val FALLBACK_SUMMARY = "按用户本轮原任务执行（决策动作未通过格式校验，已跳过）"
         fun explicitlyRejectsTools(error: LlmException): Boolean {
             if (error.httpCode !in listOf(400, 422, 501)) return false
             val detail = error.technicalDetail.orEmpty().lowercase()

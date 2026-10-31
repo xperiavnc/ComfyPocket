@@ -120,8 +120,7 @@ object AgentInteractionProtocol {
     }
 
     fun plan(arguments: JsonObject): AgentTaskPlan {
-        val summary = string(arguments, "summary")
-        require(summary.isNotBlank() && summary.length <= 2000) { "缺少简短执行结论" }
+        val summary = string(arguments, "summary").ifBlank { "按用户本轮任务继续" }.take(2000)
         val outfits = arguments["outfit_selections"]?.takeIf { it.isJsonArray }?.asJsonArray
             ?.take(20)?.mapNotNull { value ->
                 if (!value.isJsonObject) return@mapNotNull null

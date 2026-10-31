@@ -117,18 +117,20 @@ class AgentRuntimeIntegrationTest {
             .contains("结构化动作兼容重试"))
     }
 
-    @Test fun invalidActionsAfterTheBoundedFallbackShowOneErrorPanelNotDuplicateReplyText() {
+    @Test fun invalidActionsAfterTheBoundedRetryFallThroughToTheResultStep() {
         automaticDecisions = false
         responses += success("我先想一想。")
         responses += success("这是一段普通回复，不含动作对象。")
+        responses += success("""{"action":"ask_user","reply":"需要你确认。","questions":[{"id":"q","question":"选哪个？","options":[{"id":"a","label":"甲"},{"id":"b","label":"乙"}],"multi_select":false}]}""")
         vm.sendAgentMessage("这里存在冲突，请处理")
         awaitDone()
 
-        val failed = vm.agentMessages.value.last()
-        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        // Two decision attempts, then the result step still runs (and may still ask) instead of failing.
         assertEquals(2, decisionBodies.size)
-        assertTrue(failed.content.isBlank())
-        assertTrue(failed.errorMessage!!.contains("已尝试一次结构化格式兼容重试"))
+        assertEquals(1, llmBodies.size)
+        assertTrue(llmBodies.single().contains("按用户本轮原任务直接完成"))
+        assertEquals(AgentPhase.WAITING_USER, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("q", vm.agentMessages.value.last().clarification!!.questions!!.single().id)
         assertTrue(promptBodies.isEmpty())
         assertTrue(uploadBodies.isEmpty())
     }

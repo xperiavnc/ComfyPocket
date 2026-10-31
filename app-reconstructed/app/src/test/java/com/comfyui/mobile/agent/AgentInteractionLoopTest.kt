@@ -117,12 +117,18 @@ class AgentInteractionLoopTest {
         assertTrue(feedback.content!!.contains("invalid_action"))
     }
 
-    @Test fun repeatedInvalidActionsAreBoundedAndNeverFallThroughToCompose() = runBlocking {
-        val fixture = Fixture(tool("bad_action", "{}"), tool("bad_action", "{}"))
-        val error = runCatching { AgentInteractionLoop(fixture).run(messages, "decision") }.exceptionOrNull()
-        assertTrue(error is AgentExecutionException)
-        assertEquals(2, fixture.requests.size)
-        assertTrue(fixture.requests.all { it.deciding })
+    @Test fun repeatedInvalidActionsAreBoundedThenFallThroughToCompose() = runBlocking {
+        val fixture = Fixture(tool("bad_action", "{}"), tool("bad_action", "{}"), LlmCompletionOutput("正式答复"))
+        val result = AgentInteractionLoop(fixture).run(messages, "decision")
+        assertEquals("正式答复", result.output!!.content)
+        assertEquals(3, fixture.requests.size)
+        assertTrue(fixture.requests.take(2).all { it.deciding })
+        val compose = fixture.requests.last()
+        assertFalse(compose.deciding)
+        // Compose still offers the question tool and never replays the failed decision text.
+        assertEquals(listOf(AgentInteractionProtocol.ASK), compose.tools!!.map { it.function.name })
+        assertTrue(compose.messages.last().content!!.contains("按用户本轮原任务直接完成"))
+        assertEquals(AgentInteractionLoop.FALLBACK_SUMMARY, result.plan!!.summary)
     }
 
     @Test fun duplicateQuestionIdsAreRepairedRatherThanRenamedBehindTheModel() = runBlocking {
@@ -144,20 +150,26 @@ class AgentInteractionLoopTest {
     }
 
     @Test fun plainWaitingWordsNeverCreateAQuestionAndDoNotSkipTheDecisionGate() = runBlocking {
-        val fixture = Fixture(LlmCompletionOutput("请先确认服装，再等你回答。"), LlmCompletionOutput("我再想想。"))
-        assertTrue(runCatching { AgentInteractionLoop(fixture).run(messages, "decision") }.exceptionOrNull() is AgentExecutionException)
-        assertEquals(2, fixture.requests.size)
-        assertTrue(fixture.requests.all { it.deciding })
+        val fixture = Fixture(LlmCompletionOutput("请先确认服装，再等你回答。"), LlmCompletionOutput("我再想想。"),
+            LlmCompletionOutput("正式答复"))
+        val result = AgentInteractionLoop(fixture).run(messages, "decision")
+        // Waiting words are never turned into a question; both gate attempts run before composing.
+        assertNull(result.question)
+        assertEquals(3, fixture.requests.size)
+        assertTrue(fixture.requests.take(2).all { it.deciding })
+        assertFalse(fixture.requests.last().messages.any { it.content.orEmpty().contains("请先确认服装") })
     }
 
     @Test fun reasoningOnlyDoesNotBecomeContentAndGetsOneCleanStructuredRetry() = runBlocking {
         val fixture = Fixture(
             LlmCompletionOutput("", reasoning = "still thinking"),
-            LlmCompletionOutput("", reasoning = "still thinking")
+            LlmCompletionOutput("", reasoning = "still thinking"),
+            LlmCompletionOutput("正式答复")
         )
-        assertTrue(runCatching { AgentInteractionLoop(fixture).run(messages, "decision") }.exceptionOrNull() is AgentExecutionException)
-        assertEquals(2, fixture.requests.size)
-        assertNull(fixture.requests.last().messages.lastOrNull { it.role == "assistant" })
+        AgentInteractionLoop(fixture).run(messages, "decision")
+        assertEquals(3, fixture.requests.size)
+        assertNull(fixture.requests[1].messages.lastOrNull { it.role == "assistant" })
+        assertNull(fixture.requests[2].messages.lastOrNull { it.role == "assistant" })
     }
 
     @Test fun explicitUnsupportedToolsUsesJsonDecisionAndCachesOnlyThatEvidence() = runBlocking {
