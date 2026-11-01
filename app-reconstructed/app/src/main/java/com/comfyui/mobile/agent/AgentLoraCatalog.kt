@@ -74,6 +74,8 @@ object AgentLoraCatalog {
     const val MAX_FULL_DESCRIPTION = 2000
     const val MAX_AGENT_NOTES = 800
     const val MAX_TAGS = 24
+    /** Longest notes the Bridge accepts (validate_annotation in ComfyUI-Mobile-Bridge/model_index.py). */
+    const val MAX_NOTES = 8000
     /** Heading of the Agent's block at the end of the user's notes; everything after it belongs to the Agent. */
     const val AGENT_MARK = "【Agent 笔记】"
 
@@ -161,11 +163,20 @@ object AgentLoraCatalog {
         if (agentText != null) {
             val (user, previous) = splitNotes(current.notes)
             val agent = agentText.trim()
-            if (agent != previous) {
-                next = next.copy(notes = joinNotes(user, agent))
+            val joined = joinNotes(user, agent)
+            if (agent != previous && joined.length > MAX_NOTES) {
+                skipped += "Agent 笔记（和用户备注合计会超过 $MAX_NOTES 字，请写短一些）"
+            } else if (agent != previous) {
+                next = next.copy(notes = joined)
                 applied += if (agent.isEmpty()) "清除了 Agent 笔记" else "Agent 笔记"
             }
         }
+        // A classification the user confirmed in the Model Center stays as it is; only the Agent's notes change.
+        if (current.classificationStatus == "confirmed") {
+            if (note.copy(notes = null) != AgentLoraNote()) skipped += "其他标注（用户已确认分类，未改动）"
+            return AgentLoraMerge(next, applied, skipped)
+        }
+        val notesOnly = next
         val known = current.tags.map { it.lowercase(Locale.ROOT) }.toMutableSet()
         val newTags = note.tags.map(String::trim).filter { it.isNotEmpty() && known.add(it.lowercase(Locale.ROOT)) }
         if (newTags.isNotEmpty()) {
@@ -226,6 +237,8 @@ object AgentLoraCatalog {
                 skipped += "推荐强度（已有 $existingStrength，未覆盖）"
             }
         }
+        // Fields beyond the notes stay a suggestion ("AI 建议待确认") until the user saves them in the Model Center.
+        if (next != notesOnly) next = next.copy(classificationSource = "ai-suggestion", classificationStatus = "suggested")
         return AgentLoraMerge(next, applied, skipped)
     }
 

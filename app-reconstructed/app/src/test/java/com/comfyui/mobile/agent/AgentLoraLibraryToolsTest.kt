@@ -83,9 +83,25 @@ class AgentLoraLibraryToolsTest {
         assertEquals(emptyList<String>(), next.trainedWords)
         assertEquals(0.7, next.preferredStrength!!, 0.0)
         assertEquals(listOf("character"), next.fieldLocks)
+        // Fields beyond the notes show up in the Model Center as "AI 建议待确认".
+        assertEquals("ai-suggestion", next.classificationSource)
+        assertEquals("suggested", next.classificationStatus)
         // Locked character, user outfit, source base model and source trigger words are all left alone.
         assertEquals(4, merge.skipped.size)
         assertEquals("用户备注", AgentLoraCatalog.merge(next, AgentLoraNote(notes = "")).annotation.notes)
+    }
+
+    @Test fun confirmedClassificationOnlyLetsTheAgentChangeItsOwnNotes() {
+        val current = ModelAnnotation(notes = "用户备注", useCases = listOf("style"), classificationStatus = "confirmed")
+        val merge = AgentLoraCatalog.merge(current, AgentLoraNote(notes = "画风", tags = listOf("pastel"), character = "Miku"))
+        assertEquals(current.copy(notes = "用户备注\n\n${AgentLoraCatalog.AGENT_MARK}\n画风"), merge.annotation)
+        assertEquals(listOf("Agent 笔记"), merge.applied)
+        assertEquals(listOf("其他标注（用户已确认分类，未改动）"), merge.skipped)
+        val notesOnly = AgentLoraCatalog.merge(ModelAnnotation(), AgentLoraNote(notes = "画风")).annotation
+        assertEquals("user" to "unclassified", notesOnly.classificationSource to notesOnly.classificationStatus)
+        val full = AgentLoraCatalog.merge(ModelAnnotation(notes = "长".repeat(7990)), AgentLoraNote(notes = "超出上限的笔记"))
+        assertTrue(full.applied.isEmpty())
+        assertTrue(full.skipped.single().contains("${AgentLoraCatalog.MAX_NOTES}"))
     }
 
     @Test fun browsingToolsWorkWithoutAWorkflowSlotAndRefreshOncePerTurn() = runBlocking {
