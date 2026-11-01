@@ -2,8 +2,6 @@ package com.comfyui.mobile.ui.screens.gallery
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -16,6 +14,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.createSavedStateHandle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -25,7 +24,7 @@ import androidx.navigation.NavController
 import com.comfyui.mobile.danbooru.DanbooruRuntime
 import com.comfyui.mobile.danbooru.DanbooruViewModel
 import com.comfyui.mobile.ui.GalleryUi
-import com.comfyui.mobile.ui.screens.CategoryChip
+import com.comfyui.mobile.ui.designsystem.PocketSegmented
 import com.comfyui.mobile.ui.screens.GalleryScreen
 import com.comfyui.mobile.ui.screens.danbooru.DanbooruScreen
 
@@ -80,7 +79,8 @@ fun GalleryHomeScreen(navController: NavController, legacy: GalleryUi) {
 
 @Composable
 fun GallerySourcePicker(selected: GalleryHomeSource, onSelect: (GalleryHomeSource) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        GalleryHomeSource.entries.forEach { source -> CategoryChip(source.title, selected == source) { onSelect(source) } }
-    }
+    // Same segmented track as the Danbooru sort row, so the page's pickers read as one family.
+    val sources = GalleryHomeSource.entries
+    PocketSegmented(sources.map { it.title }, sources.indexOf(selected), { onSelect(sources[it]) },
+        Modifier.fillMaxWidth().padding(bottom = 10.dp).testTag("gallery-source-picker"))
 }

@@ -164,11 +164,13 @@ class DanbooruFullscreenUiTest {
         withDetail(DanbooruPost(505, emptyMap()), fontScale) { _, vm ->
             compose.runOnIdle { vm.back() }
             compose.waitForIdle()
+            // Rating narrows the search, so it sits on the search line; the sort track keeps the full width.
             val row = compose.onNodeWithTag("danbooru-browse-filters").fetchSemanticsNode().boundsInRoot
             val rating = compose.onNodeWithTag("danbooru-rating-filter").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-            val first = compose.onNodeWithText("最新").fetchSemanticsNode().boundsInRoot
-            assertEquals("Rating must stay on the first sort line", first.center.y, rating.center.y, 2f)
-            assertTrue(rating.right <= row.right && rating.left >= row.left)
+            val search = compose.onNodeWithText("搜索标签", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+            assertTrue("Rating must share the search line", rating.top < search.bottom && rating.bottom > search.top)
+            assertTrue("Sort track sits below search and rating", row.top >= rating.bottom)
+            assertTrue(rating.right <= row.right + 1f)
             for (text in listOf("最新", "热度", "排行榜", "评分", "收藏")) compose.onNodeWithText(text).assertIsDisplayed()
             compose.onAllNodesWithTag("danbooru-rating-filter").assertCountEquals(1)
             compose.onNodeWithTag("danbooru-rating-filter").performTouchInput { click() }
