@@ -59,6 +59,7 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
         vm.back()
     }
     val grid = rememberLazyStaggeredGridState(vm.scrollIndex, vm.scrollOffset)
+    val header = rememberDanbooruHeaderState()
     LaunchedEffect(grid) {
         snapshotFlow { grid.firstVisibleItemIndex to grid.firstVisibleItemScrollOffset }.collect {
             vm.scrollIndex = it.first; vm.scrollOffset = it.second
@@ -69,11 +70,19 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
         if (state.revision != observedRevision) {
             observedRevision = state.revision
             grid.scrollToItem(0)
+            header.expand()
         }
     }
     var input by rememberSaveable(state.query.text) { mutableStateOf(state.query.text) }
     val keyboard = LocalSoftwareKeyboardController.current
     val clearance = LocalFloatingNavClearance.current
+    // Without a grid there is nothing to drag the controls back with, so never leave them hidden.
+    val noPosts = state.posts.isEmpty()
+    LaunchedEffect(noPosts) { if (noPosts) header.expand() }
+    // Browsing hides the header; a half-typed query should not keep the keyboard over the images.
+    LaunchedEffect(header) {
+        snapshotFlow { header.offset > 0f }.distinctUntilChanged().collect { if (it) keyboard?.hide() }
+    }
     val scope = runtime.settings.namespace()
     val page = DanbooruPageSnapshot(vm.hasDetail, state)
     val rtl = LocalLayoutDirection.current == LayoutDirection.Rtl
@@ -117,12 +126,17 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
               if (snapshot.detail) {
                 DanbooruDetailScreen(snapshot.state, runtime, vm, Modifier.weight(1f), bottomClearance = clearance)
               } else {
-                sourcePicker()
-                DanbooruBrowseControls(input, { input = it }, snapshot.state.query,
-                    onSearch = { keyboard?.hide(); vm.search(input) },
-                    onSort = { keyboard?.hide(); vm.sort(input, it) },
-                    onFilter = { vm.filter(input, it) },
-                    onPeriod = { vm.rankingPeriod(input, it) }, onDate = vm::rankingDate)
+              Column(Modifier.fillMaxSize()) {
+                DanbooruCollapsingHeader(header) {
+                  Column {
+                    sourcePicker()
+                    DanbooruBrowseControls(input, { input = it }, snapshot.state.query,
+                        onSearch = { keyboard?.hide(); vm.search(input) },
+                        onSort = { keyboard?.hide(); vm.sort(input, it) },
+                        onFilter = { vm.filter(input, it) },
+                        onPeriod = { vm.rankingPeriod(input, it) }, onDate = vm::rankingDate)
+                  }
+                }
                 if (snapshot.state.loading && snapshot.state.posts.isEmpty()) {
                     Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 } else if (snapshot.state.error != null && snapshot.state.posts.isEmpty()) {
@@ -132,8 +146,9 @@ fun DanbooruScreen(vm: DanbooruViewModel, runtime: DanbooruRuntime, sourcePicker
                 } else {
                     snapshot.state.error?.let { Feedback("$it；当前图片已保留", "重新刷新", vm::refresh) }
                     DanbooruGalleryGrid(snapshot.state, grid, runtime.imageLoader, scope, clearance, Modifier.weight(1f),
-                        vm::open, vm::previous, vm::retry, { vm.loadNext() }, vm::refresh)
+                        vm::open, vm::previous, vm::retry, { vm.loadNext() }, vm::refresh, header.connection)
                 }
+              }
               }
             }
           }

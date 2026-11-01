@@ -2,6 +2,8 @@ package com.comfyui.mobile.ui.screens.danbooru
 
 import androidx.compose.foundation.background
 import com.comfyui.mobile.ui.designsystem.PocketTokens
+import com.comfyui.mobile.ui.designsystem.PocketSegmented
+import com.comfyui.mobile.ui.designsystem.PocketSegmentedHeight
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,38 +47,36 @@ internal fun DanbooruBrowseControls(
 ) {
     val scheme = MiuixTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        TextField(
-            input, onInput, label = "搜索标签 / Danbooru 语法", useLabelAsPlaceholder = true,
-            singleLine = true, textStyle = MiuixTheme.textStyles.body2,
-            insideMargin = DpSize(14.dp, 10.dp), cornerRadius = PocketTokens.Radius.Large,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { onSearch() }),
-            trailingIcon = {
-                IconButton(onClick = onSearch) {
-                    Icon(MiuixIcons.Search, contentDescription = "搜索", modifier = Modifier.size(20.dp), tint = scheme.primary)
-                }
-            },
-            modifier = Modifier.fillMaxWidth()
-        )
-        // Lightweight text tabs instead of five tall slabs and a clipped scrolling row.
-        // Wrap on small screens/large fonts; every choice remains visible and tappable.
-        Row(Modifier.fillMaxWidth().testTag("danbooru-browse-filters"),
-            horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.Top) {
-            FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                listOf(DanbooruSort.LATEST, DanbooruSort.HOT, DanbooruSort.RANKING, DanbooruSort.SCORE, DanbooruSort.FAVORITES).forEach {
-                    DanbooruBrowseChip(it.title, query.sort == it) { onSort(it) }
-                }
-                if (query.sort == DanbooruSort.CUSTOM) DanbooruBrowseChip("自定义", true) {}
-            }
-            // Rating always stays on the first sort line; only the sort group may wrap.
+        // Search and the rating filter share one line: rating narrows the search, it is not a sort.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            TextField(
+                input, onInput, label = "搜索标签", useLabelAsPlaceholder = true,
+                // Same fill as the sort track and rating pill (the default is white in the light theme).
+                colors = TextFieldDefaults.textFieldColors(backgroundColor = scheme.surfaceContainerHigh),
+                singleLine = true, textStyle = MiuixTheme.textStyles.body2,
+                insideMargin = DpSize(16.dp, 10.dp), cornerRadius = PocketSegmentedHeight / 2,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+                trailingIcon = {
+                    IconButton(onClick = onSearch, minHeight = 36.dp, minWidth = 36.dp) {
+                        Icon(MiuixIcons.Search, contentDescription = "搜索", modifier = Modifier.size(20.dp), tint = scheme.primary)
+                    }
+                },
+                modifier = Modifier.weight(1f).heightIn(min = PocketSegmentedHeight)
+            )
             DanbooruRatingFilter(query.filter, onFilter)
         }
+        val sorts = listOf(DanbooruSort.LATEST, DanbooruSort.HOT, DanbooruSort.RANKING, DanbooruSort.SCORE, DanbooruSort.FAVORITES) +
+            if (query.sort == DanbooruSort.CUSTOM) listOf(DanbooruSort.CUSTOM) else emptyList()
+        PocketSegmented(sorts.map { if (it == DanbooruSort.CUSTOM) "自定义" else it.title }, sorts.indexOf(query.sort),
+            { if (sorts[it] != DanbooruSort.CUSTOM) onSort(sorts[it]) },
+            Modifier.fillMaxWidth().testTag("danbooru-browse-filters"))
         if (query.sort == DanbooruSort.RANKING) {
-            FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                RankingPeriod.entries.forEach { value ->
-                    DanbooruBrowseChip(value.title, query.rankingPeriod == value) { onPeriod(value) }
-                }
-                Row {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                val periods = RankingPeriod.entries
+                PocketSegmented(periods.map { it.title }, periods.indexOf(query.rankingPeriod), { onPeriod(periods[it]) },
+                    Modifier.weight(1f))
                 IconButton(onClick = { onDate(query.rankingPeriod.shift(query.rankingDate, -1)) }) {
                     Icon(MiuixIcons.Back, contentDescription = "上一期", modifier = Modifier.size(16.dp))
                 }
@@ -88,9 +88,8 @@ internal fun DanbooruBrowseControls(
                     Icon(MiuixIcons.Back, contentDescription = "下一期", modifier = Modifier.size(16.dp).rotate(180f),
                         tint = scheme.onSurface.copy(alpha = if (canAdvance) 1f else 0.25f))
                 }
-                }
             }
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(query.rankingPeriod.label(query.rankingDate) + " · 站点日期",
                     style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceSecondary, modifier = Modifier.weight(1f))
                 if (query.rankingPeriod.start(query.rankingDate) != query.rankingPeriod.start(danbooruToday()))
@@ -130,25 +129,17 @@ private fun DanbooruBrowseChip(
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val background by animateColorAsState(
-        if (selected) scheme.primary.copy(alpha = if (pressed) 0.2f else 0.14f)
-        else if (pressed) scheme.primary.copy(alpha = 0.08f) else Color.Transparent,
-        label = "danbooru-filter-state")
-    // A single painted surface replaces the default outer indication plus inner selected slab.
+        if (pressed) scheme.primary.copy(alpha = 0.12f) else scheme.surfaceContainerHigh, label = "danbooru-filter-state")
+    // Same pill and fill as the search field and the sort track beside it.
     val touch = if (dropdown) Modifier.clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick)
         else Modifier.selectable(selected = selected, interactionSource = interaction, indication = null, role = Role.Tab, onClick = onClick)
-    Box(modifier.heightIn(min = 48.dp).widthIn(min = 48.dp).clip(PocketTokens.Shape.Medium).then(touch),
-        contentAlignment = Alignment.Center) {
-        Row(Modifier.clip(PocketTokens.Shape.Medium)
-            .background(background)
-            .then(if (dropdown) Modifier.border(1.dp, scheme.onSurfaceSecondary.copy(alpha = 0.22f), PocketTokens.Shape.Medium) else Modifier)
-            .padding(horizontal = if (dropdown) 8.dp else 4.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(text, style = MiuixTheme.textStyles.footnote2.copy(fontSize = 14.sp),
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (selected) scheme.primary else scheme.onSurfaceSecondary, maxLines = 1)
-            if (dropdown) Icon(Icons.Default.ArrowDropDown, contentDescription = null,
-                modifier = Modifier.size(16.dp), tint = scheme.onSurfaceSecondary)
-        }
+    Row(modifier.heightIn(min = PocketSegmentedHeight).widthIn(min = 48.dp).clip(PocketTokens.Shape.Pill)
+            .background(background).then(touch).padding(start = 14.dp, end = 10.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(text, style = MiuixTheme.textStyles.footnote1, fontWeight = FontWeight.Medium,
+            color = if (selected) scheme.primary else scheme.onSurface, maxLines = 1)
+        if (dropdown) Icon(Icons.Default.ArrowDropDown, contentDescription = null,
+            modifier = Modifier.size(18.dp), tint = scheme.onSurfaceSecondary)
     }
 }
 

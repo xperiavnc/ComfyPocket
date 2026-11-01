@@ -12,6 +12,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -26,7 +28,8 @@ internal fun DanbooruGalleryGrid(
     state: DanbooruState, grid: LazyStaggeredGridState, imageLoader: ImageLoader, namespace: String,
     bottomPadding: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier,
     onOpen: (DanbooruPost) -> Unit, onPrevious: () -> Unit, onRetry: () -> Unit,
-    onLoadMore: () -> Unit, onRefresh: () -> Unit
+    onLoadMore: () -> Unit, onRefresh: () -> Unit,
+    headerScroll: NestedScrollConnection? = null
 ) {
     PullToRefresh(
         isRefreshing = state.refreshing, onRefresh = onRefresh, modifier = modifier,
@@ -36,7 +39,9 @@ internal fun DanbooruGalleryGrid(
     ) {
         LazyVerticalStaggeredGrid(
             columns = StaggeredGridCells.Fixed(2), state = grid,
-            modifier = Modifier.fillMaxSize().testTag("danbooru-grid"),
+            // Inside pull-to-refresh, so a pulled indicator retracts before the header starts to hide.
+            modifier = Modifier.fillMaxSize().testTag("danbooru-grid")
+                .then(if (headerScroll != null) Modifier.nestedScroll(headerScroll) else Modifier),
             contentPadding = PaddingValues(top = 10.dp, bottom = bottomPadding + 16.dp),
             verticalItemSpacing = 8.dp, horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {

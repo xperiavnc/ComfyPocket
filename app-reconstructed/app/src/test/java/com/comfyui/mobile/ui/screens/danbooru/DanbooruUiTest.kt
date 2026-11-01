@@ -157,6 +157,25 @@ class DanbooruUiTest {
             compose.onNodeWithText("下拉刷新").assertIsNotDisplayed()
         } finally { controller.pause().stop().destroy() }
     }
+    @Test fun browsingHidesTheSearchHeaderAndTheFirstDownwardDragBringsItBack() {
+        val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
+        val vm = DanbooruViewModel(SavedStateHandle(), Service(post))
+        try {
+            controller.get().setContentView(ComposeView(controller.get()).apply { setContent { MiuixTheme {
+                DanbooruScreen(vm, DanbooruRuntime.get(controller.get())) { GallerySourcePicker(GalleryHomeSource.DANBOORU) {} }
+            } } })
+            compose.waitForIdle()
+            val expanded = compose.onNodeWithTag("danbooru-browse-header").fetchSemanticsNode().boundsInRoot.height
+            assertTrue(expanded > 0f)
+            compose.onNodeWithTag("danbooru-grid").performTouchInput { swipeUp(centerY + height * 0.3f, centerY - height * 0.3f, 300) }
+            compose.waitForIdle()
+            assertEquals(0f, compose.onNodeWithTag("danbooru-browse-header").fetchSemanticsNode().boundsInRoot.height, 1f)
+            compose.onNodeWithTag("danbooru-grid").performTouchInput { swipeDown(centerY - height * 0.1f, centerY + height * 0.2f, 300) }
+            compose.waitForIdle()
+            assertEquals(expanded, compose.onNodeWithTag("danbooru-browse-header").fetchSemanticsNode().boundsInRoot.height, 1f)
+            compose.onNodeWithText("热度").assertIsDisplayed()
+        } finally { controller.pause().stop().destroy() }
+    }
     @Test fun aRealPullGestureRefreshesOnceAndKeepsTheGrid() {
         val controller = Robolectric.buildActivity(ComponentActivity::class.java).setup().visible()
         val service = Service(post)
