@@ -49,7 +49,7 @@ class AgentDrawToolbox(
         tool(SET_PROMPT, "写入本轮正向提示词和可选的反向提示词。可以多次调用，以最后一次为准。",
             obj(mapOf(
                 "prompt" to text("完整正向提示词，按系统中的写法规则"),
-                "negative_prompt" to text("完整反向提示词；不传则保留工作流原值，传空字符串表示清空")
+                "negative_prompt" to text("完整反向提示词；不传则保留工作流原值，传空字符串表示清空。要去掉的标签只从 prompt 删除，不要放进反向，除非用户明确要避免")
             ), "prompt")),
         tool(LOOKUP_TAGS, "在本地词库中查绘画标签或角色名的标准写法与中文释义。拿不准标签拼写时使用。",
             obj(mapOf(
@@ -248,7 +248,7 @@ class AgentDrawToolbox(
         if (negative != null) {
             val conflicts = AgentNegativePromptPolicy.conflicts(positive, negative)
             if (conflicts.isNotEmpty()) return AgentToolResult(false,
-                error = "正反向包含相同标签：${conflicts.take(8).joinToString("、")}。从其中一边删掉后重新调用")
+                error = "正反向包含相同标签：${conflicts.take(8).joinToString("、")}。要去掉的标签只从正向删除，除非用户明确要避免，否则不要放进反向，然后重新调用")
         }
         prompt = positive
         negativePrompt = negative
