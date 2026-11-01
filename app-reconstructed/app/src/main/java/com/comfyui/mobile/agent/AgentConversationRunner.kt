@@ -20,7 +20,9 @@ data class AgentReply(
     val positiveAliases: List<AgentPromptAlias>? = null,
     val negativeAliases: List<AgentPromptAlias>? = null,
     /** Extra workflow fields staged by the tool agent (patch_workflow); applied with the prompt. */
-    val workflowChanges: List<AgentFieldChange>? = null
+    val workflowChanges: List<AgentFieldChange>? = null,
+    /** The tool agent asked to keep this turn's parameters as the workflow defaults. */
+    val saveDefaults: Boolean = false
 )
 
 enum class AgentAction { ASK_USER, RESPOND, APPLY_PROMPT, DRAW }
@@ -47,6 +49,8 @@ interface AgentWorkflowPort {
         patchPrompt(prompt, negativePrompt)
     }
     suspend fun promptApplied(prompt: String)
+    /** Remember the applied parameters as the workflow defaults (same as the settings 「保存」). */
+    suspend fun saveDefaults() {}
     suspend fun submit(): String
 }
 
@@ -71,6 +75,7 @@ class AgentDrawExecutor(private val workflow: AgentWorkflowPort) {
         workflow.patchPrompt(reply.prompt, reply.negativePrompt, reply.workflowChanges.orEmpty())
         checkCurrent()
         workflow.promptApplied(reply.prompt)
+        if (reply.saveDefaults) workflow.saveDefaults()
         if (!reply.shouldDraw) return null
         checkCurrent()
         phase(AgentPhase.SUBMITTING)

@@ -1,6 +1,7 @@
 package com.comfyui.mobile.agent
 
 import com.comfyui.mobile.model.CharacterLore
+import com.comfyui.mobile.model.CharacterOutfit
 import com.comfyui.mobile.network.ChatFunctionDefinition
 import com.comfyui.mobile.network.ChatToolDefinition
 import com.comfyui.mobile.taglib.LocalTagEntry
@@ -17,11 +18,20 @@ import java.util.Locale
 class AgentDrawToolbox(
     private val snapshot: AgentWorkflowSnapshot,
     private val titles: Map<String, String> = emptyMap(),
-    private val characters: List<CharacterLore> = emptyList(),
+    characters: List<CharacterLore> = emptyList(),
     private val searchTags: (suspend (query: String, kind: String) -> List<LocalTagEntry>)? = null,
     /** Local LoRA metadata (user annotations + provider info); empty when the model index is unavailable. */
-    private val loras: List<AgentLoraInfo> = emptyList()
+    private val loras: List<AgentLoraInfo> = emptyList(),
+    /** Address of the 画风 / 画师 text field shown in the style settings, when bound. */
+    private val styleField: String? = null,
+    private val favoriteArtists: List<String> = emptyList(),
+    /** Persists a character profile into the library; returns an error message or null. */
+    private val saveCharacter: (suspend (CharacterLore) -> String?)? = null
 ) : AgentToolbox {
+    private var characters: List<CharacterLore> = characters
+    /** Set by submit(save_defaults=true): keep this turn's parameters as the workflow defaults. */
+    var saveDefaults: Boolean = false
+        private set
     private val patchTool = PatchWorkflowTool()
     private val inspectTool = InspectWorkflowTool()
     private val staged = linkedMapOf<String, AgentFieldChange>()
@@ -62,13 +72,29 @@ class AgentDrawToolbox(
             obj(mapOf(
                 "reply" to text("给用户的简短回复，说明这次画了什么或改了什么"),
                 "draw" to mapOf("type" to "boolean", "description" to "是否立即出图，默认 true"),
+                "save_defaults" to mapOf("type" to "boolean", "description" to
+                    "把本轮画风与辅助参数（含 patch_workflow / set_lora 的修改）保存为这个工作流的默认值，新会话也沿用；用户说保存、记住、以后都这样、设为默认时传 true"),
                 "outfit_selections" to array(obj(mapOf(
                     "character_id" to text("已登记角色 ID"),
                     "outfit_id" to text("采用的服装 ID"),
                     "custom_outfit" to mapOf("type" to "boolean")
                 ), "character_id"), 20)
             ), "reply"))
-    ) + (if (loraSlots.isEmpty()) emptyList() else listOf(
+    ) + (if (saveCharacter == null) emptyList() else listOf(
+        tool(SAVE_CHARACTER, "把角色写入或更新到用户的角色触发词库（设置页可见）。同名或别名已存在时合并：外貌词和固定词按传入值替换，别名与服装按名称合并。",
+            obj(mapOf(
+                "name" to text("角色名称，对话中用来识别的名字"),
+                "appearance_tags" to text("外貌绘画标签，英文逗号分隔，如 \"1girl, fox ears, long hair, green eyes\""),
+                "must_keep_tags" to text("可选：每次都必须出现的固定词（通常是角色名标签），不传则沿用原值"),
+                "aliases" to array(text("别名"), 10),
+                "outfits" to array(obj(mapOf(
+                    "name" to text("服装名称"),
+                    "tags" to text("服装绘画标签"),
+                    "dialogue_triggers" to array(text("对话中会提到的服装说法"), 8)
+                ), "name", "tags"), 12),
+                "default_outfit" to text("可选：默认服装名称，须是 outfits 或已有服装之一")
+            ), "name", "appearance_tags"))
+    )) + (if (loraSlots.isEmpty()) emptyList() else listOf(
         tool(LIST_LORAS, "列出工作流里的 LoRA 槽位，并检索本地 LoRA：文件名、触发词、底模、用户标注（标签/用途/角色/服装/备注/推荐强度）和简介。选 LoRA 前先调用。",
             obj(mapOf("query" to text("检索词，可填角色名、画风、用途等，空格分隔多个词须同时命中；留空列出全部")))),
         tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效。",
@@ -88,6 +114,7 @@ class AgentDrawToolbox(
         SUBMIT -> "提交结果"
         LIST_LORAS -> "检索本地 LoRA"
         SET_LORA -> "配置 LoRA"
+        SAVE_CHARACTER -> "保存角色到词库"
         else -> name
     }
 
@@ -100,6 +127,7 @@ class AgentDrawToolbox(
         SUBMIT -> submit(arguments)
         LIST_LORAS -> if (loraSlots.isEmpty()) unknown(name) else listLoras(arguments)
         SET_LORA -> if (loraSlots.isEmpty()) unknown(name) else setLora(arguments)
+        SAVE_CHARACTER -> if (saveCharacter == null) unknown(name) else saveCharacterProfile(arguments)
         else -> unknown(name)
     }
 
@@ -126,9 +154,14 @@ class AgentDrawToolbox(
                     field.spec.min?.let { put("min", it) }
                     field.spec.max?.let { put("max", it) }
                     if (field.spec.address in staged) put("staged", true)
+                    if (field.spec.address == styleField) {
+                        put("role", "画风/画师")
+                        favoriteArtists.takeIf { it.isNotEmpty() }?.let { put("favorite_artists", it.take(MAX_OPTIONS)) }
+                    }
                 }
             },
-            "note" to if (fields.isEmpty()) "用户没有开放可修改的辅助参数；提示词用 set_prompt 写入" else "提示词字段不在此列，用 set_prompt 写入"
+            "note" to if (fields.isEmpty()) "用户没有开放可修改的辅助参数；提示词用 set_prompt 写入" else
+                "提示词字段不在此列，用 set_prompt 写入。用户要求保存或以后沿用时，submit_workflow 传 save_defaults=true"
         ))
     }
 
@@ -298,6 +331,7 @@ class AgentDrawToolbox(
         val positive = prompt ?: return AgentToolResult(false, error = "还没有提示词，先调用 set_prompt")
         val reply = AgentInteractionProtocol.string(arguments, "reply")
         val draw = arguments["draw"]?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean ?: true
+        saveDefaults = arguments["save_defaults"]?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == true
         val final = JsonObject().apply {
             addProperty("reply", reply)
             addProperty("prompt", positive)
@@ -307,7 +341,69 @@ class AgentDrawToolbox(
             arguments["outfit_selections"]?.takeIf { it.isJsonArray }?.let { add("outfit_selections", it) }
         }
         return AgentToolResult(true, mapOf("summary" to if (draw) "已提交出图" else "已写入提示词，未出图",
-            "staged_changes" to staged.size), finalContent = final.toString())
+            "staged_changes" to staged.size, "save_defaults" to saveDefaults), finalContent = final.toString())
+    }
+
+    private fun strings(element: JsonElement?): List<String> =
+        element?.takeIf { it.isJsonArray }?.asJsonArray?.mapNotNull { item ->
+            item.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }?.asString?.trim()?.takeIf(String::isNotBlank)
+        }.orEmpty()
+
+    private suspend fun saveCharacterProfile(arguments: JsonObject): AgentToolResult {
+        val save = saveCharacter ?: return unknown(SAVE_CHARACTER)
+        val merged = mergeCharacter(characters, arguments).getOrElse {
+            return AgentToolResult(false, error = it.message)
+        }
+        save(merged)?.let { return AgentToolResult(false, error = it) }
+        characters = characters.filterNot { it.id == merged.id } + merged
+        return AgentToolResult(true, mapOf(
+            "summary" to "已保存角色「${merged.name}」到词库",
+            "character_id" to merged.id,
+            "outfits" to merged.outfits.orEmpty().map { it.name },
+            "default_outfit" to merged.outfits.orEmpty().firstOrNull { it.id == merged.defaultOutfitId }?.name
+        ))
+    }
+
+    /** Merge model-supplied profile data into an existing record (matched by name or alias) or create one. */
+    internal fun mergeCharacter(existing: List<CharacterLore>, arguments: JsonObject): Result<CharacterLore> {
+        val name = AgentInteractionProtocol.string(arguments, "name").trim()
+        val appearance = AgentInteractionProtocol.string(arguments, "appearance_tags").trim()
+        if (name.isBlank()) return Result.failure(IllegalArgumentException("name 不能为空"))
+        if (appearance.isBlank()) return Result.failure(IllegalArgumentException("appearance_tags 不能为空"))
+        if (name.length > 40 || appearance.length > MAX_PROMPT)
+            return Result.failure(IllegalArgumentException("name 或 appearance_tags 过长"))
+        val key = name.lowercase(Locale.ROOT)
+        val old = existing.firstOrNull { it.name.lowercase(Locale.ROOT) == key }
+            ?: existing.firstOrNull { lore -> lore.aliases.orEmpty().any { it.lowercase(Locale.ROOT) == key } }
+        val fixed = arguments["must_keep_tags"]?.takeIf { it.isJsonPrimitive }?.asString?.trim()
+        val aliases = (old?.aliases.orEmpty() + strings(arguments["aliases"]))
+            .filterNot { it.equals(old?.name ?: name, ignoreCase = true) }
+            .distinctBy { it.lowercase(Locale.ROOT) }.take(20)
+        val outfits = old?.outfits.orEmpty().toMutableList()
+        arguments["outfits"]?.takeIf { it.isJsonArray }?.asJsonArray?.forEach { item ->
+            if (!item.isJsonObject) return Result.failure(IllegalArgumentException("outfits 每项必须为对象"))
+            val obj = item.asJsonObject
+            val outfitName = AgentInteractionProtocol.string(obj, "name").trim()
+            val tags = AgentInteractionProtocol.string(obj, "tags").trim()
+            if (outfitName.isBlank() || tags.isBlank())
+                return Result.failure(IllegalArgumentException("服装须同时填写 name 和 tags"))
+            val triggers = strings(obj["dialogue_triggers"]).ifEmpty { null }
+            val index = outfits.indexOfFirst { it.name.equals(outfitName, ignoreCase = true) }
+            if (index < 0) outfits += CharacterOutfit(name = outfitName, triggerWords = tags, dialogueTriggers = triggers)
+            else outfits[index] = outfits[index].copy(triggerWords = tags,
+                dialogueTriggers = triggers ?: outfits[index].dialogueTriggers)
+        }
+        val defaultName = AgentInteractionProtocol.string(arguments, "default_outfit").trim()
+        val defaultId = if (defaultName.isBlank()) old?.defaultOutfitId else
+            outfits.firstOrNull { it.name.equals(defaultName, ignoreCase = true) }?.id
+                ?: return Result.failure(IllegalArgumentException("default_outfit「$defaultName」不在服装列表中"))
+        val base = old ?: CharacterLore(name = name, triggerWords = appearance)
+        return Result.success(base.copy(
+            triggerWords = appearance,
+            fixedTriggerWords = if (fixed == null) base.fixedTriggerWords else fixed.ifBlank { null },
+            aliases = aliases.ifEmpty { null },
+            outfits = outfits.ifEmpty { null },
+            defaultOutfitId = defaultId))
     }
 
     private fun scalar(value: JsonElement?): Any? {
@@ -333,6 +429,7 @@ class AgentDrawToolbox(
         const val SUBMIT = "submit_workflow"
         const val LIST_LORAS = "list_loras"
         const val SET_LORA = "set_lora"
+        const val SAVE_CHARACTER = "save_character_profile"
         private const val MAX_LORAS = 20
         private const val MAX_OPTIONS = 40
         private const val MAX_TAGS = 12
@@ -344,6 +441,8 @@ class AgentDrawToolbox(
 建议流程：需要时 get_character_profile 核对角色、lookup_tags 查标签写法、inspect_workflow 查看参数并用 patch_workflow 修改；然后 set_prompt 写入提示词，最后 submit_workflow 提交。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
 工作流里有 LoRA 槽位时会提供 list_loras / set_lora：只有用户提到角色、画风、用途或明确要求时才检索并更换 LoRA，按本地标注和简介挑选，强度优先用推荐强度，并把触发词写进提示词；用户没提就保持原样。
+画风/画师字段在 inspect_workflow 中标为 role="画风/画师"，用户要求换画风或画师时用 patch_workflow 修改；用户说保存、记住、以后都用、设为默认时，submit_workflow 传 save_defaults=true，设置页会同步。
+有 save_character_profile 时：用户介绍了词库里没有的新角色、要求记住某个角色，或给已登记角色补充新服装/外貌时，把整理好的英文绘画标签写入词库；不要擅自覆盖用户没要求改动的已有档案。
 工具报错时按错误修正参数再试，不要重复同样的错误调用。只聊天不出图时，不调用工具，直接按系统中的格式回复。
 """.trim()
 
