@@ -39,8 +39,6 @@ fun AgentRuleFilesPanel(
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Same header as "模型服务" / "可选资源" so the settings page reads as one grouped list.
         com.comfyui.mobile.ui.designsystem.PocketSectionHeader("提示词规则")
-        Text("导入自己的 TXT / Markdown 文件，可导入多个并随时切换；启用的规则会作为必须遵守的要求发送给模型。",
-            style = MiuixTheme.textStyles.footnote1, color = scheme.onSurfaceVariantSummary)
         AgentRuleKind.entries.forEach { kind ->
             val document = files.document(kind)
             val library = files.library(kind)

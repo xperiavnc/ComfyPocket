@@ -19,6 +19,60 @@ internal object WorkflowGraph {
      * passes local display/editing but fails server-side `value_not_in_list` validation.
      * Only LoRA filename fields are normalized; prompt text and unrelated strings stay intact.
      */
+    /**
+     * A LoRA file field whose value is no longer on the server (renamed / deleted / swapped by
+     * hand) fails the whole prompt with `value_not_in_list`, even at strength 0. When the field
+     * offers "None" (LoRA stacks do), switch it to "None" and zero the matching strengths.
+     * Loaders without a "None" option are left alone: there is no safe substitute file.
+     * Returns the graph and the cleared "nodeId:key -> old value" entries.
+     */
+    internal fun clearMissingLoras(
+        workflow: Map<String, Any>,
+        objectInfo: Map<String, Any>
+    ): Pair<Map<String, Any>, List<String>> {
+        if (objectInfo.isEmpty()) return workflow to emptyList()
+        val cleared = mutableListOf<String>()
+        val graph = LinkedHashMap<String, Any>(workflow.size)
+        for ((nodeId, rawNode) in workflow) {
+            val node = rawNode as? Map<*, *>
+            val classType = node?.get("class_type") as? String
+            val rawInputs = node?.get("inputs") as? Map<*, *>
+            if (node == null || rawInputs == null || !classType.orEmpty().contains("lora", ignoreCase = true)) {
+                graph[nodeId] = rawNode
+                continue
+            }
+            val inputs = LinkedHashMap<String, Any?>(rawInputs.size)
+            for ((k, v) in rawInputs) inputs[k?.toString().orEmpty()] = v
+            var changed = false
+            for (key in inputs.keys.toList()) {
+                val value = inputs[key] as? String ?: continue
+                if (!LORA_FILE_KEY.matches(key) || value.equals("None", ignoreCase = true)) continue
+                val options = WorkflowOptionParser.getComboOptions(objectInfo, classType.orEmpty(), key) ?: continue
+                if (options.isEmpty() || options.any { canonicalLoraKey(it) == canonicalLoraKey(value) }) continue
+                val none = options.firstOrNull { it.equals("None", ignoreCase = true) } ?: continue
+                inputs[key] = none
+                val slot = Regex("\\d+").find(key)?.value
+                for (strengthKey in inputs.keys.toList()) {
+                    if (!strengthKey.contains("strength", ignoreCase = true)) continue
+                    if (slot != null && Regex("\\d+").find(strengthKey)?.value != slot) continue
+                    if (inputs[strengthKey] is Number) inputs[strengthKey] = 0.0
+                }
+                cleared += "$nodeId:$key -> $value"
+                changed = true
+            }
+            if (!changed) {
+                graph[nodeId] = rawNode
+                continue
+            }
+            val updated = LinkedHashMap<String, Any?>(node.size)
+            for ((k, v) in node) updated[k?.toString().orEmpty()] = v
+            updated["inputs"] = inputs
+            graph[nodeId] = updated
+        }
+        @Suppress("UNCHECKED_CAST")
+        return (graph as Map<String, Any>) to cleared
+    }
+
     internal fun normalizeLoraFilePaths(
         workflow: Map<String, Any>,
         objectInfo: Map<String, Any> = emptyMap()

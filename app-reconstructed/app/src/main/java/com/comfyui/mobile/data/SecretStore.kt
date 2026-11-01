@@ -46,6 +46,11 @@ class SecretStore private constructor(context: Context) {
 
     fun getCivitaiProxyPassword(): String = get("market:proxy-password").orEmpty()
 
+    fun putAgentProxyPassword(plaintext: String) =
+        put("agent:proxy-password", plaintext, trim = false)
+
+    fun getAgentProxyPassword(): String = get("agent:proxy-password").orEmpty()
+
     fun putDanbooruConfig(plaintext: String) = put("gallery:danbooru:config", plaintext, trim = false)
 
     fun getDanbooruConfig(): String = get("gallery:danbooru:config").orEmpty()

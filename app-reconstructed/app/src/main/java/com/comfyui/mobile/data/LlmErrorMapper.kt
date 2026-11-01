@@ -117,6 +117,15 @@ object LlmErrorMapper {
                     technicalDetail = apiErrorMessage ?: rawResponseBody,
                     cause = throwable
     )
+                407 -> LlmException(
+                    errorType = LlmErrorType.FORBIDDEN,
+                    userMessage = "HTTP 代理要求认证或认证失败 (407)。",
+                    suggestion = "请在「Agent 设置 → 网络代理」中检查代理用户名和密码。",
+                    endpoint = endpoint,
+                    httpCode = httpCode,
+                    technicalDetail = apiErrorMessage ?: rawResponseBody,
+                    cause = throwable
+    )
                 503 -> LlmException(
                     errorType = LlmErrorType.SERVER_ERROR,
                     userMessage = if (apiErrorMessage != null) "服务暂不可用 (503)：$apiErrorMessage" else "服务暂不可用 (HTTP 503)。",

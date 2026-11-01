@@ -239,13 +239,6 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         modifier = Modifier.fillMaxWidth()
     )
 
-                    // 常用服务商快速填入
-                    Text(
-                        text = "常用大模型服务商预设",
-                        color = scheme.onSurfaceVariantSummary,
-                        style = MiuixTheme.textStyles.body2,
-                        fontSize = 12.sp
-    )
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -300,9 +293,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth()
     )
-                    Text(
-                        text = if (baseUrl.isBlank()) "兼容 OpenAI 规范，例如 https://api.deepseek.com/v1"
-                            else "将请求：${com.comfyui.mobile.data.LlmClient.resolveEndpoint(baseUrl.trim())}",
+                    if (baseUrl.isNotBlank()) Text(
+                        text = "将请求：${com.comfyui.mobile.data.LlmClient.resolveEndpoint(baseUrl.trim())}",
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                         color = scheme.onSurfaceVariantSummary,
@@ -335,8 +327,8 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                             text = when {
                                 fetchingModels -> "正在获取模型列表…"
                                 modelError != null -> modelError.orEmpty()
-                                fetchedModels != null -> "已获取 ${fetchedModels.orEmpty().size} 个模型，可直接选择"
-                                else -> "可从服务商获取模型列表后选择"
+                                fetchedModels != null -> "已获取 ${fetchedModels.orEmpty().size} 个模型"
+                                else -> ""
                             },
                             modifier = Modifier.weight(1f),
                             color = if (modelError != null && !fetchingModels) scheme.error else scheme.onSurfaceVariantSummary,
@@ -410,6 +402,9 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                     )
                 }
             }
+            val proxySettings by viewModel.agentProxySettings.collectAsState()
+            com.comfyui.mobile.ui.screens.agent.AgentProxySettingsCard(
+                saved = proxySettings, onSave = viewModel::saveAgentProxySettings)
             if (showModelPicker) AgentModelPicker(
                 models = fetchedModels,
                 current = model.trim(),
@@ -444,8 +439,7 @@ fun AgentSettingsScreen(navController: NavController, viewModel: MainViewModel) 
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f).padding(end = 12.dp)) {
                         Text("多步工具智能体", style = MiuixTheme.textStyles.body1)
-                        Text("绘图时让模型自己查看与修改工作流参数、查词、读取角色档案后再提交，最多 8 步，" +
-                            "每步进度会显示在回复里。需要服务支持原生工具调用，否则自动使用兼容流程。",
+                        Text("绘图时自己查参数、查词、读档案，最多 8 步",
                             style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
                     }
                     Switch(tagSettings.toolLoop,

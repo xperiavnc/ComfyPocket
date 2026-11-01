@@ -1,5 +1,6 @@
 package com.comfyui.mobile.data
 
+import com.comfyui.mobile.agent.AgentProxySettings
 import com.comfyui.mobile.agent.AgentReasoningEffort
 import com.comfyui.mobile.agent.AgentGenerationLimits
 import com.comfyui.mobile.agent.OutputTokenParameter
@@ -23,7 +24,9 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.Authenticator
 import okhttp3.Call
+import okhttp3.Credentials
 import okhttp3.ConnectionPool
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -56,6 +59,45 @@ class LlmClient(
         .build(),
     private val totalTimeoutMillis: Long = 240_000
 ) {
+    /** The client actually used; rebuilt from [client] whenever the Agent proxy changes. */
+    @Volatile private var http: OkHttpClient = client
+    @Volatile private var proxyLabel: String? = null
+
+    /**
+     * Routes model API calls through an HTTP proxy (null/disabled = system default, as before).
+     * LAN and localhost endpoints always connect directly. Invalid settings throw.
+     */
+    fun applyProxy(settings: AgentProxySettings?) {
+        val value = settings?.validated()
+        val url = value?.proxyUrl()
+        if (url == null) {
+            http = client
+            proxyLabel = null
+            return
+        }
+        val proxy = java.net.Proxy(java.net.Proxy.Type.HTTP,
+            java.net.InetSocketAddress.createUnresolved(url.host, url.port))
+        http = client.newBuilder()
+            .proxySelector(LanBypassProxySelector.through(proxy))
+            .proxyAuthenticator(if (value.username.isBlank()) Authenticator.NONE else Authenticator { _, response ->
+                if (response.request.header("Proxy-Authorization") != null) null
+                else response.request.newBuilder().header("Proxy-Authorization",
+                    Credentials.basic(value.username, value.password, Charsets.UTF_8)).build()
+            })
+            .build()
+        proxyLabel = "${url.host}:${url.port}"
+    }
+
+    /** Adds a proxy hint to connection-level failures while a custom proxy is active. */
+    private fun proxied(e: LlmException): LlmException {
+        val label = proxyLabel ?: return e
+        if (e.httpCode != null || e.errorType !in setOf(LlmErrorType.TIMEOUT_CONNECT,
+                LlmErrorType.CONNECTION_REFUSED, LlmErrorType.DNS_FAILURE, LlmErrorType.NETWORK_GENERAL, LlmErrorType.UNKNOWN)) return e
+        return LlmException(e.errorType, e.userMessage,
+            "当前通过 HTTP 代理 $label 访问：请确认代理已开启、手机能访问到它（局域网代理需允许局域网连接）。\n" + e.suggestion,
+            e.endpoint, e.httpCode, e.technicalDetail, e.cause)
+    }
+
     private class ActiveCall(val call: Call, val cancelled: AtomicBoolean = AtomicBoolean(false))
     private val activeCalls = ConcurrentHashMap<String, ActiveCall>()
     // Session-local capability evidence only; never persist credentials or guess by model name.
@@ -108,7 +150,7 @@ class LlmClient(
                 .apply { if (apiKey.isNotBlank()) header("Authorization", "Bearer ${apiKey.trim()}") }
                 .header("Accept", "application/json")
                 .build()
-            val call = client.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request)
+            val call = http.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request)
             try {
                 call.execute().use { response ->
                     val body = response.body?.string().orEmpty()
@@ -123,7 +165,7 @@ class LlmClient(
                     ids
                 }
             } catch (e: LlmException) { throw e } catch (e: Exception) {
-                throw LlmErrorMapper.map(e, endpoint = endpoint, isConnectingPhase = true)
+                throw proxied(LlmErrorMapper.map(e, endpoint = endpoint, isConnectingPhase = true))
             }
         }
     }
@@ -204,7 +246,7 @@ class LlmClient(
         require(requestId.isNotBlank()) { "Request ID is empty" }
         require(totalTimeoutMillis > 0) { "Total timeout must be positive" }
         currentCoroutineContext().ensureActive()
-        val entry = ActiveCall(client.newCall(request))
+        val entry = ActiveCall(http.newCall(request))
         // A stream that keeps producing tokens is healthy however long it runs (long reasoning
         // over a big context easily passes 4 min). For streams the total deadline only applies
         // until the first data arrives; after that stalls are caught by the read timeout and an
@@ -482,7 +524,7 @@ class LlmClient(
             e.message?.contains("timeout", ignoreCase = true) == true) {
             return LlmException(LlmErrorType.TIMEOUT_TOTAL, "本轮模型请求超过总时限（流式输出上限约 ${totalTimeoutMillis * StreamHardCapFactor / 60_000} 分钟）。", endpoint = endpoint, cause = e)
         }
-        return LlmErrorMapper.map(e, endpoint = endpoint, isConnectingPhase = connecting)
+        return proxied(LlmErrorMapper.map(e, endpoint = endpoint, isConnectingPhase = connecting))
     }
 }
 
@@ -506,6 +548,14 @@ object LanBypassProxySelector : java.net.ProxySelector() {
     override fun select(uri: java.net.URI?): MutableList<java.net.Proxy> {
         if (uri == null || isPrivateHost(uri.host)) return mutableListOf(java.net.Proxy.NO_PROXY)
         return default?.select(uri)?.toMutableList() ?: mutableListOf(java.net.Proxy.NO_PROXY)
+    }
+
+    /** LAN / localhost direct, everything else through [proxy]. */
+    fun through(proxy: java.net.Proxy): java.net.ProxySelector = object : java.net.ProxySelector() {
+        override fun select(uri: java.net.URI?): MutableList<java.net.Proxy> =
+            mutableListOf(if (uri == null || isPrivateHost(uri.host)) java.net.Proxy.NO_PROXY else proxy)
+
+        override fun connectFailed(uri: java.net.URI?, sa: java.net.SocketAddress?, ioe: java.io.IOException?) = Unit
     }
 
     override fun connectFailed(uri: java.net.URI?, sa: java.net.SocketAddress?, ioe: java.io.IOException?) {
