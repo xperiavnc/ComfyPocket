@@ -16,8 +16,8 @@ android {
         minSdk = 33
         targetSdk = 36
         // Installed 0.0.56-agent-drawer used versionCode 58; continue above it so updates install.
-        versionCode = 90
-        versionName = "0.0.88"
+        versionCode = 91
+        versionName = "0.0.89"
     }
 
     buildFeatures {
@@ -60,12 +60,9 @@ android {
             pocketSigning?.let { signingConfig = it }
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            // No R8 obfuscation or resource shrinking: Gson maps plain field names reflectively.
+            isMinifyEnabled = false
+            isShrinkResources = false
             // Use the local release key when configured; otherwise keep the
             // release artifact installable with the standard debug key.
             signingConfig = pocketSigning ?: signingConfigs.getByName("debug")
