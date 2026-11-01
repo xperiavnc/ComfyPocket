@@ -60,7 +60,6 @@ android {
             pocketSigning?.let { signingConfig = it }
         }
         release {
-            // No R8 obfuscation or resource shrinking: Gson maps plain field names reflectively.
             isMinifyEnabled = false
             isShrinkResources = false
             // Use the local release key when configured; otherwise keep the
