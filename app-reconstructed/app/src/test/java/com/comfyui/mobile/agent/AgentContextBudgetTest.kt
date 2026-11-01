@@ -93,4 +93,54 @@ class AgentContextBudgetTest {
         val changes = firsts.zipWithNext().count { (a, b) -> a != b }
         assertTrue("window slid on every turn: $firsts", changes <= firsts.size / 2)
     }
+
+    private val growing = listOf(
+        ChatMessageDto("system", "rules"),
+        ChatMessageDto("user", "old1" + "x".repeat(1000)), ChatMessageDto("assistant", "a1"),
+        ChatMessageDto("user", "old2" + "y".repeat(1000)), ChatMessageDto("assistant", "a2"),
+        ChatMessageDto("user", "task"),
+        ChatMessageDto("tool", "answer" + "z".repeat(2000), tool_call_id = "c1"))
+    private val growingImages = mapOf(1 to listOf("data:old"), 5 to listOf("data:task"))
+
+    @Test fun growingToolTurnDropsOldestWholeHistoryTurnsAndKeepsTheTaskAndToolAnswers() {
+        val roomy = AgentContextBudget.trimRequest(growing, growingImages, historyCount = 4, limit = 20_000)
+        assertEquals(0, roomy.droppedHistory)
+        assertSame(growing, roomy.messages)
+
+        val trimmed = AgentContextBudget.trimRequest(growing, growingImages, historyCount = 4, limit = 9_000)
+        assertTrue(trimmed.fits)
+        assertEquals(2, trimmed.droppedHistory)
+        assertEquals(listOf("system", "user", "assistant", "user", "tool"), trimmed.messages.map { it.role })
+        assertEquals("a2", trimmed.messages[2].content)
+        assertEquals("task", trimmed.messages[3].content)
+        assertEquals(mapOf(3 to listOf("data:task")), trimmed.images)
+        assertTrue(trimmed.cost <= 9_000)
+    }
+
+    @Test fun overflowWithoutAnyHistoryIsReportedInsteadOfCuttingTheTaskOrToolAnswers() {
+        val tight = AgentContextBudget.trimRequest(growing, growingImages, historyCount = 4, limit = 7_000)
+        assertTrue(tight.fits)
+        assertEquals(4, tight.droppedHistory)
+        assertEquals(listOf("rules", "task"), tight.messages.take(2).map { it.content })
+        assertEquals(mapOf(1 to listOf("data:task")), tight.images)
+
+        val over = AgentContextBudget.trimRequest(growing, growingImages, historyCount = 4, limit = 6_000)
+        assertFalse(over.fits)
+        assertEquals(4, over.droppedHistory)
+        assertEquals(listOf("system", "user", "tool"), over.messages.map { it.role })
+        assertTrue(over.messages.last().content!!.startsWith("answer"))
+    }
+
+    @Test fun toolHeadroomOnlyShortensTheHistoryAndNeverFailsTheTurn() {
+        val history = (1..6).flatMap { listOf(message("user", "u$it " + "x".repeat(600)), message("assistant", "a$it")) }
+        val limits = AgentGenerationLimits(4096, 128)
+        val plain = AgentContextBudget.fit(message("system", "rules"), history, listOf(message("user", "current")), limits, 4)
+        val roomy = AgentContextBudget.fit(message("system", "rules"), history, listOf(message("user", "current")), limits, 4,
+            growthHeadroom = 100_000)
+        assertEquals(12, plain.keptHistory)
+        assertEquals(8, roomy.keptHistory)
+        assertEquals(roomy.keptHistory + 2, roomy.messages.size)
+        assertEquals("u3 " + "x".repeat(600), roomy.messages[1].message.content)
+        assertEquals("current", roomy.messages.last().message.content)
+    }
 }

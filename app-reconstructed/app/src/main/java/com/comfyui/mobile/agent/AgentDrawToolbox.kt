@@ -2,12 +2,15 @@ package com.comfyui.mobile.agent
 
 import com.comfyui.mobile.model.CharacterLore
 import com.comfyui.mobile.model.CharacterOutfit
+import com.comfyui.mobile.modelcenter.modelUseCases
 import com.comfyui.mobile.network.ChatFunctionDefinition
 import com.comfyui.mobile.network.ChatToolDefinition
 import com.comfyui.mobile.taglib.LocalTagEntry
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonPrimitive
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 /**
@@ -21,14 +24,19 @@ class AgentDrawToolbox(
     characters: List<CharacterLore> = emptyList(),
     private val searchTags: (suspend (query: String, kind: String) -> List<LocalTagEntry>)? = null,
     /** Local LoRA metadata (user annotations + provider info); empty when the model index is unavailable. */
-    private val loras: List<AgentLoraInfo> = emptyList(),
+    loras: List<AgentLoraInfo> = emptyList(),
     /** Address of the 画风 / 画师 text field shown in the style settings, when bound. */
     private val styleField: String? = null,
     private val favoriteArtists: List<String> = emptyList(),
     /** Persists a character profile into the library; returns an error message or null. */
-    private val saveCharacter: (suspend (CharacterLore) -> String?)? = null
+    private val saveCharacter: (suspend (CharacterLore) -> String?)? = null,
+    /** Live model-center access: refresh, full descriptions and the Agent's own LoRA notes. */
+    private val loraLibrary: AgentLoraLibrary? = null
 ) : AgentToolbox {
     private var characters: List<CharacterLore> = characters
+    private var loras: List<AgentLoraInfo> = loras
+    /** True once this turn re-read the computer's LoRA list (or tried and fell back to the cache). */
+    private var lorasFresh = loraLibrary == null
     /** Set by submit(save_defaults=true): keep this turn's parameters as the workflow defaults. */
     var saveDefaults: Boolean = false
         private set
@@ -94,16 +102,43 @@ class AgentDrawToolbox(
                 ), "name", "tags"), 12),
                 "default_outfit" to text("可选：默认服装名称，须是 outfits 或已有服装之一")
             ), "name", "appearance_tags"))
-    )) + (if (loraSlots.isEmpty()) emptyList() else listOf(
-        tool(LIST_LORAS, "列出工作流里的 LoRA 槽位，并检索本地 LoRA：文件名、触发词、底模、用户标注（标签/用途/角色/服装/备注/推荐强度）和简介。选 LoRA 前先调用。",
-            obj(mapOf("query" to text("检索词，可填角色名、画风、用途等，空格分隔多个词须同时命中；留空列出全部")))),
-        tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效。",
-            obj(mapOf(
-                "slot" to text("list_loras 返回的槽位地址，形如 \"10:lora_name\""),
-                "lora" to text("list_loras 返回的 file；空字符串表示停用"),
-                "strength" to mapOf("type" to "number", "description" to "强度，通常 0.4–1.2；不传则用推荐强度或 1.0")
-            ), "slot", "lora"))
-    ))
+    )) + loraTools()
+
+    /** LoRA tools: browsing works from the phone's cached index; set_lora needs a slot in the workflow. */
+    private fun loraTools(): List<ChatToolDefinition> {
+        if (loraSlots.isEmpty() && loras.isEmpty() && loraLibrary == null) return emptyList()
+        val browse: List<ChatToolDefinition> = listOf(
+            tool(LIST_LORAS, "检索本地 LoRA：文件名、触发词、底模、用户标注（标签/用途/角色/服装/备注/推荐强度）、你以前写的 agent_notes 和简介；工作流有 LoRA 槽位时一并列出槽位。选 LoRA 或回答 LoRA 相关问题前先调用。",
+                obj(mapOf("query" to text("检索词，可填角色名、画风、用途等，空格分隔多个词须同时命中；留空列出全部")))),
+            tool(READ_LORA, "读取一个本地 LoRA 的完整资料：模型和版本简介（保留分段）、来源触发词与用户确认的触发词、底模、用户标注、你以前写的 agent_notes，以及能否装进当前工作流。",
+                obj(mapOf("lora" to text("list_loras 返回的 file 或 name")), "lora"))
+        )
+        val live: List<ChatToolDefinition> = if (loraLibrary == null) emptyList() else listOf(
+            tool(REFRESH_LORAS, "重新读取电脑上的 LoRA 列表，报告新增和移除的文件。用户说刚放了新 LoRA，或要找的 LoRA 不在列表里时使用。",
+                obj(mapOf("rescan" to mapOf("type" to "boolean", "description" to "true 时先让电脑重新扫描模型文件夹（较慢，最多等约 45 秒）")))),
+            tool(ANNOTATE_LORA, "把你对一个 LoRA 的理解写进模型中心的标注，供以后的新会话检索和使用。notes 会替换你上次写的笔记，不动用户自己的备注；其余字段只在用户没填、没锁定时补上，绝不覆盖用户内容。只写从简介、触发词、用户说明或出图结果确认过的事实。",
+                obj(mapOf(
+                    "lora" to text("list_loras 返回的 file 或 name"),
+                    "notes" to text("你的笔记：用途、效果、推荐强度、搭配和注意事项，几句话，不超过 ${AgentLoraCatalog.MAX_AGENT_NOTES} 字；空字符串表示清除你的笔记"),
+                    "tags" to array(text("检索用标签，如角色名、画风关键词"), MAX_TAGS),
+                    "use_cases" to array(mapOf("type" to "string", "enum" to modelUseCases.keys.toList()), 4),
+                    "character" to text("可选：对应的角色名"),
+                    "outfit" to text("可选：对应的服装"),
+                    "base_model" to text("可选：底模，如 SDXL 1.0、Illustrious、Pony"),
+                    "trigger_words" to array(text("触发词"), MAX_TAGS),
+                    "preferred_strength" to mapOf("type" to "number", "description" to "可选：推荐强度，-4 到 4")
+                ), "lora"))
+        )
+        val set: List<ChatToolDefinition> = if (loraSlots.isEmpty()) emptyList() else listOf(
+            tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效。",
+                obj(mapOf(
+                    "slot" to text("list_loras 返回的槽位地址，形如 \"10:lora_name\""),
+                    "lora" to text("list_loras 返回的 file；空字符串表示停用"),
+                    "strength" to mapOf("type" to "number", "description" to "强度，通常 0.4–1.2；不传则用推荐强度或 1.0")
+                ), "slot", "lora"))
+        )
+        return browse + live + set
+    }
 
     override fun label(name: String): String = when (name) {
         INSPECT -> "查看工作流参数"
@@ -115,6 +150,9 @@ class AgentDrawToolbox(
         LIST_LORAS -> "检索本地 LoRA"
         SET_LORA -> "配置 LoRA"
         SAVE_CHARACTER -> "保存角色到词库"
+        READ_LORA -> "读取 LoRA 资料"
+        REFRESH_LORAS -> "刷新本地 LoRA"
+        ANNOTATE_LORA -> "写入 LoRA 笔记"
         else -> name
     }
 
@@ -125,13 +163,18 @@ class AgentDrawToolbox(
         LOOKUP_TAGS -> lookup(arguments)
         PROFILE -> profile(arguments)
         SUBMIT -> submit(arguments)
-        LIST_LORAS -> if (loraSlots.isEmpty()) unknown(name) else listLoras(arguments)
+        LIST_LORAS -> if (!offers(name)) unknown(name) else listLoras(arguments)
         SET_LORA -> if (loraSlots.isEmpty()) unknown(name) else setLora(arguments)
+        READ_LORA -> if (!offers(name)) unknown(name) else readLora(arguments)
+        REFRESH_LORAS -> if (!offers(name)) unknown(name) else refreshLoras(arguments)
+        ANNOTATE_LORA -> if (!offers(name)) unknown(name) else annotateLora(arguments)
         SAVE_CHARACTER -> if (saveCharacter == null) unknown(name) else saveCharacterProfile(arguments)
         else -> unknown(name)
     }
 
     private fun unknown(name: String) = AgentToolResult(false, error = "未知工具：$name")
+
+    private fun offers(name: String) = definitions.any { it.function.name == name }
 
     private fun current(): AgentWorkflowSnapshot {
         if (staged.isEmpty()) return snapshot
@@ -197,7 +240,8 @@ class AgentDrawToolbox(
     private fun stagedValue(nodeId: String, key: String): Any? =
         staged["$nodeId:$key"]?.value ?: ((snapshot.workflow[nodeId] as? Map<*, *>)?.get("inputs") as? Map<*, *>)?.get(key)
 
-    private fun listLoras(arguments: JsonObject): AgentToolResult {
+    private suspend fun listLoras(arguments: JsonObject): AgentToolResult {
+        val notice = ensureFresh()
         val query = AgentInteractionProtocol.string(arguments, "query")
         val offered = loraSlots.flatMap { it.options }.map(AgentLoraCatalog::normalize).toSet()
         // Only LoRAs the server can actually load; without combo options trust the index.
@@ -208,7 +252,9 @@ class AgentDrawToolbox(
             .filter { AgentLoraCatalog.normalize(it) !in known && (query.isBlank() || query.lowercase(Locale.ROOT).split(' ').filter(String::isNotBlank).all { term -> it.lowercase(Locale.ROOT).contains(term) }) }
             .take(MAX_LORAS - hits.size)
         return AgentToolResult(true, linkedMapOf(
-            "summary" to "${loraSlots.size} 个 LoRA 槽位，命中 ${hits.size + bare.size} 个 LoRA" + if (loras.isEmpty()) "（模型中心还没有本地 LoRA 资料，只有文件名）" else "",
+            "summary" to (if (loraSlots.isEmpty()) "当前工作流没有 LoRA 槽位（只能查看和写笔记，不能装载），" else "${loraSlots.size} 个 LoRA 槽位，") +
+                "命中 ${hits.size + bare.size} 个 LoRA" + (if (loras.isEmpty()) "（模型中心还没有本地 LoRA 资料，只有文件名）" else "") +
+                (if (notice.isNotEmpty()) "；$notice" else ""),
             "slots" to loraSlots.map { slot ->
                 linkedMapOf<String, Any?>(
                     "slot" to slot.id,
@@ -227,12 +273,150 @@ class AgentDrawToolbox(
                     "character" to info.character.ifBlank { null },
                     "outfit" to info.outfit.ifBlank { null },
                     "notes" to info.notes.ifBlank { null },
+                    "agent_notes" to info.agentNotes.ifBlank { null }?.let { if (it.length > 160) it.take(160) + "…" else it },
                     "preferred_strength" to info.preferredStrength,
                     "description" to info.description.ifBlank { null },
                     "favorite" to info.favorite.takeIf { it }
                 ).filterValues { it != null }
             } + bare.map { mapOf("file" to it, "note" to "没有本地资料") }
         ))
+    }
+
+    /** Re-reads the computer's LoRA list once per turn so a new session sees new files and notes. */
+    private suspend fun ensureFresh(): String {
+        if (lorasFresh) return ""
+        lorasFresh = true
+        val library = loraLibrary ?: return ""
+        return try {
+            val fresh = withTimeoutOrNull(FRESH_TIMEOUT_MS) { library.refresh() }
+                ?: return "电脑没有及时返回最新 LoRA 列表，以下是手机缓存"
+            // An index that is still being rebuilt can come back empty; keep the cached list then.
+            if (fresh.loras.isNotEmpty() || loras.isEmpty()) loras = fresh.loras
+            ""
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (error: Exception) { "没能读取电脑上的最新 LoRA 列表（${error.message ?: "未知错误"}），以下是手机缓存" }
+    }
+
+    private fun findLora(requested: String): AgentLoraInfo? {
+        val wanted = requested.trim()
+        if (wanted.isEmpty()) return null
+        val key = AgentLoraCatalog.normalize(wanted)
+        loras.firstOrNull { AgentLoraCatalog.normalize(it.file) == key || it.name.equals(wanted, ignoreCase = true) }?.let { return it }
+        val file = AgentLoraCatalog.resolve(wanted, loras.map { it.file }, loras) ?: return null
+        return loras.firstOrNull { AgentLoraCatalog.normalize(it.file) == AgentLoraCatalog.normalize(file) }
+    }
+
+    private fun keep(info: AgentLoraInfo) {
+        val key = AgentLoraCatalog.normalize(info.file)
+        loras = if (loras.any { AgentLoraCatalog.normalize(it.file) == key })
+            loras.map { if (AgentLoraCatalog.normalize(it.file) == key) info else it } else loras + info
+    }
+
+    private suspend fun readLora(arguments: JsonObject): AgentToolResult {
+        val requested = AgentInteractionProtocol.string(arguments, "lora")
+        if (requested.isBlank()) return AgentToolResult(false, error = "lora 不能为空")
+        val stale = ensureFresh()
+        val found = findLora(requested)
+            ?: return AgentToolResult(false, error = "没有找到 LoRA「$requested」。先用 list_loras 检索，再填返回的 file")
+        val library = loraLibrary
+        var notice = stale
+        val current = if (library != null && found.id.isNotBlank()) {
+            try {
+                val detail = library.detail(found)
+                if (detail.notice.isNotEmpty()) notice = detail.notice
+                detail.info
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) {
+                notice = "没能从电脑读取最新资料（${error.message ?: "未知错误"}），以下是手机缓存"
+                found
+            }
+        } else found
+        keep(current)
+        val offered = loraSlots.flatMap { it.options }.map(AgentLoraCatalog::normalize).toSet()
+        return AgentToolResult(true, linkedMapOf<String, Any?>(
+            "file" to current.file, "name" to current.name,
+            "base_model" to current.baseModel.ifBlank { null },
+            "trigger_words" to current.triggerWords.takeIf { it.isNotEmpty() },
+            "source_trigger_words" to current.sourceTriggerWords.takeIf { it.isNotEmpty() && it != current.triggerWords },
+            "description" to current.fullDescription.ifBlank { current.description }.ifBlank { null },
+            "source" to current.source.ifBlank { null },
+            "notes" to current.notes.ifBlank { null },
+            "agent_notes" to current.agentNotes.ifBlank { null },
+            "tags" to current.tags.takeIf { it.isNotEmpty() },
+            "use_cases" to current.useCases.takeIf { it.isNotEmpty() },
+            "character" to current.character.ifBlank { null },
+            "outfit" to current.outfit.ifBlank { null },
+            "preferred_strength" to current.preferredStrength,
+            "favorite" to current.favorite.takeIf { it },
+            "loadable" to (loraSlots.isNotEmpty() && (offered.isEmpty() || AgentLoraCatalog.normalize(current.file) in offered)),
+            "notice" to notice.ifBlank { null },
+            "hint" to if (current.triggerWords.isEmpty() && current.fullDescription.isBlank() && library != null)
+                "没有简介和触发词：可以问用户这个 LoRA 的用途，确认后用 annotate_lora 记下" else null
+        ).filterValues { it != null })
+    }
+
+    private suspend fun refreshLoras(arguments: JsonObject): AgentToolResult {
+        val library = loraLibrary ?: return unknown(REFRESH_LORAS)
+        val rescan = arguments["rescan"]?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == true
+        val before = loras.associateBy { AgentLoraCatalog.normalize(it.file) }
+        val result = try { library.refresh(rescan) } catch (cancelled: CancellationException) { throw cancelled
+        } catch (error: Exception) {
+            return AgentToolResult(false, error = "没能从电脑刷新 LoRA 列表（${error.message ?: "未知错误"}）。手机缓存里还有 ${loras.size} 个 LoRA，可以继续用 list_loras")
+        }
+        lorasFresh = true
+        loras = result.loras
+        val after = result.loras.associateBy { AgentLoraCatalog.normalize(it.file) }
+        val added = result.loras.filter { AgentLoraCatalog.normalize(it.file) !in before }.map { it.file }
+        val removed = before.filterKeys { it !in after }.values.map { it.file }
+        return AgentToolResult(true, linkedMapOf<String, Any?>(
+            "summary" to "电脑上共 ${result.loras.size} 个 LoRA，新增 ${added.size} 个，移除 ${removed.size} 个" +
+                (if (result.note.isNotEmpty()) "；${result.note}" else ""),
+            "added" to added.take(MAX_LORAS).takeIf { it.isNotEmpty() },
+            "removed" to removed.take(MAX_LORAS).takeIf { it.isNotEmpty() },
+            "hint" to if (added.isNotEmpty() && loraSlots.isNotEmpty())
+                "新文件要等工作流的可选项刷新后才能用 set_lora 装载，现在可以先用 read_lora 查看" else null
+        ).filterValues { it != null })
+    }
+
+    private suspend fun annotateLora(arguments: JsonObject): AgentToolResult {
+        val library = loraLibrary ?: return unknown(ANNOTATE_LORA)
+        val requested = AgentInteractionProtocol.string(arguments, "lora")
+        if (requested.isBlank()) return AgentToolResult(false, error = "lora 不能为空")
+        val notesElement = arguments["notes"]
+        val notes = when {
+            notesElement == null || notesElement.isJsonNull -> null
+            notesElement.isJsonPrimitive && notesElement.asJsonPrimitive.isString -> notesElement.asString.trim()
+            else -> return AgentToolResult(false, error = "notes 必须是字符串")
+        }
+        if (notes != null && notes.length > AgentLoraCatalog.MAX_AGENT_NOTES)
+            return AgentToolResult(false, error = "notes 过长（${notes.length} 字，上限 ${AgentLoraCatalog.MAX_AGENT_NOTES}），请精简成几句话")
+        val strengthElement = arguments["preferred_strength"]
+        val strength = strengthElement?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble
+        if (strengthElement != null && !strengthElement.isJsonNull && strength == null)
+            return AgentToolResult(false, error = "preferred_strength 必须是数字")
+        if (strength != null && (strength < -4.0 || strength > 4.0))
+            return AgentToolResult(false, error = "preferred_strength 超出范围（-4 到 4）")
+        val note = AgentLoraNote(
+            notes = notes, tags = strings(arguments["tags"]).take(MAX_TAGS), useCases = strings(arguments["use_cases"]),
+            character = AgentInteractionProtocol.string(arguments, "character"),
+            outfit = AgentInteractionProtocol.string(arguments, "outfit"),
+            baseModel = AgentInteractionProtocol.string(arguments, "base_model"),
+            triggerWords = strings(arguments["trigger_words"]).take(MAX_TAGS), preferredStrength = strength)
+        if (note == AgentLoraNote()) return AgentToolResult(false, error = "没有要写入的内容：至少给 notes 或一个标注字段")
+        ensureFresh()
+        val found = findLora(requested)
+            ?: return AgentToolResult(false, error = "没有找到 LoRA「$requested」。先用 list_loras 检索，再填返回的 file")
+        val result = try { library.annotate(found, note) } catch (cancelled: CancellationException) { throw cancelled
+        } catch (error: Exception) {
+            return AgentToolResult(false, error = "写入标注失败：${error.message ?: "未知错误"}")
+        }
+        keep(result.info)
+        return AgentToolResult(true, linkedMapOf<String, Any?>(
+            "summary" to if (result.applied.isEmpty()) "「${result.info.name}」的标注没有变化"
+                else "已写入「${result.info.name}」：" + result.applied.joinToString("、"),
+            "skipped" to result.skipped.takeIf { it.isNotEmpty() },
+            "agent_notes" to result.info.agentNotes.ifBlank { null }
+        ).filterValues { it != null })
     }
 
     private fun setLora(arguments: JsonObject): AgentToolResult {
@@ -430,7 +614,11 @@ class AgentDrawToolbox(
         const val LIST_LORAS = "list_loras"
         const val SET_LORA = "set_lora"
         const val SAVE_CHARACTER = "save_character_profile"
+        const val READ_LORA = "read_lora"
+        const val REFRESH_LORAS = "refresh_loras"
+        const val ANNOTATE_LORA = "annotate_lora"
         private const val MAX_LORAS = 20
+        private const val FRESH_TIMEOUT_MS = 10_000L
         private const val MAX_OPTIONS = 40
         private const val MAX_TAGS = 12
         private const val MAX_PROMPT = 8000
@@ -440,10 +628,11 @@ class AgentDrawToolbox(
 【智能体工具模式】本轮通过工具完成任务，最多 $maxSteps 步，每步可调用一个或多个工具，工具结果会返回给你。
 建议流程：需要时 get_character_profile 核对角色、lookup_tags 查标签写法、inspect_workflow 查看参数并用 patch_workflow 修改；然后 set_prompt 写入提示词，最后 submit_workflow 提交。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
-工作流里有 LoRA 槽位时会提供 list_loras / set_lora：只有用户提到角色、画风、用途或明确要求时才检索并更换 LoRA，按本地标注和简介挑选，强度优先用推荐强度，并把触发词写进提示词；用户没提就保持原样。
+有 LoRA 工具时：list_loras 检索本地 LoRA（含你以前写的 agent_notes），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，按标注、笔记和简介挑选，强度优先用推荐强度，并把触发词写进提示词；用户没提就保持原样。
+有 refresh_loras / annotate_lora 时：用户说放了新 LoRA 或列表里找不到时先 refresh_loras；读懂简介、用户说明了用途或出图确认了效果后，用 annotate_lora 记下简短笔记（用途、效果、推荐强度、注意事项），方便以后的新会话直接使用；只记确认过的内容，不写猜测。
 画风/画师字段在 inspect_workflow 中标为 role="画风/画师"，用户要求换画风或画师时用 patch_workflow 修改；用户说保存、记住、以后都用、设为默认时，submit_workflow 传 save_defaults=true，设置页会同步。
 有 save_character_profile 时：用户介绍了词库里没有的新角色、要求记住某个角色，或给已登记角色补充新服装/外貌时，把整理好的英文绘画标签写入词库；不要擅自覆盖用户没要求改动的已有档案。
-工具报错时按错误修正参数再试，不要重复同样的错误调用。只聊天不出图时，不调用工具，直接按系统中的格式回复。
+工具报错时按错误修正参数再试，不要重复同样的错误调用。只聊天不出图时，不调用工具，直接按系统中的格式回复；只查看或整理 LoRA 资料、不出图时，用完 LoRA 工具后不调用 submit_workflow，直接按系统中的格式回复。
 """.trim()
 
         private fun tool(name: String, description: String, parameters: Map<String, Any>) =

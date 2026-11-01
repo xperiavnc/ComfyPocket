@@ -308,7 +308,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             item.images.takeIf { it.isNotEmpty() }?.let { index to it }
         }.toMap()
         val outcome = interact(turn.id, settings, messages, images, decisionSystem,
-            checkCurrent = { session.requireCurrent(turn) }, progress = progress)
+            checkCurrent = { session.requireCurrent(turn) }, progress = progress, historyCount = selected.keptHistory)
         outcome.question?.let { return it }
         val output = checkNotNull(outcome.output)
         val parsed = com.comfyui.mobile.data.AgentReplyParser.parse(output.content, preserveNaturalLanguage = true)
@@ -326,9 +326,10 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         images: Map<Int, List<String>>, decisionSystem: String, streaming: Boolean = true,
         checkCurrent: suspend () -> Unit,
         progress: suspend (AgentProgress) -> Unit = {},
-        validate: ((String) -> String?)? = null
+        validate: ((String) -> String?)? = null,
+        historyCount: Int = 0
     ): AgentInteractionOutcome = AgentInteractionLoop(
-        model(requestId, settings, images, streaming, checkCurrent),
+        model(requestId, settings, images, streaming, checkCurrent, historyCount),
         initialTextProtocol = vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model),
         onTextProtocol = {
             vm.llmClient.useTextToolProtocol(settings.baseUrl, settings.model)
@@ -344,22 +345,34 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
 
     /** Streaming, context-budget, phase and live-stats adapter shared by every agent loop. */
     private fun model(
-        requestId: String, settings: AgentLlmSettings, images: Map<Int, List<String>>,
-        streaming: Boolean, checkCurrent: suspend () -> Unit
-    ): AgentInteractionModel = AgentInteractionModel { request, onProgress ->
+        requestId: String, settings: AgentLlmSettings, allImages: Map<Int, List<String>>,
+        streaming: Boolean, checkCurrent: suspend () -> Unit, historyCount: Int = 0
+    ): AgentInteractionModel {
+        var lastDropped = 0
+        return AgentInteractionModel { request, onProgress ->
             checkCurrent()
             session.state.value.turn?.takeIf { it.id == requestId }?.let {
                 session.advance(it, if (request.deciding) AgentPhase.DECIDING else AgentPhase.GENERATING)
             }
-            val cost = request.messages.mapIndexed { index, message ->
-                AgentContextBudget.estimate(AgentContextMessage(message, images[index].orEmpty()))
-            }.sum() + request.tools?.let { vm.gson.toJson(it).toByteArray(Charsets.UTF_8).size } .orZero()
-            settings.generationLimits.contextTokens?.let { budget ->
-                if (cost + settings.generationLimits.outputReserve > budget) throw AgentExecutionException(
-                    "本轮交互上下文约需 $cost tokens，连同输出预留超过预算 $budget；未截断原任务或工具答案。")
-            }
-            val promptEstimate = AgentLlmStats.estimatePrompt(request.messages, images.values.sumOf { it.size },
-                request.tools?.let { vm.gson.toJson(it) })
+            val toolsJson = request.tools?.let { vm.gson.toJson(it) }
+            val toolsCost = toolsJson?.toByteArray(Charsets.UTF_8)?.size.orZero()
+            val limits = settings.generationLimits
+            // Every tool step appends calls, answers and reasoning: drop whole older turns first,
+            // never the current task or a tool answer.
+            val trimmed = limits.contextTokens?.let { budget ->
+                AgentContextBudget.trimRequest(request.messages, allImages, historyCount,
+                    budget - limits.outputReserve - toolsCost)
+            } ?: AgentTrimmedRequest(request.messages, allImages, 0, 0, true)
+            if (!trimmed.fits) throw AgentExecutionException(
+                "本轮交互上下文约需 ${trimmed.cost + toolsCost} tokens（已去掉全部较早历史），连同输出预留 " +
+                    "${limits.outputReserve} 超过预算 ${limits.contextTokens}；未截断原任务或工具答案。" +
+                    "请在 Agent 设置里提高上下文预算或调低单次输出上限。")
+            if (trimmed.droppedHistory > lastDropped) vm.addLog(
+                "Agent 上下文：本轮工具结果变多，已再去掉 ${trimmed.droppedHistory} 条较早历史", LogType.INFO)
+            lastDropped = trimmed.droppedHistory
+            val messages = trimmed.messages
+            val images = trimmed.images
+            val promptEstimate = AgentLlmStats.estimatePrompt(messages, images.values.sumOf { it.size }, toolsJson)
             val contextLimit = settings.generationLimits.contextTokens
             val started = System.nanoTime()
             var firstToken = 0L
@@ -368,7 +381,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             val wanted = if (request.deciding) AgentReasoningEffort.forDecision(settings.effort) else settings.effort
             val effort = if (effortKey in effortRejected) AgentReasoningEffort.DEFAULT else wanted
             suspend fun call(effort: AgentReasoningEffort) = if (streaming) vm.llmClient.chatCompletionsStream(
-                settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
+                settings.baseUrl, settings.apiKey, settings.model, messages, messageImages = images,
                 requestId = requestId, reasoningEffort = effort,
                 generationLimits = settings.generationLimits, tools = request.tools, toolChoice = request.toolChoice
             ) { _, _, reasoning, content ->
@@ -388,7 +401,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                     if (request.deciding) "正在核对任务与待确认项…" else "正在编写结果…"))
             }.getOrThrow()
             else vm.llmClient.chatCompletions(
-                settings.baseUrl, settings.apiKey, settings.model, request.messages, messageImages = images,
+                settings.baseUrl, settings.apiKey, settings.model, messages, messageImages = images,
                 requestId = requestId, reasoningEffort = effort, generationLimits = settings.generationLimits,
                 tools = request.tools, toolChoice = request.toolChoice).getOrThrow()
             val output = try {
@@ -403,6 +416,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             vm._agentLlmStats.value = AgentLlmStats.from(settings.model, output, promptEstimate, contextLimit)
             output
         }
+    }
 
     /**
      * Multi-step tool agent: the model inspects/patches the workflow, writes the prompt, looks up
@@ -413,8 +427,9 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         images: Map<Int, List<String>>, toolbox: AgentToolbox, streaming: Boolean = true,
         checkCurrent: suspend () -> Unit,
         progress: suspend (AgentProgress) -> Unit = {},
-        validate: ((String) -> String?)? = null
-    ): AgentInteractionOutcome = AgentToolLoop(model(requestId, settings, images, streaming, checkCurrent), toolbox)
+        validate: ((String) -> String?)? = null,
+        historyCount: Int = 0
+    ): AgentInteractionOutcome = AgentToolLoop(model(requestId, settings, images, streaming, checkCurrent, historyCount), toolbox)
         .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS), checkCurrent, progress,
             onStep = { step ->
                 vm.addLog("Agent 工具第 ${step.index} 步：${step.label}${if (step.ok) "" else "（失败）"}" +

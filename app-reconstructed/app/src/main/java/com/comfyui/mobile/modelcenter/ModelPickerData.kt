@@ -37,6 +37,13 @@ internal class ModelPickerData(application: Application, private val bridge: Com
     private fun repository(server: ServerProfile) = LocalModelRepository(
         directory, "${server.effectiveId}|${server.baseUrl}", server.baseUrl, bridge.hostAwareCallFactory)
 
+    /** The Agent's LoRA tools for [server]; [identity] matches the Model Center cache of that server. */
+    fun loraLibrary(server: ServerProfile, identity: String): com.comfyui.mobile.agent.AgentLoraLibrary =
+        ModelCenterLoraLibrary(directory, identity, server.baseUrl, bridge.hostAwareCallFactory) {
+            updateTransport()
+            phone
+        }
+
     suspend fun decorate(server: ServerProfile, page: RhResourcePageData): RhResourcePageData =
         withContext(Dispatchers.IO) {
             updateTransport()

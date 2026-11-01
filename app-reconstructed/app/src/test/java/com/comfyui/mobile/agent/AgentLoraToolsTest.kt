@@ -53,11 +53,14 @@ class AgentLoraToolsTest {
         assertNull(AgentLoraCatalog.resolve("nope", options, catalog))
     }
 
-    @Test fun loraToolsOnlyAppearWhenTheWorkflowHasASlot() {
+    @Test fun setLoraNeedsAWorkflowSlotWhileBrowsingOnlyNeedsTheCatalog() {
         val names = AgentDrawToolbox(snapshot(), loras = catalog).definitions.map { it.function.name }
-        assertTrue(AgentDrawToolbox.LIST_LORAS in names && AgentDrawToolbox.SET_LORA in names)
+        assertTrue(AgentDrawToolbox.LIST_LORAS in names && AgentDrawToolbox.SET_LORA in names && AgentDrawToolbox.READ_LORA in names)
+        assertFalse(AgentDrawToolbox.ANNOTATE_LORA in names) // writing needs the live model-center library
         val plain = AgentWorkflowSnapshot(workflow(), listOf(AgentFieldSpec("3", "steps", "KSampler", AgentFieldKind.INTEGER)))
-        assertFalse(AgentDrawToolbox(plain, loras = catalog).definitions.any { it.function.name == AgentDrawToolbox.LIST_LORAS })
+        val browsing = AgentDrawToolbox(plain, loras = catalog).definitions.map { it.function.name }
+        assertTrue(AgentDrawToolbox.LIST_LORAS in browsing && AgentDrawToolbox.SET_LORA !in browsing)
+        assertFalse(AgentDrawToolbox(plain).definitions.any { it.function.name == AgentDrawToolbox.LIST_LORAS })
     }
 
     @Test fun listShowsSlotsAndAnnotatedLoras() = runBlocking {

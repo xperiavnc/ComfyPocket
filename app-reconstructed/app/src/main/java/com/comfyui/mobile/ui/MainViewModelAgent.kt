@@ -1226,13 +1226,26 @@ object MainViewModelAgent {
             runCatching {
                 val id = vm._currentServerId.value
                 val server = vm._servers.value.firstOrNull { it.effectiveId == id || it.id == id }
-                val cache = com.comfyui.mobile.modelcenter.LocalModelCache(
+                com.comfyui.mobile.modelcenter.ModelCenterLoraLibrary.cached(
                     java.io.File(vm.getApplication<android.app.Application>().filesDir, "local-model-cache-v1"),
                     "$id|${server?.baseUrl.orEmpty()}")
-                val snapshot = cache.load()
-                com.comfyui.mobile.agent.AgentLoraCatalog.from(snapshot.items, snapshot.phoneSources)
             }.getOrDefault(emptyList())
         }
+
+    /** The Agent's live LoRA library for this turn; tells the user whenever the Agent writes a note. */
+    private fun agentLoraLibrary(vm: MainViewModel): com.comfyui.mobile.agent.AgentLoraLibrary? {
+        val base = vm.agentLoraLibrary() ?: return null
+        return object : com.comfyui.mobile.agent.AgentLoraLibrary by base {
+            override suspend fun annotate(
+                item: com.comfyui.mobile.agent.AgentLoraInfo, note: com.comfyui.mobile.agent.AgentLoraNote
+            ): com.comfyui.mobile.agent.AgentLoraAnnotated = base.annotate(item, note).also { result ->
+                if (result.applied.isNotEmpty()) withContext(Dispatchers.Main) {
+                    vm.showToast("Agent 已写入 LoRA 笔记：${result.info.name}")
+                    vm.addLog("Agent 已更新 LoRA「${result.info.name}」的标注：" + result.applied.joinToString("、"), LogType.INFO)
+                }
+            }
+        }
+    }
 
     internal suspend fun expandPromptWithLlm(
         vm: MainViewModel,
@@ -1408,7 +1421,7 @@ object MainViewModelAgent {
                                         }
                                     }
                                 }
-                            })
+                            }, loraLibrary = agentLoraLibrary(vm))
                     }
                 }
             } else null
@@ -1429,7 +1442,8 @@ object MainViewModelAgent {
                         if (index + 1 + historyCount == currentRequestIndex) imageDataUrls else emptyList())
                 }, settings.generationLimits, defaultHistoryMessages = 4,
                 reservedInputTokens = com.comfyui.mobile.agent.AgentInteractionProtocol.contextReserve(finalSystem, decisionSystem) +
-                    toolReserve)
+                    toolReserve,
+                growthHeadroom = if (toolbox != null) com.comfyui.mobile.agent.AgentContextBudget.TOOL_GROWTH else 0)
             messages.clear()
             messages.addAll(selection.messages.map { it.message })
             vm.addLog("Agent 上下文：保守估算 ${selection.estimatedInputTokens} tokens，裁剪 ${selection.removedMessages} 条历史", LogType.INFO)
@@ -1451,7 +1465,7 @@ object MainViewModelAgent {
             val outcome = toolbox?.let {
                 try {
                     vm.agentRuntime.runTools(requestId, settings, messages, imageMessages, it, streaming,
-                        checkCurrent, relay, validate)
+                        checkCurrent, relay, validate, historyCount = selection.keptHistory)
                 } catch (e: com.comfyui.mobile.data.LlmException) {
                     if (!com.comfyui.mobile.agent.AgentInteractionLoop.explicitlyRejectsTools(e)) throw e
                     // The service refuses native tools: remember that and run the compatible flow instead.
@@ -1460,7 +1474,8 @@ object MainViewModelAgent {
                     null
                 }
             } ?: vm.agentRuntime.interact(requestId, settings, messages, imageMessages, decisionSystem,
-                streaming = streaming, checkCurrent = checkCurrent, progress = relay, validate = validate)
+                streaming = streaming, checkCurrent = checkCurrent, progress = relay, validate = validate,
+                historyCount = selection.keptHistory)
             checkCurrent()
             val output = outcome.output
             val parsed = outcome.question ?: parseAgentLlmReply(vm, checkNotNull(output).content, output.reasoning,
