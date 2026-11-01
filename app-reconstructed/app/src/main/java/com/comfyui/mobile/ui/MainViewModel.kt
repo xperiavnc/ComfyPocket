@@ -1149,6 +1149,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
     override fun localModelImageLoader() = modelPickerData.value.imageLoader()
     override fun localModelImageRequest(url: String) = modelPickerData.value.imageRequest(url)
 
+    /** Live model-center LoRA access for the Agent; null while the current computer is offline or cloud-only. */
+    internal fun agentLoraLibrary(): com.comfyui.mobile.agent.AgentLoraLibrary? {
+        val id = _currentServerId.value
+        val server = _servers.value.firstOrNull { it.effectiveId == id || it.id == id } ?: return null
+        if (server.isRunningHub || connectionState.value != ConnectionState.CONNECTED) return null
+        return modelPickerData.value.loraLibrary(server, "$id|${server.baseUrl}")
+    }
+
     fun fetchAssetsSummary() {
         val server = currentServerProfile()
         if (server?.isRunningHub == true) return
