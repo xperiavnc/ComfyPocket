@@ -60,12 +60,8 @@ android {
             pocketSigning?.let { signingConfig = it }
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            isMinifyEnabled = false
+            isShrinkResources = false
             // Use the local release key when configured; otherwise keep the
             // release artifact installable with the standard debug key.
             signingConfig = pocketSigning ?: signingConfigs.getByName("debug")
