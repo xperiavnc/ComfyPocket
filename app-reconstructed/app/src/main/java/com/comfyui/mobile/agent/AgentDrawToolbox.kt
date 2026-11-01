@@ -213,7 +213,10 @@ class AgentDrawToolbox(
         val disable = requested.isBlank() || requested.equals("none", ignoreCase = true) || strength == 0.0
         if (disable) {
             if (slot.strengthKeys.isEmpty()) return AgentToolResult(false, error = "这个槽位没有可修改的强度字段，无法停用；可以换成别的 LoRA")
-            return stage(slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, 0.0) }, "已暂存：停用 ${slot.id}")
+            // Strength 0 alone still leaves the file name, which ComfyUI validates against its list.
+            val none = slot.options.firstOrNull { it.equals("None", ignoreCase = true) }
+            return stage(listOfNotNull(none?.let { AgentFieldChange(slot.nodeId, slot.nameKey, it) }) +
+                slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, 0.0) }, "已暂存：停用 ${slot.id}")
         }
         val file = AgentLoraCatalog.resolve(requested, slot.options, loras)
             ?: return AgentToolResult(false, error = "服务器上没有 LoRA「$requested」。先用 list_loras 检索，再填返回的 file")

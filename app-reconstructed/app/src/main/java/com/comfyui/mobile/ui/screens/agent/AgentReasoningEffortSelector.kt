@@ -29,10 +29,5 @@ internal fun AgentReasoningEffortSelector(
                 AgentChoiceChip(effort.label, effort == value) { onChange(effort) }
             }
         }
-        Text(
-            "聊天和画图共用。可选档位以模型服务商支持情况为准。",
-            fontSize = 12.sp,
-            color = scheme.onSurfaceVariantSummary
-        )
     }
 }

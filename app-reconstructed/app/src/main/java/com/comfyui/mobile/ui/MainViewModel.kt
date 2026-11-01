@@ -2848,6 +2848,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
 
     internal val _agentPromptSettings = MutableStateFlow(com.comfyui.mobile.agent.AgentPromptSettingsStore(prefs).load())
     val agentPromptSettings = _agentPromptSettings.asStateFlow()
+
+    private val agentProxyStore by lazy {
+        com.comfyui.mobile.agent.AgentProxySettingsStore(prefs, com.comfyui.mobile.data.SecretStore.get(application))
+    }
+    private val _agentProxySettings = MutableStateFlow(
+        runCatching { agentProxyStore.load() }.getOrDefault(com.comfyui.mobile.agent.AgentProxySettings())
+    )
+    val agentProxySettings: StateFlow<com.comfyui.mobile.agent.AgentProxySettings> = _agentProxySettings.asStateFlow()
+
+    init {
+        // A stored proxy that no longer validates falls back to the default route instead of crashing.
+        runCatching { llmClient.applyProxy(_agentProxySettings.value) }
+    }
+
+    /** Validates, saves and immediately applies the Agent API proxy. Returns an error message or null. */
+    fun saveAgentProxySettings(value: com.comfyui.mobile.agent.AgentProxySettings): String? = runCatching {
+        val saved = agentProxyStore.save(value)
+        llmClient.applyProxy(saved)
+        _agentProxySettings.value = saved
+        showToast(if (saved.enabled) "已保存，Agent 请求将通过代理 ${saved.label()}" else "已关闭 Agent 代理")
+    }.exceptionOrNull()?.let { it.message ?: "保存代理设置失败，请重试" }
     internal val localTagLibrary = com.comfyui.mobile.taglib.LocalTagLibrary(application)
     val localTagLibraryState = localTagLibrary.store.state
 
@@ -3159,6 +3180,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
      * Used by Agent so chat can show real success/failure.
      */
     suspend fun enqueueCurrentWorkflowAwait(batchCount: Int = 1, turnId: String = java.util.UUID.randomUUID().toString()): Result<String> {
+        val first = enqueueCurrentWorkflowOnce(batchCount, turnId)
+        val message = first.exceptionOrNull()?.message.orEmpty()
+        // The cached object_info can be older than the server's file list (a LoRA swapped by hand
+        // on the PC). Refresh once, let the LoRA clean-up see the real list, and resend.
+        if (first.isSuccess || currentServerProfile()?.isRunningHub == true ||
+            !(message.contains("value_not_in_list") || message.contains("取值不在可选列表中") ||
+                message.contains("not in (list", ignoreCase = true))) return first
+        val sid = _currentServerId.value
+        val fresh = repository.getObjectInfo(force = true) ?: return first
+        if (_currentServerId.value != sid) return first
+        _objectInfo.value = fresh
+        agentWorkflow?.let { MainViewModelAgent.parseAgentEditableNodes(this, it) }
+        addLog("Agent：服务器模型列表已变化，已刷新后重新提交", LogType.WARNING)
+        return enqueueCurrentWorkflowOnce(batchCount, turnId)
+    }
+
+    private suspend fun enqueueCurrentWorkflowOnce(batchCount: Int, turnId: String): Result<String> {
         if (isSending) {
             return Result.failure(IllegalStateException("正在发送中，请稍候再试"))
         }
@@ -3175,7 +3213,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 val normalized = com.comfyui.mobile.workflow.WorkflowGraph.normalizeLoraFilePaths(
                     overridden, _objectInfo.value
                 )
-                sanitizeNumbers(normalized) as Map<String, Any>
+                val (present, cleared) = com.comfyui.mobile.workflow.WorkflowGraph.clearMissingLoras(
+                    normalized, _objectInfo.value
+                )
+                if (cleared.isNotEmpty()) {
+                    addLog("Agent：服务器上已没有这些 LoRA，本次改为 None 提交：${cleared.joinToString("；")}", LogType.WARNING)
+                    showToast("有 ${cleared.size} 个 LoRA 已不在服务器上，本次已停用")
+                }
+                sanitizeNumbers(present) as Map<String, Any>
             }
             if (baseWorkflow == null) {
                 addLog("Agent/提交失败: agentWorkflow 为空", LogType.ERROR)

@@ -83,8 +83,7 @@ internal fun AgentLocalTagSettings(
             when {
                 libraryState.checking -> Text("正在检查本地资源…", style = MiuixTheme.textStyles.footnote1)
                 libraryState.busy -> Text(libraryState.operation, style = MiuixTheme.textStyles.footnote1, color = scheme.primary)
-                info == null -> Text("按需导入标签与角色词库，支持中文、英文和别名离线查词。",
-                    style = MiuixTheme.textStyles.body2, color = scheme.onSurfaceVariantSummary)
+                info == null -> Unit
                 else -> {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
                         Column(Modifier.weight(1f)) {
@@ -99,7 +98,6 @@ internal fun AgentLocalTagSettings(
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f).padding(end = 12.dp)) {
                             Text("绘图前查词", style = MiuixTheme.textStyles.body1)
-                            Text("修改后立即保存", style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
                         }
                         Switch(settings.useLocalLibrary, onCheckedChange = { onSave(settings.copy(useLocalLibrary = it)) },
                             enabled = ready, modifier = Modifier.testTag("agent-local-tags-enabled"))
@@ -130,8 +128,6 @@ internal fun AgentLocalTagSettings(
                     if (status.isNotEmpty()) Text(status, style = MiuixTheme.textStyles.footnote1,
                         color = scheme.onSurfaceVariantSummary)
                     if (results.isNotEmpty()) {
-                        Text("长按文字可自由选取；也可分别复制标签和中文。",
-                            style = MiuixTheme.textStyles.footnote2, color = scheme.onSurfaceVariantSummary)
                         Column(
                             Modifier.fillMaxWidth().heightIn(max = 240.dp).verticalScroll(rememberScrollState()),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
