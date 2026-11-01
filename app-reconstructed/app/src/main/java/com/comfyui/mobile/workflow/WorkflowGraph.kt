@@ -11,6 +11,58 @@ import com.comfyui.mobile.model.isStrengthKey
  */
 internal object WorkflowGraph {
     private val EASY_LORA_STACK_SLOT_KEY = Regex("^lora_(\\d+)_(name|strength|model_strength|clip_strength)$")
+    private val LORA_FILE_KEY = Regex("(?i)^lora(?:_\\d+)?(?:_name)?$")
+
+    /**
+     * ComfyUI's LoRA combo values use forward-slash paths even on Windows. A workflow
+     * manually edited on the phone/PC can contain the equivalent backslash path, which
+     * passes local display/editing but fails server-side `value_not_in_list` validation.
+     * Only LoRA filename fields are normalized; prompt text and unrelated strings stay intact.
+     */
+    internal fun normalizeLoraFilePaths(
+        workflow: Map<String, Any>,
+        objectInfo: Map<String, Any> = emptyMap()
+    ): Map<String, Any> {
+        var changed = false
+        val graph = LinkedHashMap<String, Any>(workflow.size)
+        for ((nodeId, rawNode) in workflow) {
+            val node = rawNode as? Map<*, *>
+            val classType = node?.get("class_type") as? String
+            val rawInputs = node?.get("inputs") as? Map<*, *>
+            if (node == null || rawInputs == null || !classType.orEmpty().contains("lora", ignoreCase = true)) {
+                graph[nodeId] = rawNode
+                continue
+            }
+            var inputsChanged = false
+            val inputs = LinkedHashMap<String, Any?>(rawInputs.size)
+            for ((keyAny, value) in rawInputs) {
+                val key = keyAny?.toString().orEmpty()
+                val normalized = if (value is String && LORA_FILE_KEY.matches(key)) {
+                    val canonical = value.replace('\\', '/')
+                    val options = WorkflowOptionParser.getComboOptions(objectInfo, classType.orEmpty(), key)
+                    options?.firstOrNull { canonicalLoraKey(it) == canonicalLoraKey(canonical) } ?: canonical
+                } else value
+                if (normalized != value) {
+                    inputsChanged = true
+                    changed = true
+                }
+                inputs[key] = normalized
+            }
+            if (!inputsChanged) {
+                graph[nodeId] = rawNode
+                continue
+            }
+            val updatedNode = LinkedHashMap<String, Any?>(node.size)
+            for ((keyAny, value) in node) updatedNode[keyAny?.toString().orEmpty()] = value
+            updatedNode["inputs"] = inputs
+            graph[nodeId] = updatedNode
+        }
+        @Suppress("UNCHECKED_CAST")
+        return if (changed) graph as Map<String, Any> else workflow
+    }
+
+    private fun canonicalLoraKey(value: String): String =
+        value.trim().replace('\\', '/').replace(Regex("/+"), "/").lowercase()
 
     internal fun sanitizeNumbers(value: Any?, keyHint: String? = null): Any? {
         val floatKeys = setOf(
@@ -306,7 +358,9 @@ internal object WorkflowGraph {
                            val options = getComboOptions(classType, key)?.distinct()
                            val mergedOptions = if (!options.isNullOrEmpty()) {
                                val currentValue = value.trim()
-                               if (currentValue.isNotBlank() && !options.contains(currentValue)) {
+                               val equivalentOption = LORA_FILE_KEY.matches(key) &&
+                                   options.any { canonicalLoraKey(it) == canonicalLoraKey(currentValue) }
+                               if (currentValue.isNotBlank() && !options.contains(currentValue) && !equivalentOption) {
                                    listOf(currentValue) + options
                                } else {
                                    options

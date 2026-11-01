@@ -74,6 +74,48 @@ class WorkflowGraphTest {
         assertFalse(parsed.filterIsInstance<EditableNode.BooleanInput>().single().isVisible)
     }
 
+    @Test fun loraPathsUseComfyUiForwardSlashCanonicalForm() {
+        val graph = linkedMapOf<String, Any>(
+            "1" to node("easy loraStack", mapOf(
+                "lora_1_name" to "Animal\\add_detail.safetensors",
+                "lora_1_strength" to 0.6,
+                "note" to "keep\\this\\text"
+            )),
+            "2" to node("Text", mapOf("text" to "Animal\\keep_this_text")))
+        val normalized = WorkflowGraph.normalizeLoraFilePaths(graph)
+        val loraInputs = (normalized["1"] as Map<*, *>)["inputs"] as Map<*, *>
+        assertEquals("Animal/add_detail.safetensors", loraInputs["lora_1_name"])
+        assertEquals("keep\\this\\text", loraInputs["note"])
+        val otherInputs = (normalized["2"] as Map<*, *>)["inputs"] as Map<*, *>
+        assertEquals("Animal\\keep_this_text", otherInputs["text"])
+        val originalInputs = (graph["1"] as Map<*, *>)["inputs"] as Map<*, *>
+        assertEquals("Animal\\add_detail.safetensors", originalInputs["lora_1_name"])
+    }
+
+    @Test fun loraPathMatchesServerComboOptionAfterManualWindowsEdit() {
+        val graph = linkedMapOf<String, Any>(
+            "1" to node("easy loraStack", mapOf(
+                "lora_2_name" to "Animal\\add_detail.safetensors",
+                "lora_2_strength" to 0.6)))
+        val objectInfo = mapOf("easy loraStack" to mapOf("input" to mapOf(
+            "required" to mapOf(
+                "lora_2_name" to listOf(listOf("Animal/add_detail.safetensors", "style/other.safetensors"))))))
+        val normalized = WorkflowGraph.normalizeLoraFilePaths(graph, objectInfo)
+        val inputs = (normalized["1"] as Map<*, *>)["inputs"] as Map<*, *>
+        assertEquals("Animal/add_detail.safetensors", inputs["lora_2_name"])
+    }
+
+    @Test fun parserDoesNotPromoteBackslashLoraAliasOverServerOption() {
+        val graph = mapOf("1" to node("easy loraStack", mapOf(
+            "lora_1_name" to "Animal\\add_detail.safetensors")))
+        val objectInfo = mapOf("easy loraStack" to mapOf("input" to mapOf(
+            "required" to mapOf(
+                "lora_1_name" to listOf(listOf("Animal/add_detail.safetensors"))))))
+        val field = WorkflowGraph.parseWorkflowNodes(graph, objectInfo, emptyMap(), emptyMap())
+            .filterIsInstance<EditableNode.TextInput>().single()
+        assertEquals(listOf("Animal/add_detail.safetensors"), field.options)
+    }
+
     @Test fun imageVideoAndAudioInputsRetainTheirUploadKeys() {
         val graph = linkedMapOf(
             "1" to node("LoadImage", mapOf("image" to "a.png", "subfolder" to "uploads")),

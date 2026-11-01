@@ -3169,7 +3169,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
                 .removeSuffix(".JSON")
             val baseWorkflow = agentWorkflow?.let {
                 val (overridden, _) = applyParamOverridesToWorkflow(it, agentWorkflowParamValues)
-                sanitizeNumbers(overridden) as Map<String, Any>
+                // ComfyUI validates LoRA combo values with forward-slash paths. A workflow
+                // edited on Windows may contain the equivalent backslash path and fail at
+                // /prompt even though it points to the same file.
+                val normalized = com.comfyui.mobile.workflow.WorkflowGraph.normalizeLoraFilePaths(
+                    overridden, _objectInfo.value
+                )
+                sanitizeNumbers(normalized) as Map<String, Any>
             }
             if (baseWorkflow == null) {
                 addLog("Agent/提交失败: agentWorkflow 为空", LogType.ERROR)
