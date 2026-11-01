@@ -60,8 +60,15 @@ android {
             pocketSigning?.let { signingConfig = it }
         }
         release {
-            isMinifyEnabled = false
-            pocketSigning?.let { signingConfig = it }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+            // Use the local release key when configured; otherwise keep the
+            // release artifact installable with the standard debug key.
+            signingConfig = pocketSigning ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -149,8 +156,16 @@ dependencies {
 val exportComfyPocketDebugApk by tasks.registering(Copy::class) {
     from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
     into(layout.buildDirectory.dir("outputs/ComfyPocket"))
+    rename { "ComfyPocket-${android.defaultConfig.versionName}-debug.apk" }
+}
+val exportComfyPocketReleaseApk by tasks.registering(Copy::class) {
+    from(layout.buildDirectory.file("outputs/apk/release/app-release.apk"))
+    into(layout.buildDirectory.dir("outputs/ComfyPocket"))
     rename { "ComfyPocket-${android.defaultConfig.versionName}.apk" }
 }
 tasks.matching { it.name == "assembleDebug" }.configureEach {
     finalizedBy(exportComfyPocketDebugApk)
+}
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(exportComfyPocketReleaseApk)
 }
