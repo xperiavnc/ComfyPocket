@@ -179,6 +179,10 @@ object AgentCharacterPolicy {
     private val exclusionPrefix = Regex(
         """(?i)(?:(?:不要|不用|别|不再)(?:再)?(?:穿|画|用|使用|加|追加|带)?|不画|不穿|不使用|去掉|移除|排除|without|except|(?:not|don't|do\s+not)(?:\s+(?:draw|use|wear|wearing|add))?)\s*$""")
 
+    private val removalSuffix = Regex(
+        """^(?:这个角色|角色|本人|相关(?:的)?(?:内容|元素|设定|特征|东西|标签|tag)?)?\s*(?:的?(?:全部|所有|都|也|一并|整个|统统|全))?\s*(?:给我)?\s*(?:去掉|删掉|删除|撤掉|撤下|撤了|拿掉|移除|换掉|不要了|不画了|别画了?)(?=$|[\s，,。.;；!！~～、]|吧|了|呢|啊)""",
+        RegexOption.IGNORE_CASE)
+
     private fun normalized(value: String) = Normalizer.normalize(value, Normalizer.Form.NFKC)
         .lowercase(Locale.ROOT).replace('_', ' ').replace(Regex("""\s+"""), " ").trim()
 
@@ -213,8 +217,10 @@ object AgentCharacterPolicy {
         return exclusionPrefix.containsMatchIn(value.substring(maxOf(0, range.first - 16), range.first))
     }
     private fun excludedName(text: String, range: IntRange, lore: CharacterLore): Boolean {
-        if (!excluded(text, range)) return false
         val tail = normalized(text).substring(range.last + 1).trimStart()
+        // "小黑相关全部撤掉" / "把小黑去掉" remove the character itself; "小黑的衣服去掉" does not match.
+        if (removalSuffix.containsMatchIn(tail)) return true
+        if (!excluded(text, range)) return false
         // "不要星澜的冬装" excludes the outfit, not the character.
         if (tail.startsWith("的")) {
             val possessed = tail.drop(1)
@@ -421,7 +427,8 @@ object AgentCharacterPolicy {
         })
     }
 
-    private fun completeCharacter(reply: AgentReply, context: AgentCharacterContext, userText: String): AgentReply {
+    private fun completeCharacter(reply: AgentReply, resolved: AgentCharacterContext, userText: String): AgentReply {
+        var context = resolved
         if (reply.clarification != null) {
             return reply.copy(
                 prompt = "",
@@ -467,8 +474,22 @@ object AgentCharacterPolicy {
         }
         var added = 0
         var removed = 0
+        // The model put a carried-over character's own drawing words into the negative prompt:
+        // it is deliberately removing that character, so completing them back in would only
+        // produce a positive/negative conflict. Explicitly named characters still fail closed.
+        val negativeKeys = cleanNegative?.let { negative -> pieces(negative).map(::tagKey).toSet() }.orEmpty()
+        val dropped = context.characters.filter { item ->
+            val words = profileWords(item).map(::tagKey).distinct()
+            val negated = words.count { it in negativeKeys }
+            negated > 0 && (!explicit(userText, item.lore) || (negated >= 2 && negated * 2 >= words.size))
+        }
+        if (dropped.isNotEmpty()) context = context.copy(
+            characters = context.characters - dropped.toSet())
+        val droppedNote = dropped.takeIf { it.isNotEmpty() }?.joinToString("、") { it.lore.name }
+            ?.let { "已按反向提示词撤下 $it，不再补齐其触发词" }
         if (context.characters.isEmpty()) {
             val status = listOfNotNull(
+                droppedNote,
                 removedDialogueTerms.takeIf { it > 0 }?.let { "已从正反向提示词移除 $it 项角色对话识别词" }
             ).joinToString("；").ifBlank { null }
             return reply.copy(prompt = prompt, negativePrompt = cleanNegative,
@@ -508,6 +529,7 @@ object AgentCharacterPolicy {
             if (added > 0) append("；补齐 $added 项触发词")
             if (removed > 0) append("；移除 $removed 项旧服装词")
             if (removedDialogueTerms > 0) append("；过滤 $removedDialogueTerms 项角色对话识别词")
+            droppedNote?.let { append("；$it") }
             if (context.characters.size > 1) append("；多人按角色提供，不全局拼词")
             else append("；档案绘画词已核对")
         }
