@@ -38,12 +38,18 @@ internal class ModelCenterLoraLibrary(
             note = try {
                 var scan = repo.scan("start")
                 val started = System.currentTimeMillis()
-                while (scan.active && System.currentTimeMillis() - started < SCAN_WAIT_MS) {
+                // The file list is complete once "scanning" ends; hashing new files continues in the background.
+                while (scan.status == "scanning" && System.currentTimeMillis() - started < SCAN_WAIT_MS) {
                     delay(SCAN_POLL_MS)
                     scan = repo.tasks().scan
                 }
-                if (scan.active) "电脑仍在扫描（已发现 ${scan.discovered} 个文件），稍后可再刷新一次"
-                else "已重新扫描电脑上的模型文件夹"
+                when (scan.status) {
+                    "scanning" -> "电脑仍在扫描（已发现 ${scan.discovered} 个文件），稍后可再刷新一次"
+                    "hashing" -> "电脑已列出模型文件；新文件的校验值还在后台计算，算完才能匹配来源简介和来源触发词"
+                    "failed" -> "电脑扫描失败（${scan.message.ifBlank { "请检查模型目录权限" }}），下面是现有索引"
+                    "paused", "cancelled" -> "电脑上的扫描被暂停或取消，下面是现有索引"
+                    else -> "已重新扫描电脑上的模型文件夹"
+                }
             } catch (cancelled: CancellationException) { throw cancelled
             } catch (error: Exception) { "没能启动扫描（${error.message ?: "未知错误"}），下面是现有索引" }
         }
@@ -110,7 +116,10 @@ internal class ModelCenterLoraLibrary(
     private suspend fun fresh(item: AgentLoraInfo): LocalModel {
         check(item.id.isNotBlank()) { "「${item.name}」还没有进入电脑的模型索引，先调用 refresh_loras" }
         val capabilities = repo.capabilities()
-        val latest = repo.detail(item.id)
+        val latest = try { repo.detail(item.id) } catch (missing: IllegalStateException) {
+            if (missing is CancellationException || missing.message?.contains("模型位置不存在") != true) throw missing
+            error("电脑的模型索引里已经没有「${item.name}」（文件可能被移动、改名或删除），请先调用 refresh_loras")
+        }
         check(latest.serverId.isBlank() || latest.serverId == capabilities.serverId) { "模型资料库已更换，请先调用 refresh_loras" }
         check(latest.present) { "电脑上已经没有「${item.name}」，请先调用 refresh_loras" }
         return latest

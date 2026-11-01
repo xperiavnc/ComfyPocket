@@ -116,7 +116,7 @@ class AgentDrawToolbox(
         val live: List<ChatToolDefinition> = if (loraLibrary == null) emptyList() else listOf(
             tool(REFRESH_LORAS, "重新读取电脑上的 LoRA 列表，报告新增和移除的文件。用户说刚放了新 LoRA，或要找的 LoRA 不在列表里时使用。",
                 obj(mapOf("rescan" to mapOf("type" to "boolean", "description" to "true 时先让电脑重新扫描模型文件夹（较慢，最多等约 45 秒）")))),
-            tool(ANNOTATE_LORA, "把你对一个 LoRA 的理解写进模型中心的标注，供以后的新会话检索和使用。notes 会替换你上次写的笔记，不动用户自己的备注；其余字段只在用户没填、没锁定时补上，绝不覆盖用户内容。只写从简介、触发词、用户说明或出图结果确认过的事实。",
+            tool(ANNOTATE_LORA, "把你对一个 LoRA 的理解写进模型中心的标注，供以后的新会话检索和使用。notes 会替换你上次写的笔记，不动用户自己的备注；其余字段只在用户没填、没锁定、也没在模型中心确认过分类时补上，绝不覆盖用户内容；补上的内容在模型中心显示为「AI 建议待确认」。只写从简介、触发词、用户说明或出图结果确认过的事实。",
                 obj(mapOf(
                     "lora" to text("list_loras 返回的 file 或 name"),
                     "notes" to text("你的笔记：用途、效果、推荐强度、搭配和注意事项，几句话，不超过 ${AgentLoraCatalog.MAX_AGENT_NOTES} 字；空字符串表示清除你的笔记"),
@@ -402,6 +402,13 @@ class AgentDrawToolbox(
             outfit = AgentInteractionProtocol.string(arguments, "outfit"),
             baseModel = AgentInteractionProtocol.string(arguments, "base_model"),
             triggerWords = strings(arguments["trigger_words"]).take(MAX_TAGS), preferredStrength = strength)
+        // Field limits of the Bridge's validate_annotation (ComfyUI-Mobile-Bridge/model_index.py).
+        val overLimit = listOfNotNull(
+            "character".takeIf { note.character.length > 500 }, "outfit".takeIf { note.outfit.length > 500 },
+            "base_model".takeIf { note.baseModel.length > 200 }, "tags".takeIf { note.tags.any { it.length > 200 } },
+            "trigger_words".takeIf { note.triggerWords.any { it.length > 2000 } })
+        if (overLimit.isNotEmpty()) return AgentToolResult(false, error = overLimit.joinToString("、") +
+            " 过长：角色和服装不超过 500 字，底模不超过 200 字，单个标签不超过 200 字")
         if (note == AgentLoraNote()) return AgentToolResult(false, error = "没有要写入的内容：至少给 notes 或一个标注字段")
         ensureFresh()
         val found = findLora(requested)
