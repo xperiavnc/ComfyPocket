@@ -688,6 +688,12 @@ object MainViewModelAgent {
     }
 
     fun saveCharacterLore(vm: MainViewModel, lore: CharacterLore) {
+        val error = storeCharacterLore(vm, lore)
+        vm.showToast(error ?: "已保存角色与服装：${lore.name.trim()}")
+    }
+
+    /** Validates and persists one profile; returns the reason it was rejected, or null when saved. */
+    internal fun storeCharacterLore(vm: MainViewModel, lore: CharacterLore): String? {
         val clean = lore.copy(
             name = lore.name.trim(), triggerWords = lore.triggerWords.trim(),
             aliases = lore.aliases.orEmpty().map(String::trim).filter(String::isNotBlank).distinct(),
@@ -701,34 +707,36 @@ object MainViewModelAgent {
                 )
             }
         )
-        if (clean.name.isBlank() || clean.triggerWords.isBlank()) {
-            vm.showToast("请填写角色对话识别名称与绘画外貌参考")
-            return
-        }
+        if (clean.name.isBlank() || clean.triggerWords.isBlank())
+            return "请填写角色对话识别名称与绘画外貌参考"
         val list = vm._characterLores.value.toMutableList()
-        if (list.any { it.id != clean.id && it.name.equals(clean.name, ignoreCase = true) }) {
-            vm.showToast("角色名已存在，请使用不同名称")
-            return
-        }
+        if (list.any { it.id != clean.id && it.name.equals(clean.name, ignoreCase = true) })
+            return "角色名已存在，请使用不同名称"
         if (clean.outfits.orEmpty().any { it.name.isBlank() || it.triggerWords.isBlank() } ||
             clean.outfits.orEmpty().map { it.name.lowercase(java.util.Locale.ROOT) }.distinct().size != clean.outfits.orEmpty().size
-        ) {
-            vm.showToast("请填写完整服装预设名称与绘画标签，且名称不要重复")
-            return
-        }
+        ) return "请填写完整服装预设名称与绘画标签，且名称不要重复"
         val duplicateOutfitTerms = com.comfyui.mobile.agent.AgentCharacterPolicy
             .duplicateOutfitDialogueTriggers(clean.outfits.orEmpty())
-        if (duplicateOutfitTerms.isNotEmpty()) {
-            vm.showToast("服装对话触发词重复：${duplicateOutfitTerms.joinToString("、")}")
-            return
-        }
+        if (duplicateOutfitTerms.isNotEmpty())
+            return "服装对话触发词重复：${duplicateOutfitTerms.joinToString("、")}"
         val target = clean.copy(defaultOutfitId = clean.defaultOutfitId
             ?.takeIf { id -> clean.outfits.orEmpty().any { it.id == id } })
         val index = list.indexOfFirst { it.id == target.id }
         if (index < 0) list.add(0, target) else list[index] = target
         persistCharacterLores(vm, list)
         vm._characterLores.value = list
-        vm.showToast("已保存角色与服装：${target.name}")
+        return null
+    }
+
+    /** The 画风 / 画师 text field shown in the style settings (explicit binding, else the title guess). */
+    internal fun agentStyleNode(vm: MainViewModel): EditableNode.TextInput? {
+        val texts = vm._agentEditableNodes.value.filterIsInstance<EditableNode.TextInput>()
+        val bound = vm._agentArtistNodeId.value
+        if (bound.isNotBlank()) return texts.firstOrNull { it.nodeId == bound }
+        return texts.filter { it.nodeId != vm._agentTargetNodeId.value && it.options.isNullOrEmpty() }.firstOrNull {
+            val t = it.title.lowercase()
+            t.contains("画师") || t.contains("artist") || t.contains("style") || t.contains("风格")
+        }
     }
 
     fun removeCharacterLore(vm: MainViewModel, id: String) {
@@ -1385,10 +1393,22 @@ object MainViewModelAgent {
                             com.comfyui.mobile.agent.AgentLoraCatalog.slots(graph) { _, _ -> emptyList() }
                                 .flatMap { slot -> listOf(slot.id) + slot.strengthKeys.map { "${slot.nodeId}:$it" } }
                         }.orEmpty()
-                        vm.agentRuntime.workflowSnapshot(emptyList(), loraFields)
-                    }.getOrNull()?.let { snapshot ->
+                        val style = agentStyleNode(vm)?.let { "${it.nodeId}:${it.key}" }
+                        vm.agentRuntime.workflowSnapshot(emptyList(), loraFields + listOfNotNull(style)) to style
+                    }.getOrNull()?.let { (snapshot, style) ->
                         com.comfyui.mobile.agent.AgentDrawToolbox(snapshot, vm._agentNodeTitles.value, settings.lores,
-                            if (settings.tagSettings.useLocalLibrary) vm::searchLocalTags else null, loras)
+                            if (settings.tagSettings.useLocalLibrary) vm::searchLocalTags else null, loras,
+                            styleField = style, favoriteArtists = vm._favoriteArtists.value,
+                            saveCharacter = { lore ->
+                                withContext(Dispatchers.Main) {
+                                    storeCharacterLore(vm, lore).also { error ->
+                                        if (error == null) {
+                                            vm.showToast("Agent 已保存角色到词库：${lore.name}")
+                                            vm.addLog("Agent 已写入角色档案「${lore.name}」", LogType.INFO)
+                                        }
+                                    }
+                                }
+                            })
                     }
                 }
             } else null
@@ -1446,7 +1466,7 @@ object MainViewModelAgent {
             val parsed = outcome.question ?: parseAgentLlmReply(vm, checkNotNull(output).content, output.reasoning,
                 userText = userText)
             val planned = parsed.copy(outfitSelections = parsed.outfitSelections ?: outcome.plan?.outfits?.ifEmpty { null },
-                workflowChanges = toolbox?.changes?.ifEmpty { null })
+                workflowChanges = toolbox?.changes?.ifEmpty { null }, saveDefaults = toolbox?.saveDefaults == true)
             val completed = com.comfyui.mobile.agent.AgentCharacterPolicy.complete(planned, characterContext, taskText,
                 outcome.plan?.profileOverrides.orEmpty())
             Result.success(completed.copy(

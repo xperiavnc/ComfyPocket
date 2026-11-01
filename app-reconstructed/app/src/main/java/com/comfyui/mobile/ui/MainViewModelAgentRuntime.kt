@@ -570,6 +570,12 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             check(vm._agentPromptOutput.value.positive == prompt)
         }
 
+        override suspend fun saveDefaults() = withContext(Dispatchers.Main) {
+            session.requireCurrent(turn)
+            MainViewModelAgent.saveAgentWorkflowDefaults(vm)
+            vm.addLog("Agent 已把本轮画风与辅助参数保存为工作流默认值", LogType.INFO)
+        }
+
         override suspend fun submit(): String = withContext(Dispatchers.Main) {
             session.requireCurrent(turn)
             vm.agentWorkspace.flush()
