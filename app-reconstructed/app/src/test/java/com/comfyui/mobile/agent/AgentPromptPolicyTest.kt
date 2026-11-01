@@ -82,4 +82,10 @@ class AgentPromptPolicyTest {
         assertEquals(1, Regex("<instruction>").findAll(system).count())
         assertFalse(AgentPromptPolicy.chat("").contains(rules))
     }
+
+    @Test fun removedTagsAreDeletedInsteadOfMovedIntoTheNegativePrompt() {
+        val system = AgentPromptPolicy.system("", "", emptyList())
+        assertTrue(system.contains("只从正向提示词里删除对应标签，不要把这些标签加进反向提示词"))
+        assertTrue(system.contains("反向会沿用到后续出图"))
+    }
 }

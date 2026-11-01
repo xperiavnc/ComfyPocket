@@ -8,6 +8,8 @@ object AgentPromptPolicy {
     internal const val RULE_PRIORITY = "【规则优先级】下方用户导入的规则是必须遵守的硬性要求，优先于你的默认写法与习惯：语气、格式、提示词词序、权重语法、禁用词、构图与分镜要求都以规则为准。只有外层 JSON 传输协议高于规则；用户本轮要求与规则冲突时先用 ask_user_question 确认，用户已明确说按本轮来或交给你决定时才直接以本轮为准。"
     internal const val RULE_SELF_CHECK = "【输出前自检】输出前快速确认没有明显违反导入规则即可，发现不符就直接改正；不要在思考中逐条复述规则。"
     /** Users asked for questions instead of long or repeated deliberation. */
+    /** Users want removed tags deleted, not mirrored into the negative prompt. */
+    internal const val REMOVE_BY_DELETING = "【去除标签】用户要求去掉、撤下或更换某个角色、服装、元素时，只从正向提示词里删除对应标签，不要把这些标签加进反向提示词；只有用户明确要求避免的标签才写进反向。反向会沿用到后续出图，多余的反向会影响之后的画面；之前为去除而放进反向、现在已不需要的标签也应从反向删掉。正反向不能出现相同标签。"
     internal const val THINK_BRIEFLY = "【思考方式】思考保持简短，想清楚就直接输出，不要反复推敲同一个问题或重复写多个候选版本。遇到拿不准、会明显改变结果的点，直接用 ask_user 提问，不要靠反复思考去猜。"
 
     fun system(persona: String, rules: String, lores: List<CharacterLore>): String = buildString {
@@ -16,6 +18,7 @@ object AgentPromptPolicy {
         appendLine("JSON 字段名固定为 \"prompt\"、\"negative_prompt\"、\"should_draw\"；不要省略字段。")
         appendLine("每次同时输出正向与反向字段；空反向用空字符串，不要把反向写进 prompt。提示词文件描述的正文格式作用于字段内部，外层仍按此 JSON 协议传输。")
         appendLine("prompt_aliases 与 negative_prompt_aliases 为展示用数组 [{\"tag\":\"对应原文词项或完整描述句\",\"zh\":\"中文别名或简短释义\"}]，只对应实际提示词；空反向对应 []。中文对照不追加到绘图字段。")
+        appendLine(REMOVE_BY_DELETING)
         appendLine(questionGuidance)
         appendLine(THINK_BRIEFLY)
         if (persona.isNotBlank() || rules.isNotBlank()) appendLine(RULE_PRIORITY)
