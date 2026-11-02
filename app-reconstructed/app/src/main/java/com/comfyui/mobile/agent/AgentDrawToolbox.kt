@@ -469,15 +469,23 @@ class AgentDrawToolbox(
             else -> return AgentToolResult(false, error = "negative_prompt 必须是字符串")
         }
         if (negative != null && negative.length > MAX_PROMPT) return AgentToolResult(false, error = "negative_prompt 过长")
-        if (negative != null) {
-            val conflicts = AgentNegativePromptPolicy.conflicts(positive, negative)
-            if (conflicts.isNotEmpty()) return AgentToolResult(false,
-                error = "正反向包含相同标签：${conflicts.take(8).joinToString("、")}。要去掉的标签只从正向删除，除非用户明确要避免，否则不要放进反向，然后重新调用")
-        }
+        val resolution = AgentNegativePromptPolicy.removePositiveCollisions(positive, negative)
+        val appliedNegative = negative?.let { resolution.negativePrompt }
         prompt = positive
-        negativePrompt = negative
-        return AgentToolResult(true, mapOf("summary" to "已写入提示词（${positive.length} 字符）",
-            "negative" to when (negative) { null -> "保留工作流原值"; "" -> "清空"; else -> "${negative.length} 字符" }))
+        negativePrompt = appliedNegative
+        val removedTags = resolution.removedTags
+        return AgentToolResult(true, buildMap {
+            put("summary", "已写入提示词（${positive.length} 字符）")
+            put("negative", when (appliedNegative) {
+                null -> "保留工作流原值"
+                "" -> "清空"
+                else -> "${appliedNegative.length} 字符"
+            })
+            if (removedTags.isNotEmpty()) {
+                put("warning", "已从反向提示词移除与正向重复的标签：${removedTags.joinToString("、")}；保留正向提示词并继续出图")
+                put("removed_duplicate_negative_tags", removedTags)
+            }
+        })
     }
 
     private suspend fun lookup(arguments: JsonObject): AgentToolResult {

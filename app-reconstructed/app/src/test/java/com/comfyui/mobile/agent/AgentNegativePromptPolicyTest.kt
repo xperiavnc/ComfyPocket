@@ -9,6 +9,47 @@ class AgentNegativePromptPolicyTest {
             AgentNegativePromptPolicy.conflicts("cat, (Red Eyes:1.2), rain", "blurry, red_eyes, CAT, cat"))
     }
 
+    @Test fun removesOnlyLiteralPositiveCollisionsFromNegativeAndPreservesThePositive() {
+        val resolved = AgentNegativePromptPolicy.removePositiveCollisions(
+            "cat, (Red Eyes:1.2), rain",
+            "blurry, red_eyes, CAT, extra limbs, <lora:avoid:0.7>"
+        )
+        assertEquals("blurry, extra limbs, <lora:avoid:0.7>", resolved.negativePrompt)
+        assertEquals(listOf("red_eyes", "CAT"), resolved.removedTags)
+    }
+
+    @Test fun removingEveryNegativeTagProducesAnEmptyValueWithoutAddingATemplate() {
+        val resolved = AgentNegativePromptPolicy.removePositiveCollisions("cat, red eyes", "CAT, (red_eyes:0.8), cat")
+        assertEquals("", resolved.negativePrompt)
+        assertEquals(listOf("CAT", "(red_eyes:0.8)"), resolved.removedTags)
+    }
+
+    @Test fun noCollisionsPreservesTheExactNegativeStringIncludingWhitespaceAndSyntax() {
+        val negative = "  blurry,\n<lora:avoid:0.7>， [red:blue:0.5], __custom__  "
+        val resolved = AgentNegativePromptPolicy.removePositiveCollisions("cat, rain", negative)
+        assertEquals(negative, resolved.negativePrompt)
+        assertTrue(resolved.removedTags.isEmpty())
+    }
+
+    @Test fun cleanupLeavesMalformedAndQuotedListsUntouchedRatherThanGuessing() {
+        for (negative in listOf("cat, (rain", """cat, "unfinished""", """sign reading "cat, dog" """)) {
+            val resolved = AgentNegativePromptPolicy.removePositiveCollisions("cat", negative)
+            assertEquals(negative, resolved.negativePrompt)
+            assertTrue(resolved.removedTags.isEmpty())
+        }
+        val resolved = AgentNegativePromptPolicy.removePositiveCollisions("cat, [rain)", "cat")
+        assertEquals("cat", resolved.negativePrompt)
+        assertTrue(resolved.removedTags.isEmpty())
+    }
+
+    @Test fun cleanupDoesNotInventNegativeTagsForMissingOrEmptyValues() {
+        for (negative in listOf(null, "", " \n ")) {
+            val resolved = AgentNegativePromptPolicy.removePositiveCollisions("cat", negative)
+            assertEquals(negative.orEmpty(), resolved.negativePrompt)
+            assertTrue(resolved.removedTags.isEmpty())
+        }
+    }
+
     @Test fun plainAttentionAndNewlineListsAlsoWorkWithoutRewritingOriginalPieces() {
         assertEquals(listOf("(red hair:0.8)", "blue_eyes"),
             AgentNegativePromptPolicy.conflicts("((red_hair))\nBLUE EYES", "(red hair:0.8)，blue_eyes"))

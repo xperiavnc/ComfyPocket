@@ -282,16 +282,20 @@ class AgentRuntimeIntegrationTest {
         awaitDone()
     }
 
-    @Test fun reviewOmittedNegativeChecksThePreservedAutoBoundValueBeforeApplying() {
+    @Test fun reviewOmittedNegativeCleansAnEntirelyConflictingAutoBoundValueAndStillDraws() {
         withNegativeWorkflow()
         val file = File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json")
         file.writeText(file.readText().replace("template_embedding, (blurry:1.2)", "cat"))
         responses += success("""{"action":"draw","reply":"好了","prompt":"cat","should_draw":true}""")
         vm.sendAgentMessage("画一只猫")
         awaitDone()
-        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
-        assertEquals("before", graphText())
-        assertTrue(promptBodies.isEmpty())
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("cat", graphText())
+        assertEquals("", submittedNegative())
+        assertEquals(1, promptBodies.size)
+        assertEquals("", vm.agentMessages.value.last().expandedNegativePrompt)
+        assertEquals("", vm.agentPromptOutput.value.negative)
+        assertNull(vm.agentMessages.value.last().errorMessage)
     }
 
     @Test fun reviewFailedAnswerCanRetryTheSameQuestionWithItsOriginalTask() {
@@ -1044,18 +1048,22 @@ class AgentRuntimeIntegrationTest {
             .asJsonArray.first().asJsonObject["content"].asString.contains("xl_token"))
     }
 
-    @Test fun characterCompletionRunsBeforeExistingPositiveNegativeConflictValidation() {
+    @Test fun characterCompletionRemovesConflictingNegativeWithoutDroppingRequiredTriggerOrFailingDraw() {
         withNegativeWorkflow()
         vm._characterLores.value = listOf(com.comfyui.mobile.model.CharacterLore(
             "star", "星澜", "xl_token", fixedTriggerWords = "xl_token"))
         responses += success("""{"reply":"好","prompt":"1girl","negative_prompt":"xl_token","should_draw":true}""")
         vm.sendAgentMessage("画星澜")
         awaitDone()
-        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
-        assertTrue(promptBodies.isEmpty())
-        assertEquals("before", graphText())
-        assertTrue(vm.agentMessages.value.last().expandedPrompt!!.contains("xl_token"))
-        assertTrue(vm.agentMessages.value.last().errorMessage!!.contains("正反向提示词包含相同标签"))
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, promptBodies.size)
+        assertEquals("1girl, xl_token", graphText())
+        assertEquals("", submittedNegative())
+        val message = vm.agentMessages.value.last()
+        assertEquals("1girl, xl_token", message.expandedPrompt)
+        assertEquals("", message.expandedNegativePrompt)
+        assertNull(message.errorMessage)
+        assertTrue(message.negativePromptStatus!!.contains("移除"))
     }
 
     @Test fun assistantProposedAliasOrCharacterIdsCannotSelectAnUnmatchedRecord() {
@@ -1213,19 +1221,141 @@ class AgentRuntimeIntegrationTest {
         assertTrue(promptBodies.isEmpty())
     }
 
-    @Test fun conflictingWeightedNegativeStopsBeforeChangingPromptFieldsOrSubmitting() {
+    @Test fun conflictingWeightedNegativeIsCleanedAndSubmittedWithMatchingUiAliasesAndPersistence() {
         withNegativeWorkflow()
-        responses += success("""{"reply":"好了","prompt":"cat, (red eyes:1.2), soft focus","negative_prompt":"blurry, red_eyes","should_draw":true}""")
+        responses += success("""{"reply":"好了","prompt":"cat, (red eyes:1.2), soft focus","negative_prompt":"blurry, red_eyes","negative_prompt_aliases":[{"tag":"blurry","zh":"模糊"},{"tag":"red_eyes","zh":"红眼睛"}],"should_draw":true}""")
         vm.sendAgentMessage("画红眼睛的猫，柔焦风格")
         awaitDone()
         println("NEGATIVE_CONFLICT phase=${vm.agentSessionState.value.turn!!.phase} submissions=${promptBodies.size} positive=${graphText()}")
-        assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
-        assertEquals("before", graphText())
-        assertTrue(promptBodies.isEmpty())
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals("cat, (red eyes:1.2), soft focus", graphText())
+        assertEquals(1, promptBodies.size)
+        assertEquals("blurry", submittedNegative())
         val message = vm.agentMessages.value.last()
-        assertTrue(message.errorMessage!!.contains("正反向提示词包含相同标签"))
-        assertTrue(message.errorMessage.contains("red_eyes"))
-        assertEquals("blurry, red_eyes", message.expandedNegativePrompt)
+        assertNull(message.errorMessage)
+        assertTrue(message.negativePromptStatus!!.contains("red_eyes"))
+        assertEquals("blurry", message.expandedNegativePrompt)
+        assertEquals(listOf("blurry"), message.negativeAliases!!.map { it.tag })
+        assertEquals("blurry", vm.agentPromptOutput.value.negative)
+        assertEquals(message.negativeAliases, vm.agentPromptOutput.value.negativeAliases)
+        flushWorkspace()
+        assertEquals("blurry", MainViewModelAgent.loadAgentMessages(vm).last().expandedNegativePrompt)
+    }
+
+    @Test fun entirelyConflictingGeneratedNegativeIsClearedAndDisplayedAsEmptyAfterSubmission() {
+        withNegativeWorkflow()
+        responses += success("""{"reply":"好了","prompt":"cat","negative_prompt":"CAT, (cat:1.2)","negative_prompt_aliases":[{"tag":"CAT","zh":"猫"}],"should_draw":true}""")
+        vm.sendAgentMessage("画猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat", graphText())
+        assertEquals("", submittedNegative())
+        val message = vm.agentMessages.value.last()
+        assertNull(message.errorMessage)
+        assertEquals("", message.expandedNegativePrompt)
+        assertNull(message.negativeAliases)
+        assertTrue(message.negativePromptStatus!!.startsWith("已清空"))
+        assertEquals("", vm.agentPromptOutput.value.negative)
+        assertNull(vm.agentPromptOutput.value.negativeAliases)
+    }
+
+    @Test fun missingGeneratedNegativeCleansTemplateCollisionWithoutFillingAFallback() {
+        withNegativeWorkflow()
+        responses += success("""{"reply":"好","prompt":"cat, (blurry:0.8)","should_draw":true}""")
+        vm.sendAgentMessage("画猫，保留模糊效果")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat, (blurry:0.8)", graphText())
+        assertEquals("template_embedding", submittedNegative())
+        val message = vm.agentMessages.value.last()
+        assertNull(message.errorMessage)
+        assertEquals("template_embedding", message.expandedNegativePrompt)
+        assertTrue(message.negativePromptStatus!!.contains("移除"))
+        assertFalse(message.negativePromptStatus.contains("已保留工作流原值"))
+    }
+
+    @Test fun missingGeneratedNegativeCleansEachSdxlInputWithoutMergingTheirOtherTags() {
+        File(MainViewModelWorkflow.savedWorkflowsDir(vm), "agent-fixture.json").writeText(
+            """{"1":{"class_type":"CLIPTextEncode","inputs":{"text":"before"}},"2":{"class_type":"CLIPTextEncodeSDXL","inputs":{"text_g":"red_eyes, g_only, <lora:avoid:0.7>","text_l":"(red eyes:0.8), l_only"}},"3":{"class_type":"KSampler","inputs":{"positive":["1",0],"negative":["2",0]}}}"""
+        )
+        responses += success("""{"reply":"好","prompt":"cat, red eyes","should_draw":true}""")
+        vm.sendAgentMessage("画红眼睛的猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, promptBodies.size)
+        val graph = JsonParser.parseString(promptBodies.single()).asJsonObject["prompt"].asJsonObject
+        val inputs = graph["2"].asJsonObject["inputs"].asJsonObject
+        assertEquals("g_only, <lora:avoid:0.7>", inputs["text_g"].asString)
+        assertEquals("l_only", inputs["text_l"].asString)
+        assertEquals("2", graph["3"].asJsonObject["inputs"].asJsonObject["negative"].asJsonArray[0].asString)
+        assertEquals(vm.agentMessages.value.last().expandedNegativePrompt, vm.agentPromptOutput.value.negative)
+    }
+
+    @Test fun toolStagedNegativeIsCleanedWhenSetPromptOmitsItsNegativeArgument() {
+        withNegativeWorkflow()
+        MainViewModelAgent.toggleAgentAuxNode(vm, "2:text", true)
+        vm._agentPromptSettings.value = AgentPromptSettings(toolLoop = true)
+        responses += nativeAction("patch_workflow", """{"changes":[{"field":"2:text","value":"rain, extra limbs"}]}""", "t-negative")
+        responses += nativeAction("set_prompt", """{"prompt":"cat, rain"}""", "t-prompt")
+        responses += nativeAction("submit_workflow", """{"reply":"已提交","draw":true}""", "t-submit")
+        vm.sendAgentMessage("画雨中的猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(3, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat, rain", graphText())
+        assertEquals("extra limbs", submittedNegative())
+        assertEquals("extra limbs", vm.agentMessages.value.last().expandedNegativePrompt)
+        assertEquals("extra limbs", vm.agentPromptOutput.value.negative)
+        assertNull(vm.agentMessages.value.last().errorMessage)
+    }
+
+    @Test fun nonConflictingToolStagedNegativeWinsOverACollidingTemplate() {
+        withNegativeWorkflow()
+        MainViewModelAgent.toggleAgentAuxNode(vm, "2:text", true)
+        vm._agentPromptSettings.value = AgentPromptSettings(toolLoop = true)
+        responses += nativeAction("patch_workflow", """{"changes":[{"field":"2:text","value":"extra limbs"}]}""", "t-negative")
+        responses += nativeAction("set_prompt", """{"prompt":"cat, blurry"}""", "t-prompt")
+        responses += nativeAction("submit_workflow", """{"reply":"已提交","draw":true}""", "t-submit")
+        vm.sendAgentMessage("画模糊效果的猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(3, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("extra limbs", submittedNegative())
+        assertEquals("extra limbs", vm.agentPromptOutput.value.negative)
+    }
+
+    @Test fun toolAgentDeduplicatesWithoutRequiringAnotherLlmCorrectionOrSubmittingTwice() {
+        withNegativeWorkflow()
+        vm._agentPromptSettings.value = AgentPromptSettings(toolLoop = true)
+        responses += nativeAction("set_prompt", """{"prompt":"cat, (red eyes:1.2)","negative_prompt":"blurry, red_eyes"}""", "t-prompt")
+        responses += nativeAction("submit_workflow", """{"reply":"画好了","draw":true}""", "t-submit")
+        vm.sendAgentMessage("画红眼睛的猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(2, llmBodies.size)
+        assertEquals(1, promptBodies.size)
+        assertEquals("cat, (red eyes:1.2)", graphText())
+        assertEquals("blurry", submittedNegative())
+        assertEquals("blurry", vm.agentMessages.value.last().expandedNegativePrompt)
+        assertEquals("blurry", vm.agentPromptOutput.value.negative)
+        assertNull(vm.agentMessages.value.last().errorMessage)
+    }
+
+    @Test fun keepOriginalBindingPreservesEvenACollidingTemplateInsteadOfSilentlyRewritingIt() {
+        withNegativeWorkflow()
+        installBinding(true, AgentPromptBinding(PromptBindingMode.KEEP))
+        responses += success("""{"reply":"好","prompt":"cat, blurry","negative_prompt":"blurry","should_draw":true}""")
+        vm.sendAgentMessage("画模糊效果的猫")
+        awaitDone()
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+        assertEquals(1, promptBodies.size)
+        assertEquals("template_embedding, (blurry:1.2)", submittedNegative())
+        assertEquals("blurry", vm.agentMessages.value.last().expandedNegativePrompt)
+        assertTrue(vm.agentMessages.value.last().negativePromptStatus!!.startsWith("按设置保留"))
     }
 
     @Test fun keepOriginalBindingDoesNotBlockAnUnusedConflictingGeneratedNegative() {
