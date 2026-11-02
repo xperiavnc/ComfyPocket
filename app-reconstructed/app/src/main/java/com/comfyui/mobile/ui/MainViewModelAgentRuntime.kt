@@ -430,7 +430,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         validate: ((String) -> String?)? = null,
         historyCount: Int = 0
     ): AgentInteractionOutcome = AgentToolLoop(model(requestId, settings, images, streaming, checkCurrent, historyCount), toolbox)
-        .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS), checkCurrent, progress,
+        .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS, toolbox.briefing()), checkCurrent, progress,
             onStep = { step ->
                 vm.addLog("Agent 工具第 ${step.index} 步：${step.label}${if (step.ok) "" else "（失败）"}" +
                     step.note.takeIf { it.isNotBlank() }?.let { " · ${it.take(160)}" }.orEmpty(),
@@ -520,17 +520,36 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             if (configuredNegative.any { it in positiveTargets }) {
                 throw AgentExecutionException("正反向提示词绑定了同一字段，请分别设置")
             }
-            val negativeTargets = if (negativePrompt != null) configuredNegative else emptyList()
+            var appliedNegativePrompt = negativePrompt
+            var removedDuplicateTags = emptyList<String>()
+            val sanitizedTemplateNegatives = linkedMapOf<Pair<String, String>, String>()
             if (configuredNegative.isNotEmpty()) {
-                val effectiveNegative = negativePrompt ?: AgentPromptBindings.text(
-                    vm.agentWorkflow ?: throw AgentExecutionException("工作流为空"), configuredNegative)
-                val conflicts = AgentNegativePromptPolicy.conflicts(prompt, effectiveNegative)
-                if (conflicts.isNotEmpty()) {
-                    throw AgentExecutionException(
-                        "正反向提示词包含相同标签（${conflicts.take(5).joinToString("、")}），" +
-                            "请调整后重试；本轮未改写提示词或提交出图。"
-                    )
+                if (negativePrompt != null) {
+                    val resolution = AgentNegativePromptPolicy.removePositiveCollisions(prompt, negativePrompt)
+                    removedDuplicateTags = resolution.removedTags
+                    appliedNegativePrompt = resolution.negativePrompt
+                } else {
+                    val workflow = vm.agentWorkflow ?: throw AgentExecutionException("工作流为空")
+                    val stagedInputs = changes.associateBy { it.nodeId to it.key }
+                    // A template may deliberately use distinct SDXL text_g/text_l values. Clean
+                    // each final input independently, including tool-staged values, instead of
+                    // flattening and copying them over one another.
+                    configuredNegative.forEach { target ->
+                        val input = (stagedInputs[target]?.value ?:
+                            ((workflow[target.first] as? Map<*, *>)?.get("inputs") as? Map<*, *>)
+                                ?.get(target.second)) as? String ?: return@forEach
+                        val resolution = AgentNegativePromptPolicy.removePositiveCollisions(prompt, input)
+                        if (resolution.removedTags.isNotEmpty()) {
+                            sanitizedTemplateNegatives[target] = resolution.negativePrompt
+                            removedDuplicateTags = removedDuplicateTags + resolution.removedTags
+                        }
+                    }
                 }
+            }
+            removedDuplicateTags = removedDuplicateTags.distinct()
+            val negativeTargets = when {
+                negativePrompt != null -> configuredNegative
+                else -> sanitizedTemplateNegatives.keys.toList()
             }
             // Prompt targets and the uploaded image always win over tool-staged values for the same field.
             val reserved = (positiveTargets + negativeTargets).map { "${it.first}:${it.second}" }.toSet() +
@@ -541,7 +560,11 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
                 throw AgentExecutionException("工作流检查失败：${it.message}")
             }
             val patchChanges = positiveTargets.mapTo(mutableListOf()) { (id, key) -> AgentFieldChange(id, key, prompt) }
-            negativeTargets.forEach { (id, key) -> patchChanges.add(AgentFieldChange(id, key, negativePrompt!!)) }
+            negativeTargets.forEach { (id, key) ->
+                val value = if (negativePrompt != null) appliedNegativePrompt.orEmpty()
+                    else sanitizedTemplateNegatives[id to key].orEmpty()
+                patchChanges.add(AgentFieldChange(id, key, value))
+            }
             uploadedImage?.let { (node, value) -> patchChanges.add(AgentFieldChange(node.nodeId, node.key, value)) }
             patchChanges.addAll(extra)
             val patch = tools.patchWorkflow.execute(AgentPatchRequest(snapshot, patchChanges)).getOrElse {
@@ -552,25 +575,38 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             patch.diff.forEach { vm.agentWorkflowParamValues["${it.nodeId}:${it.key}"] = it.after }
             MainViewModelAgent.parseAgentEditableNodes(vm, patch.workflow)
             MainViewModelAgent.persistAgentWorkflowParams(vm)
-            val negativeStatus = when {
+            val baseNegativeStatus = when {
                 vm._agentNegativeBinding.value.mode == PromptBindingMode.KEEP ->
                     "按设置保留工作流反向原值；生成的反向仅供查看"
+                negativePrompt == null && removedDuplicateTags.isNotEmpty() ->
+                    "模型未返回反向提示词；已清理工作流中的重复项（${negativeTargets.size} 个字段）"
                 negativePrompt == null -> "模型未返回反向提示词，已保留工作流原值"
                 negativeTargets.isEmpty() -> "未写入：工作流没有可识别的独立反向输入，已保留原配置"
-                negativePrompt.isEmpty() -> "已清空工作流反向输入（${negativeTargets.size} 项）"
+                appliedNegativePrompt.isNullOrEmpty() -> "已清空工作流反向输入（${negativeTargets.size} 项）"
                 else -> "已写入工作流反向输入（${negativeTargets.size} 项）"
             }
-            MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = true) {
-                it.copy(negativePromptStatus = negativeStatus)
-            }
+            val negativeStatus = if (removedDuplicateTags.isEmpty()) baseNegativeStatus else
+                "$baseNegativeStatus；已从反向移除与正向重复标签：${removedDuplicateTags.joinToString("、")}"
             val effectiveTargets = if (vm._agentNegativeBinding.value.mode == PromptBindingMode.KEEP) {
                 AgentPromptTargets.negative(patch.workflow, target)
             } else configuredNegative
+            val effectiveNegative = appliedNegativePrompt ?: AgentPromptBindings.text(patch.workflow, effectiveTargets)
+            val existingNegativeAliases = vm._agentMessages.value.firstOrNull { it.id == turn.assistantId }?.negativeAliases
+            MainViewModelAgent.updateAgentMessage(vm, turn.assistantId, persist = true) {
+                if (removedDuplicateTags.isEmpty()) it.copy(negativePromptStatus = negativeStatus)
+                else {
+                    it.copy(
+                        expandedNegativePrompt = effectiveNegative,
+                        negativeAliases = AgentPromptAliases.align(effectiveNegative, it.negativeAliases),
+                        negativePromptStatus = negativeStatus
+                    )
+                }
+            }
             MainViewModelAgent.savePromptOutput(vm, AgentPromptOutput(
-                prompt, negativePrompt ?: AgentPromptBindings.text(patch.workflow, effectiveTargets), negativeStatus,
+                prompt, effectiveNegative, negativeStatus,
                 vm._agentMessages.value.firstOrNull { it.id == turn.assistantId }?.positiveAliases,
-                if (negativePrompt == null) null else
-                    vm._agentMessages.value.firstOrNull { it.id == turn.assistantId }?.negativeAliases))
+                if (negativePrompt == null && removedDuplicateTags.isEmpty()) null else
+                    AgentPromptAliases.align(effectiveNegative, existingNegativeAliases)))
             vm.addLog("Agent 反向提示词：$negativeStatus", LogType.INFO)
             vm.addLog("Agent patch_workflow 已校验并修改 ${patch.diff.size} 个字段", LogType.INFO)
         }

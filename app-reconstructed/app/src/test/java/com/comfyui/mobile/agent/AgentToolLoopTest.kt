@@ -121,7 +121,7 @@ class AgentToolLoopTest {
         assertTrue(fixture.requests.size <= 2)
     }
 
-    @Test fun characterProfileAndConflictingNegativesAreReportedToTheModel() = runBlocking {
+    @Test fun characterProfileAndConflictingNegativeTagsAreRemovedBeforeTheModelCanSubmit() = runBlocking {
         val lore = CharacterLore(id = "rin", name = "凛", triggerWords = "rin, black hair")
         val box = toolbox(listOf(lore))
         val found = box.call(AgentDrawToolbox.PROFILE, JsonParser.parseString("""{"name":"凛"}""").asJsonObject)
@@ -131,7 +131,17 @@ class AgentToolLoopTest {
         assertTrue(missing.error!!.contains("凛"))
         val conflict = box.call(AgentDrawToolbox.SET_PROMPT,
             JsonParser.parseString("""{"prompt":"rain, smile","negative_prompt":"smile"}""").asJsonObject)
-        assertFalse(conflict.ok)
+        assertTrue(conflict.ok)
+        assertEquals("rain, smile", box.prompt)
+        assertEquals("", box.negativePrompt)
+        assertTrue(conflict.data.toString().contains("smile"))
+        val submitted = box.call(AgentDrawToolbox.SUBMIT,
+            JsonParser.parseString("""{"reply":"已提交","draw":true}""").asJsonObject)
+        assertTrue(submitted.ok)
+        val final = JsonParser.parseString(submitted.finalContent!!).asJsonObject
+        assertEquals("rain, smile", final["prompt"].asString)
+        assertEquals("", final["negative_prompt"].asString)
+        assertTrue(final["should_draw"].asBoolean)
         val tags = box.call(AgentDrawToolbox.LOOKUP_TAGS, JsonParser.parseString("""{"query":"rain"}""").asJsonObject)
         assertFalse(tags.ok)
     }

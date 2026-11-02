@@ -24,6 +24,8 @@ data class AgentToolStep(val index: Int, val tool: String, val label: String, va
 interface AgentToolbox {
     val definitions: List<ChatToolDefinition>
     fun label(name: String): String = name
+    /** Facts for this turn appended to the tool instruction (e.g. the LoRA overview); empty when none. */
+    fun briefing(): String = ""
     suspend fun call(name: String, arguments: JsonObject): AgentToolResult
 }
 

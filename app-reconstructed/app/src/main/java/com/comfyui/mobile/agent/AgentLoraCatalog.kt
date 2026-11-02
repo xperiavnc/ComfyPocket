@@ -32,10 +32,12 @@ data class AgentLoraInfo(
     /** Model + version description with paragraphs kept, for read_lora. */
     val fullDescription: String = "",
     /** e.g. "Civitai · Kawaii Style · v2". */
-    val source: String = ""
+    val source: String = "",
+    /** The provider's model name, e.g. "Kawaii Style"; often says more than the file name. */
+    val title: String = ""
 ) {
     internal fun haystack(): String = buildString {
-        append(file).append(' ').append(name).append(' ').append(baseModel).append(' ')
+        append(file).append(' ').append(name).append(' ').append(title).append(' ').append(baseModel).append(' ')
         append(character).append(' ').append(outfit).append(' ').append(notes).append(' ')
         append(agentNotes).append(' ')
         (triggerWords + tags + useCases + useCases.mapNotNull { modelUseCases[it] }).forEach { append(it).append(' ') }
@@ -49,7 +51,13 @@ data class AgentLoraSlot(
     val nameKey: String,
     val strengthKeys: List<String>,
     val current: String,
-    val options: List<String>
+    val options: List<String>,
+    /** Switch that must be on for the slot to apply: the node's `toggle` / `enabled`, or a stack's `switch_N`. */
+    val switchKey: String? = null,
+    /** Value of [switchKey] that turns the slot on (`true` or `"On"`). */
+    val switchOn: Any? = null,
+    /** False while the switch is off in the workflow. */
+    val switchedOn: Boolean = true
 ) {
     val id: String get() = "$nodeId:$nameKey"
 }
@@ -85,6 +93,12 @@ object AgentLoraCatalog {
     private val blockBreak = Regex("(?i)<br\\s*/?>|</(p|div|li|h[1-6]|ul|ol|tr)>")
     private val manyBreaks = Regex("\\n{3,}")
     private val stackKey = Regex("(?i)^lora(_name)?_?(\\d+)(_name)?$")
+    private val termBreak = Regex("[\\s_\\-,，、/]+")
+    /** Weight inputs of stack slots: `lora_1_strength`, `strength_01`, `model_weight_1`, `lora_wt_1`, `clip_str_1`. */
+    private val stackStrength = Regex("(?i)strength|weight|(^|_)(wt|str)(_|$)")
+    /** Stacks apply only their first N slots. */
+    private val stackCountKeys = listOf("num_loras", "lora_count")
+    private val nodeSwitchKeys = listOf("toggle", "enabled", "enable")
 
     fun from(models: List<LocalModel>, phoneSources: Map<String, ModelProvider> = emptyMap()): List<AgentLoraInfo> =
         models.asSequence()
@@ -121,7 +135,8 @@ object AgentLoraCatalog {
             agentNotes = agentNotes,
             sourceTriggerWords = sourceWords,
             fullDescription = if (full.length <= MAX_FULL_DESCRIPTION) full else full.take(MAX_FULL_DESCRIPTION) + "…",
-            source = provider?.let { listOf(it.provider, it.name, it.version).filter(String::isNotBlank).joinToString(" · ") }.orEmpty()
+            source = provider?.let { listOf(it.provider, it.name, it.version).filter(String::isNotBlank).joinToString(" · ") }.orEmpty(),
+            title = provider?.name.orEmpty().trim()
         )
     }
 
@@ -257,14 +272,30 @@ object AgentLoraCatalog {
             .replace(manyBreaks, "\n\n").trim()
     }
 
-    /** All whitespace-separated terms must match; favourites and annotated entries rank first. */
+    /** Lower-case search terms; `_`, `-`, `/` and list separators split words like spaces do. */
+    fun terms(query: String): List<String> = query.lowercase(Locale.ROOT).split(termBreak).filter(String::isNotBlank)
+
+    private val ranking: Comparator<AgentLoraInfo> = compareByDescending<AgentLoraInfo> { it.favorite }
+        .thenByDescending { it.notes.isNotBlank() || it.agentNotes.isNotBlank() || it.useCases.isNotEmpty() || it.tags.isNotEmpty() }
+        .thenBy { it.name.lowercase(Locale.ROOT) }
+
+    /** All terms must match; favourites and annotated entries rank first. */
     fun search(items: List<AgentLoraInfo>, query: String, limit: Int = 20): List<AgentLoraInfo> {
-        val terms = query.lowercase(Locale.ROOT).split(spaces).filter(String::isNotBlank)
+        val terms = terms(query)
         return items.filter { info -> terms.isEmpty() || info.haystack().let { hay -> terms.all { it in hay } } }
-            .sortedWith(compareByDescending<AgentLoraInfo> { it.favorite }
-                .thenByDescending { it.notes.isNotBlank() || it.agentNotes.isNotBlank() || it.useCases.isNotEmpty() || it.tags.isNotEmpty() }
-                .thenBy { it.name.lowercase(Locale.ROOT) })
+            .sortedWith(ranking)
             .take(limit)
+    }
+
+    /** Entries matching at least one term, most matched terms first: the fallback when no entry matches them all. */
+    fun searchAny(items: List<AgentLoraInfo>, query: String, limit: Int = 20): List<AgentLoraInfo> {
+        val terms = terms(query)
+        if (terms.isEmpty()) return emptyList()
+        return items.map { info -> info to info.haystack().let { hay -> terms.count { it in hay } } }
+            .filter { it.second > 0 }
+            .sortedWith(compareByDescending<Pair<AgentLoraInfo, Int>> { it.second }.thenComparator { a, b -> ranking.compare(a.first, b.first) })
+            .take(limit)
+            .map { it.first }
     }
 
     /** Normalised file key so `sub\a.safetensors`, `sub/a.safetensors` and `a` can be compared. */
@@ -290,7 +321,9 @@ object AgentLoraCatalog {
 
     /**
      * LoRA loader slots in [workflow]: `lora_name` with `strength_model`/`strength_clip`/`strength`, and
-     * stack nodes with numbered `lora_N` / `lora_N_name` plus `strength_N`-style partners.
+     * stack nodes with numbered `lora_N` / `lora_N_name` plus their own weight inputs. Stack slots beyond
+     * `num_loras` / `lora_count` are left out because the node ignores them. A node `toggle`/`enabled` or a
+     * stack's `switch_N` is recorded so loading a LoRA can turn it on.
      */
     fun slots(workflow: Map<String, Any>, options: (nodeId: String, key: String) -> List<String>): List<AgentLoraSlot> {
         val result = mutableListOf<AgentLoraSlot>()
@@ -300,19 +333,26 @@ object AgentLoraCatalog {
             val inputs = node["inputs"] as? Map<*, *> ?: continue
             if (!classType.contains("lora", ignoreCase = true)) continue
             val keys = inputs.keys.filterIsInstance<String>()
+            val count = stackCountKeys.firstNotNullOfOrNull { (inputs[it] as? Number)?.toInt() }
+            val nodeSwitch = nodeSwitchKeys.firstOrNull { inputs[it] is Boolean }
             for (key in keys) {
                 val value = inputs[key] as? String ?: continue
-                val strengthKeys = when {
-                    key == "lora_name" -> listOf("strength_model", "strength_clip", "strength").filter { k -> inputs[k] is Number }
-                    else -> {
-                        val number = stackKey.matchEntire(key)?.groupValues?.get(2) ?: continue
-                        keys.filter { k ->
-                            inputs[k] is Number && k.contains("strength", ignoreCase = true) &&
-                                Regex("(?<!\\d)$number(?!\\d)").containsMatchIn(k)
-                        }
-                    }
+                val number = if (key == "lora_name") null else stackKey.matchEntire(key)?.groupValues?.get(2) ?: continue
+                if (number != null && count != null && number.toInt() > count) continue
+                val strengthKeys = if (number == null) {
+                    listOf("strength_model", "strength_clip", "strength").filter { k -> inputs[k] is Number }
+                } else {
+                    val own = Regex("(?<!\\d)$number(?!\\d)")
+                    keys.filter { k -> inputs[k] is Number && own.containsMatchIn(k) && stackStrength.containsMatchIn(k) }
                 }
-                result += AgentLoraSlot(nodeId, key, strengthKeys, value, options(nodeId, key))
+                val slotSwitch = number?.let { n -> keys.firstOrNull { k -> k.equals("switch_$n", ignoreCase = true) && inputs[k] is String } }
+                result += when {
+                    slotSwitch != null -> AgentLoraSlot(nodeId, key, strengthKeys, value, options(nodeId, key),
+                        slotSwitch, "On", (inputs[slotSwitch] as String).equals("On", ignoreCase = true))
+                    nodeSwitch != null -> AgentLoraSlot(nodeId, key, strengthKeys, value, options(nodeId, key),
+                        nodeSwitch, true, inputs[nodeSwitch] == true)
+                    else -> AgentLoraSlot(nodeId, key, strengthKeys, value, options(nodeId, key))
+                }
             }
         }
         return result.sortedWith(compareBy({ it.nodeId.toIntOrNull() ?: Int.MAX_VALUE }, { it.nodeId }, { it.nameKey }))

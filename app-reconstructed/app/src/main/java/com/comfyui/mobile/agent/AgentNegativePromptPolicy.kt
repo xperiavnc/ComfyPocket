@@ -3,8 +3,10 @@ package com.comfyui.mobile.agent
 import java.text.Normalizer
 import java.util.Locale
 
-/** Diagnose unambiguous literal tag collisions without supplying drawing instructions. */
+/** Resolve unambiguous literal tag collisions without supplying drawing instructions. */
 object AgentNegativePromptPolicy {
+    data class ConflictResolution(val negativePrompt: String, val removedTags: List<String>)
+
     /**
      * Return original negative pieces for display, without rewriting either prompt.
      * No substring, synonym or "blurry vs soft focus" inference: those need model/user judgement.
@@ -17,6 +19,29 @@ object AgentNegativePromptPolicy {
         return pieces(negative).mapNotNull { piece ->
             canonicalTag(piece)?.takeIf { it in positiveTags }?.let { it to piece.trim() }
         }.distinctBy { it.first }.map { it.second }
+    }
+
+    /**
+     * Keep the positive prompt authoritative and remove literal overlaps from the negative prompt.
+     * A duplicated tag is contradictory, but should not make the entire image-generation turn fail.
+     */
+    fun removePositiveCollisions(positive: String, negative: String?): ConflictResolution {
+        if (negative.isNullOrBlank()) return ConflictResolution(negative.orEmpty(), emptyList())
+        val positiveTags = pieces(positive).mapNotNull(::canonicalTag).toSet()
+        if (positiveTags.isEmpty()) return ConflictResolution(negative, emptyList())
+
+        val kept = mutableListOf<String>()
+        val removed = linkedMapOf<String, String>()
+        for (piece in pieces(negative)) {
+            val canonical = canonicalTag(piece)
+            if (canonical != null && canonical in positiveTags) {
+                removed.putIfAbsent(canonical, piece.trim())
+            } else {
+                piece.trim().takeIf(String::isNotEmpty)?.let(kept::add)
+            }
+        }
+        if (removed.isEmpty()) return ConflictResolution(negative, emptyList())
+        return ConflictResolution(kept.joinToString(", "), removed.values.toList())
     }
 
     private fun canonicalTag(raw: String): String? {
