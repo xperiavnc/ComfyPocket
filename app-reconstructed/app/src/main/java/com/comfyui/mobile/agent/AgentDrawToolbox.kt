@@ -55,7 +55,10 @@ class AgentDrawToolbox(
     /** LoRA loader slots whose file field is part of the snapshot; strength partners only when also present. */
     private val loraSlots: List<AgentLoraSlot> = AgentLoraCatalog.slots(snapshot.workflow) { node, key ->
         allowedFields["$node:$key"]?.options.orEmpty()
-    }.filter { it.id in allowedFields }.map { slot -> slot.copy(strengthKeys = slot.strengthKeys.filter { "${slot.nodeId}:$it" in allowedFields }) }
+    }.filter { it.id in allowedFields }.map { slot -> slot.copy(
+        strengthKeys = slot.strengthKeys.filter { "${slot.nodeId}:$it" in allowedFields },
+        // Without an editable switch the slot keeps switchedOn=false, so set_lora can warn instead.
+        switchKey = slot.switchKey?.takeIf { "${slot.nodeId}:$it" in allowedFields }) }
 
     override val definitions: List<ChatToolDefinition> = listOf(
         tool(INSPECT, "查看本轮开放给你的工作流参数（节点、字段、当前值、可选项和范围）。修改参数前先调用。", obj(emptyMap())),
@@ -108,7 +111,7 @@ class AgentDrawToolbox(
     private fun loraTools(): List<ChatToolDefinition> {
         if (loraSlots.isEmpty() && loras.isEmpty() && loraLibrary == null) return emptyList()
         val browse: List<ChatToolDefinition> = listOf(
-            tool(LIST_LORAS, "检索本地 LoRA：文件名、触发词、底模、用户标注（标签/用途/角色/服装/备注/推荐强度）、你以前写的 agent_notes 和简介；工作流有 LoRA 槽位时一并列出槽位。选 LoRA 或回答 LoRA 相关问题前先调用。",
+            tool(LIST_LORAS, "按关键词检索本地 LoRA：文件名、触发词、底模、用户标注（标签/用途/角色/服装/备注/推荐强度）、你以前写的 agent_notes 和简介；工作流有 LoRA 槽位时一并列出槽位。【LoRA 速查】里找不到、要按用途或角色筛选，或回答 LoRA 相关问题时使用。",
                 obj(mapOf("query" to text("检索词，可填角色名、画风、用途等，空格分隔多个词须同时命中；留空列出全部")))),
             tool(READ_LORA, "读取一个本地 LoRA 的完整资料：模型和版本简介（保留分段）、来源触发词与用户确认的触发词、底模、用户标注、你以前写的 agent_notes，以及能否装进当前工作流。",
                 obj(mapOf("lora" to text("list_loras 返回的 file 或 name")), "lora"))
@@ -130,12 +133,12 @@ class AgentDrawToolbox(
                 ), "lora"))
         )
         val set: List<ChatToolDefinition> = if (loraSlots.isEmpty()) emptyList() else listOf(
-            tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效。",
+            tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效；槽位所在 LoRA 组的开关关着时会一并打开。",
                 obj(mapOf(
-                    "slot" to text("list_loras 返回的槽位地址，形如 \"10:lora_name\""),
-                    "lora" to text("list_loras 返回的 file；空字符串表示停用"),
+                    "slot" to text("槽位地址，形如 \"10:lora_name\"，见【LoRA 速查】或 list_loras；工作流只有一个槽位时可以不填"),
+                    "lora" to text("【LoRA 速查】或 list_loras 里的 file；空字符串表示停用"),
                     "strength" to mapOf("type" to "number", "description" to "强度，通常 0.4–1.2；不传则用推荐强度或 1.0")
-                ), "slot", "lora"))
+                ), "lora"))
         )
         return browse + live + set
     }
@@ -246,14 +249,27 @@ class AgentDrawToolbox(
         val offered = loraSlots.flatMap { it.options }.map(AgentLoraCatalog::normalize).toSet()
         // Only LoRAs the server can actually load; without combo options trust the index.
         val usable = if (offered.isEmpty()) loras else loras.filter { AgentLoraCatalog.normalize(it.file) in offered }
-        val hits = AgentLoraCatalog.search(usable, query, MAX_LORAS)
+        val terms = AgentLoraCatalog.terms(query)
+        var hits = AgentLoraCatalog.search(usable, query, MAX_LORAS)
         val known = usable.map { AgentLoraCatalog.normalize(it.file) }.toSet()
-        val bare = if (hits.size >= MAX_LORAS) emptyList() else loraSlots.flatMap { it.options }.distinct()
-            .filter { AgentLoraCatalog.normalize(it) !in known && (query.isBlank() || query.lowercase(Locale.ROOT).split(' ').filter(String::isNotBlank).all { term -> it.lowercase(Locale.ROOT).contains(term) }) }
-            .take(MAX_LORAS - hits.size)
+        val names = loraSlots.flatMap { it.options }.distinct().filterNot { it.equals("None", ignoreCase = true) }
+        fun bareMatches(all: Boolean) = names.filter { option ->
+            val name = option.lowercase(Locale.ROOT)
+            AgentLoraCatalog.normalize(option) !in known &&
+                (terms.isEmpty() || if (all) terms.all { it in name } else terms.any { it in name })
+        }
+        var bare = bareMatches(all = true)
+        // Several words that never all match one LoRA: list the closest ones instead of nothing.
+        val loose = hits.isEmpty() && bare.isEmpty() && terms.size > 1
+        if (loose) {
+            hits = AgentLoraCatalog.searchAny(usable, query, MAX_LORAS)
+            bare = bareMatches(all = false)
+        }
+        bare = if (hits.size >= MAX_LORAS) emptyList() else bare.take(MAX_LORAS - hits.size)
         return AgentToolResult(true, linkedMapOf(
             "summary" to (if (loraSlots.isEmpty()) "当前工作流没有 LoRA 槽位（只能查看和写笔记，不能装载），" else "${loraSlots.size} 个 LoRA 槽位，") +
-                "命中 ${hits.size + bare.size} 个 LoRA" + (if (loras.isEmpty()) "（模型中心还没有本地 LoRA 资料，只有文件名）" else "") +
+                "命中 ${hits.size + bare.size} 个 LoRA" + (if (loose) "（没有同时命中全部检索词，按命中词数列出）" else "") +
+                (if (loras.isEmpty()) "（模型中心还没有本地 LoRA 资料，只有文件名）" else "") +
                 (if (notice.isNotEmpty()) "；$notice" else ""),
             "slots" to loraSlots.map { slot ->
                 linkedMapOf<String, Any?>(
@@ -261,7 +277,7 @@ class AgentDrawToolbox(
                     "node" to (titles[slot.nodeId] ?: (snapshot.workflow[slot.nodeId] as? Map<*, *>)?.get("class_type")),
                     "current" to stagedValue(slot.nodeId, slot.nameKey),
                     "strength" to slot.strengthKeys.associateWith { stagedValue(slot.nodeId, it) }
-                )
+                ).apply { if (!isOn(slot)) put("enabled", false) }
             },
             "loras" to hits.map { info ->
                 linkedMapOf<String, Any?>(
@@ -426,35 +442,155 @@ class AgentDrawToolbox(
         ).filterValues { it != null })
     }
 
+    /** By id (or node id when the node has one slot); without one: the only slot, or the slot already holding [requested]. */
+    private fun pickSlot(slotId: String, requested: String?): AgentLoraSlot? {
+        if (slotId.isNotBlank()) return loraSlots.firstOrNull { it.id == slotId } ?: loraSlots.filter { it.nodeId == slotId }.singleOrNull()
+        loraSlots.singleOrNull()?.let { return it }
+        if (requested == null) return null
+        return loraSlots.filter { slot ->
+            val file = AgentLoraCatalog.resolve(requested, slot.options, loras)
+            file != null && AgentLoraCatalog.normalize(stagedValue(slot.nodeId, slot.nameKey) as? String ?: "") == AgentLoraCatalog.normalize(file)
+        }.singleOrNull()
+    }
+
+    /** Whether the slot's switch is on, counting this turn's staged changes. */
+    private fun isOn(slot: AgentLoraSlot): Boolean {
+        val key = slot.switchKey ?: return slot.switchedOn
+        val value = stagedValue(slot.nodeId, key)
+        val on = slot.switchOn
+        return if (on is String) (value as? String).equals(on, ignoreCase = true) else value == on
+    }
+
+    /** The value that turns [slot]'s switch on, spelled the way the field's options spell it. */
+    private fun switchValue(slot: AgentLoraSlot, key: String): Any {
+        val on = slot.switchOn ?: true
+        if (on !is String) return on
+        return allowedFields["${slot.nodeId}:$key"]?.options.orEmpty().firstOrNull { it.equals(on, ignoreCase = true) } ?: on
+    }
+
+    private fun nodeName(nodeId: String): Any? = titles[nodeId] ?: (snapshot.workflow[nodeId] as? Map<*, *>)?.get("class_type")
+
+    /** The LoRA file a slot holds this turn, or null when it is empty. */
+    private fun loadedFile(slot: AgentLoraSlot): String? =
+        (stagedValue(slot.nodeId, slot.nameKey) as? String)?.takeIf { it.isNotBlank() && !it.equals("None", ignoreCase = true) }
+
+    /** "file，强度 0.8，触发词 x" or "空", plus the switch state, from this turn's staged values. */
+    private fun describeSlot(slot: AgentLoraSlot): String {
+        val file = loadedFile(slot)
+        val strength = slot.strengthKeys.firstOrNull()?.let { stagedValue(slot.nodeId, it) as? Number }
+        val triggers = file?.let(::infoFor)?.let(::activators).orEmpty()
+        return buildString {
+            append(file ?: "空")
+            if (file != null && strength != null) append("，强度 ").append(strength)
+            if (triggers.isNotEmpty()) append("，触发词 ").append(triggers.take(3).joinToString(" / ") { short(it, 40) })
+            if (!isOn(slot)) append(if (slot.switchKey != null) "，开关关着（装 LoRA 时会自动打开）" else "，开关关着（Agent 改不了，装上也不生效）")
+        }
+    }
+
+    private fun infoFor(file: String): AgentLoraInfo? =
+        AgentLoraCatalog.normalize(file).let { key -> loras.firstOrNull { AgentLoraCatalog.normalize(it.file) == key } }
+
+    /** Every trigger word, with comma-separated groups split apart. */
+    private fun words(info: AgentLoraInfo?): List<String> =
+        info?.triggerWords.orEmpty().flatMap { it.split(',', '，') }.map(String::trim).filter(String::isNotEmpty)
+
+    /** The first word of each trigger group: the word that switches the LoRA on, not the tags that describe it. */
+    private fun activators(info: AgentLoraInfo?): List<String> = info?.triggerWords.orEmpty()
+        .mapNotNull { group -> group.split(',', '，').map(String::trim).firstOrNull(String::isNotEmpty) }
+        .distinctBy { promptText(it) }
+
+    /** Lower-case prompt text with `_` as a space and escapes dropped, for trigger-word checks. */
+    private fun promptText(value: String): String =
+        value.lowercase(Locale.ROOT).replace("\\", "").replace('_', ' ').replace(blank, " ").trim()
+
+    private fun mentions(prompt: String, word: String): Boolean = promptText(word).let { it.isNotEmpty() && it in promptText(prompt) }
+
+    /**
+     * Words submit adds to [positive]: for each LoRA loaded this turn whose few trigger words are all missing,
+     * its first word. LoRAs with longer trigger lists (character packs, tag dumps) are left to the model.
+     */
+    private fun missingTriggers(positive: String): List<String> = loraSlots.mapNotNull { slot ->
+        val file = staged[slot.id]?.value as? String ?: return@mapNotNull null
+        if (file.equals("None", ignoreCase = true) || AgentLoraCatalog.normalize(file) == AgentLoraCatalog.normalize(slot.current)) return@mapNotNull null
+        if (!isOn(slot)) return@mapNotNull null
+        if (slot.strengthKeys.isNotEmpty() && slot.strengthKeys.all { (stagedValue(slot.nodeId, it) as? Number)?.toDouble() == 0.0 }) return@mapNotNull null
+        val words = words(infoFor(file))
+        if (words.isEmpty() || words.size > MAX_AUTO_TRIGGERS || words.any { mentions(positive, it) }) null
+        else words.first().takeIf { it.length <= MAX_AUTO_TRIGGER_LENGTH }
+    }.distinctBy { promptText(it) }
+
+    /**
+     * Prompt advice after a slot changed from [old] to [new]: where the new trigger words go and which words of
+     * the LoRA taken out are still in this turn's prompt. Old words are only reported, never removed, because the
+     * user may want them as plain tags.
+     */
+    private fun triggerHints(loaded: String?, old: String?): List<String> {
+        val written = prompt
+        val newInfo = loaded?.let(::infoFor)
+        val fresh = words(newInfo)
+        val oldInfo = old?.let(::infoFor)
+        val oldName = oldInfo?.name ?: old
+        val freshKeys = fresh.map(::promptText).toSet()
+        val leftover = activators(oldInfo).filter { promptText(it) !in freshKeys }
+        return buildList {
+            when {
+                loaded == null -> {}
+                newInfo == null -> add("模型中心没有这个 LoRA 的资料，不知道触发词；用户说过触发词就写进提示词")
+                fresh.isEmpty() -> add("这个 LoRA 没有登记触发词，需要时用 read_lora 看简介里的用法")
+                written == null -> add("写 set_prompt 时把触发词放进正向提示词")
+                fresh.none { mentions(written, it) } -> add("当前提示词里还没有这个 LoRA 的触发词，用 set_prompt 补上")
+            }
+            if (leftover.isNotEmpty()) {
+                if (written == null) add("提示词里如果有换下的「$oldName」的触发词（${leftover.take(6).joinToString("、")}），写 set_prompt 时去掉")
+                else leftover.filter { mentions(written, it) }.takeIf { it.isNotEmpty() }?.let { stale ->
+                    add("提示词里还留着换下的「$oldName」的触发词：${stale.take(6).joinToString("、")}，不需要就用 set_prompt 去掉")
+                }
+            }
+        }
+    }
+
     private fun setLora(arguments: JsonObject): AgentToolResult {
         val slotId = AgentInteractionProtocol.string(arguments, "slot")
-        val slot = loraSlots.firstOrNull { it.id == slotId || it.nodeId == slotId }
-            ?: return AgentToolResult(false, error = "没有槽位「$slotId」。可用：" + loraSlots.joinToString("、") { it.id })
         val requested = AgentInteractionProtocol.string(arguments, "lora")
         val strengthElement = arguments["strength"]
         val strength = strengthElement?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble
         if (strengthElement != null && !strengthElement.isJsonNull && strength == null) return AgentToolResult(false, error = "strength 必须是数字")
-        val disable = requested.isBlank() || requested.equals("none", ignoreCase = true) || strength == 0.0
+        val named = requested.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) }
+        val slot = pickSlot(slotId, named) ?: return AgentToolResult(false, error =
+            (if (slotId.isBlank()) "工作流有 ${loraSlots.size} 个 LoRA 槽位，请用 slot 指定：" else "没有槽位「$slotId」。可用：") +
+                loraSlots.joinToString("、") { "${it.id}（${describeSlot(it)}）" })
+        val previous = loadedFile(slot)
+        val disable = named == null || strength == 0.0
         if (disable) {
-            if (slot.strengthKeys.isEmpty()) return AgentToolResult(false, error = "这个槽位没有可修改的强度字段，无法停用；可以换成别的 LoRA")
             // Strength 0 alone still leaves the file name, which ComfyUI validates against its list.
             val none = slot.options.firstOrNull { it.equals("None", ignoreCase = true) }
-            return stage(listOfNotNull(none?.let { AgentFieldChange(slot.nodeId, slot.nameKey, it) }) +
+            if (slot.strengthKeys.isEmpty() && none == null) return AgentToolResult(false, error = "这个槽位没有可修改的强度字段，无法停用；可以换成别的 LoRA")
+            val result = stage(listOfNotNull(none?.let { AgentFieldChange(slot.nodeId, slot.nameKey, it) }) +
                 slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, 0.0) }, "已暂存：停用 ${slot.id}")
+            val hints = triggerHints(null, previous)
+            return if (!result.ok || hints.isEmpty()) result
+            else result.copy(data = (result.data as Map<*, *>) + mapOf("hint" to hints.joinToString("；")))
         }
         val file = AgentLoraCatalog.resolve(requested, slot.options, loras)
             ?: return AgentToolResult(false, error = "服务器上没有 LoRA「$requested」。先用 list_loras 检索，再填返回的 file")
-        val info = loras.firstOrNull { AgentLoraCatalog.normalize(it.file) == AgentLoraCatalog.normalize(file) }
+        val info = infoFor(file)
         val value = strength ?: info?.preferredStrength ?: 1.0
         if (value < -4.0 || value > 4.0) return AgentToolResult(false, error = "strength 超出范围（-4 到 4）")
+        val replaced = previous?.takeIf { AgentLoraCatalog.normalize(it) != AgentLoraCatalog.normalize(file) }
+        // A switched-off LoRA group ignores its slots, so loading a LoRA there turns the switch on.
+        val turnOn = slot.switchKey?.takeIf { !isOn(slot) }?.let { AgentFieldChange(slot.nodeId, it, switchValue(slot, it)) }
         val changes = listOf(AgentFieldChange(slot.nodeId, slot.nameKey, file)) +
-            slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, value) }
-        val result = stage(changes, "已暂存：${slot.id} → ${info?.name ?: file}，强度 $value")
+            slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, value) } + listOfNotNull(turnOn)
+        val result = stage(changes, "已暂存：${slot.id} → ${info?.name ?: file}，强度 $value" +
+            (turnOn?.let { "，并打开了 ${it.key}" } ?: ""))
         if (!result.ok) return result
         val words = info?.triggerWords.orEmpty()
+        val hints = triggerHints(file, replaced)
         return result.copy(data = (result.data as Map<*, *>) + mapOf(
             "trigger_words" to words.takeIf { it.isNotEmpty() },
-            "hint" to if (words.isNotEmpty()) "把需要的触发词写进 set_prompt 的正向提示词" else "这个 LoRA 没有登记触发词"
+            "replaced" to replaced,
+            "hint" to hints.joinToString("；").ifBlank { null },
+            "warning" to if (isOn(slot)) null else "这个槽位所在 LoRA 组的开关是关的，Agent 改不了，装上也不会生效；请告诉用户在工作流里打开"
         ).filterValues { it != null })
     }
 
@@ -527,7 +663,13 @@ class AgentDrawToolbox(
     }
 
     private fun submit(arguments: JsonObject): AgentToolResult {
-        val positive = prompt ?: return AgentToolResult(false, error = "还没有提示词，先调用 set_prompt")
+        val written = prompt ?: return AgentToolResult(false, error = "还没有提示词，先调用 set_prompt")
+        // A LoRA loaded this turn whose trigger word never made it into the prompt often does nothing visible;
+        // adding the word beats failing the turn over it.
+        val added = missingTriggers(written)
+        val positive = if (added.isEmpty()) written
+            else written.trimEnd().trimEnd(',', '，').trimEnd() + ", " + added.joinToString(", ")
+        prompt = positive
         val reply = AgentInteractionProtocol.string(arguments, "reply")
         val draw = arguments["draw"]?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean ?: true
         saveDefaults = arguments["save_defaults"]?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isBoolean }?.asBoolean == true
@@ -539,8 +681,77 @@ class AgentDrawToolbox(
             addProperty("action", if (draw) "draw" else "apply_prompt")
             arguments["outfit_selections"]?.takeIf { it.isJsonArray }?.let { add("outfit_selections", it) }
         }
-        return AgentToolResult(true, mapOf("summary" to if (draw) "已提交出图" else "已写入提示词，未出图",
+        return AgentToolResult(true, mapOf("summary" to (if (draw) "已提交出图" else "已写入提示词，未出图") +
+                (if (added.isEmpty()) "" else "；已补上 LoRA 触发词：${added.joinToString("、")}"),
             "staged_changes" to staged.size, "save_defaults" to saveDefaults), finalContent = final.toString())
+    }
+
+    /**
+     * 【LoRA 速查】 for the tool instruction: this workflow's LoRA slots and the LoRAs the server can load, so
+     * "换成 X 画风" needs no list_loras round trip. Built from the turn's starting state; empty without slots.
+     */
+    override fun briefing(): String {
+        if (loraSlots.isEmpty()) return ""
+        val options = loraSlots.flatMap { it.options }.filterNot { it.equals("None", ignoreCase = true) }
+            .distinctBy(AgentLoraCatalog::normalize)
+        val offered = options.map(AgentLoraCatalog::normalize).toSet()
+        // Same rule as list_loras: only what the server can load; without combo options trust the index.
+        val usable = if (offered.isEmpty()) loras else loras.filter { AgentLoraCatalog.normalize(it.file) in offered }
+        val loaded = loraSlots.mapNotNull { loadedFile(it)?.let(AgentLoraCatalog::normalize) }.toSet()
+        val ranked = usable.sortedWith(compareByDescending<AgentLoraInfo> { AgentLoraCatalog.normalize(it.file) in loaded }
+            .thenByDescending { it.favorite }
+            .thenByDescending { it.notes.isNotBlank() || it.agentNotes.isNotBlank() || it.useCases.isNotEmpty() || it.tags.isNotEmpty() }
+            .thenByDescending { it.triggerWords.isNotEmpty() }
+            .thenBy { it.file.lowercase(Locale.ROOT) })
+        val known = usable.map { AgentLoraCatalog.normalize(it.file) }.toSet()
+        val lines = ranked.map(::briefLine) + options.filter { AgentLoraCatalog.normalize(it) !in known }
+            .sortedBy { it.lowercase(Locale.ROOT) }
+            .map { "- " + short(it, MAX_BRIEF_LINE) + "（没有资料）" }
+        return buildString {
+            append("【LoRA 速查】本轮工作流的 LoRA 槽位和服务器上能装的 LoRA。换 LoRA 时直接用这里的槽位和 file 调用 set_lora，不必先 list_loras；")
+            append("这里没有、要按用途筛选或要看完整简介时再用 list_loras / read_lora。\n槽位：\n")
+            loraSlots.forEach { slot -> append("- ${slot.id}（${nodeName(slot.nodeId) ?: "LoRA"}）：${describeSlot(slot)}\n") }
+            if (lines.isEmpty()) {
+                append("服务器没有报告可选的 LoRA 文件，用 list_loras 检索。")
+                return@buildString
+            }
+            append("可用 LoRA（共 ${lines.size} 个）：\n")
+            var shown = 0
+            for (line in lines) {
+                if (shown >= MAX_BRIEF_LORAS || length + line.length + 1 > MAX_BRIEF_CHARS) break
+                append(line).append('\n')
+                shown++
+            }
+            if (shown < lines.size) append("……还有 ${lines.size - shown} 个没列出，用 list_loras 按关键词检索。")
+        }.trim()
+    }
+
+    /** One 速查 line: what the LoRA is, how to trigger it, and what the user and the Agent noted about it. */
+    private fun briefLine(info: AgentLoraInfo): String {
+        fun stem(value: String) = AgentLoraCatalog.normalize(value).substringAfterLast('/').substringBeforeLast('.')
+        val file = stem(info.file)
+        val parts = buildList {
+            add(info.file)
+            listOf(info.name, info.title).map(String::trim).filter { it.isNotEmpty() && stem(it) != file }
+                .distinctBy { it.lowercase(Locale.ROOT) }.forEach { add(short(it, 40)) }
+            val groups = info.triggerWords
+            if (groups.isNotEmpty()) add("触发词 " + groups.take(3).joinToString(" / ") { short(it, 60) } +
+                if (groups.size > 3) " 等 ${groups.size} 组" else "")
+            if (info.baseModel.isNotBlank()) add(info.baseModel)
+            if (info.useCases.isNotEmpty()) add("用途 " + info.useCases.joinToString("、") { modelUseCases[it] ?: it })
+            if (info.character.isNotBlank()) add("角色 " + short(info.character, 30))
+            info.preferredStrength?.let { add("推荐强度 $it") }
+            if (info.favorite) add("收藏")
+            if (info.notes.isNotBlank()) add("备注 " + short(info.notes, 50))
+            if (info.agentNotes.isNotBlank()) add("你的笔记 " + short(info.agentNotes, 70))
+        }
+        return short("- " + parts.joinToString("｜"), MAX_BRIEF_LINE)
+    }
+
+    /** [text] on one line, cut to [max] characters with an ellipsis. */
+    private fun short(text: String, max: Int): String {
+        val line = text.replace(blank, " ").trim()
+        return if (line.length <= max) line else line.take(max - 1).trimEnd() + "…"
     }
 
     private fun strings(element: JsonElement?): List<String> =
@@ -637,14 +848,31 @@ class AgentDrawToolbox(
         private const val MAX_OPTIONS = 40
         private const val MAX_TAGS = 12
         private const val MAX_PROMPT = 8000
+        private const val MAX_BRIEF_LORAS = 80
+        private const val MAX_BRIEF_CHARS = 8000
+        private const val MAX_BRIEF_LINE = 220
+        /** submit adds a missing trigger word only for LoRAs with at most this many words. */
+        private const val MAX_AUTO_TRIGGERS = 3
+        private const val MAX_AUTO_TRIGGER_LENGTH = 40
+        private val blank = Regex("\\s+")
+
+        /** [instruction] followed by this turn's toolbox briefing (the 【LoRA 速查】) when there is one. */
+        fun instruction(maxSteps: Int, briefing: String): String =
+            if (briefing.isBlank()) instruction(maxSteps) else instruction(maxSteps) + "\n\n" + briefing.trim()
 
         /** Appended after the user's request; the system message keeps the drawing rules and output format. */
         fun instruction(maxSteps: Int) = """
 【智能体工具模式】本轮通过工具完成任务，最多 $maxSteps 步，每步可调用一个或多个工具，工具结果会返回给你。
 建议流程：需要时 get_character_profile 核对角色、lookup_tags 查标签写法、inspect_workflow 查看参数并用 patch_workflow 修改；然后 set_prompt 写入提示词，最后 submit_workflow 提交。
+能确定的步骤放进同一批调用，少走来回：
+- 换 LoRA（包括用 LoRA 换画风）：按【LoRA 速查】直接 set_lora，同一批 set_prompt（加上新 LoRA 的触发词，去掉换下的 LoRA 的触发词）再 submit_workflow；速查里没有或拿不准用哪个时才 list_loras / read_lora。
+- 替换角色外貌：用户给了角色标签或说"换成 xxx"时，直接替换提示词里对应的角色和外貌标签，再 set_prompt + submit_workflow；不认识这个角色或缺关键外貌时才 get_character_profile / lookup_tags。
+- 只改提示词：不用 inspect_workflow，直接 set_prompt + submit_workflow。
+**要出图时必须调用 submit_workflow**：用 set_prompt 写入提示词后，必须接着调用 submit_workflow 才能出图；patch_workflow 修改参数后也要调用 submit_workflow 才能生效；只有用户明确说"不出图""先别画"时才不提交。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
-有 LoRA 工具时：list_loras 检索本地 LoRA（含你以前写的 agent_notes），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，按标注、笔记和简介挑选，强度优先用推荐强度，并把触发词写进提示词；用户没提就保持原样。
-有 refresh_loras / annotate_lora 时：用户说放了新 LoRA 或列表里找不到时先 refresh_loras；读懂简介、用户说明了用途或出图确认了效果后，用 annotate_lora 记下简短笔记（用途、效果、推荐强度、注意事项），方便以后的新会话直接使用；只记确认过的内容，不写猜测。
+正反向提示词重复标签：系统会自动从负面提示词中移除与正面重复的标签，不影响出图，你会在 set_prompt 的返回值中看到 warning；无需再次调用或修改提示词，继续 submit_workflow 即可。
+有 LoRA 工具时：list_loras 按关键词检索本地 LoRA（含你以前写的笔记），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，用户没提就保持原样；按标注、笔记和简介挑选，强度优先用推荐强度，新 LoRA 的触发词写进提示词。SD1.5、SDXL 系（Illustrious、Pony、NoobAI 等）、Flux 等不同架构的 LoRA 互不通用：自己挑选时选底模和当前模型相符的；用户点名要用的照常装上，底模明显不符时在回复里提一句。
+有 refresh_loras / annotate_lora 时：用户说放了新 LoRA 或列表里找不到时先 refresh_loras；读懂简介或出图确认了效果后，用 annotate_lora 记下简短笔记（用途、效果、推荐强度、注意事项），方便以后的新会话直接使用；用户告诉你某个 LoRA 的触发词、用途、推荐强度或效果时，同一批调用 annotate_lora 记下；只记确认过的内容，不写猜测。
 画风/画师字段在 inspect_workflow 中标为 role="画风/画师"，用户要求换画风或画师时用 patch_workflow 修改；用户说保存、记住、以后都用、设为默认时，submit_workflow 传 save_defaults=true，设置页会同步。
 有 save_character_profile 时：用户介绍了词库里没有的新角色、要求记住某个角色，或给已登记角色补充新服装/外貌时，把整理好的英文绘画标签写入词库；不要擅自覆盖用户没要求改动的已有档案。
 工具报错时按错误修正参数再试，不要重复同样的错误调用。只聊天不出图时，不调用工具，直接按系统中的格式回复；只查看或整理 LoRA 资料、不出图时，用完 LoRA 工具后不调用 submit_workflow，直接按系统中的格式回复。

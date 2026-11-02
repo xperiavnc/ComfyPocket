@@ -430,7 +430,7 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         validate: ((String) -> String?)? = null,
         historyCount: Int = 0
     ): AgentInteractionOutcome = AgentToolLoop(model(requestId, settings, images, streaming, checkCurrent, historyCount), toolbox)
-        .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS), checkCurrent, progress,
+        .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS, toolbox.briefing()), checkCurrent, progress,
             onStep = { step ->
                 vm.addLog("Agent 工具第 ${step.index} 步：${step.label}${if (step.ok) "" else "（失败）"}" +
                     step.note.takeIf { it.isNotBlank() }?.let { " · ${it.take(160)}" }.orEmpty(),

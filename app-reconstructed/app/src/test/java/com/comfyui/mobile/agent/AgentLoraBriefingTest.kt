@@ -1,0 +1,179 @@
+package com.comfyui.mobile.agent
+
+import com.comfyui.mobile.modelcenter.LocalModel
+import com.comfyui.mobile.modelcenter.ModelAnnotation
+import com.comfyui.mobile.modelcenter.ModelProvider
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.*
+import org.junit.Test
+
+/** The per-turn 【LoRA 速查】, slot-free set_lora, group switches and the trigger-word safety net. */
+class AgentLoraBriefingTest {
+    private val watercolor = "style\\watercolor_v2.safetensors"
+    private val miku = "chars\\miku.safetensors"
+    private val options = listOf(watercolor, miku, "detail.safetensors")
+
+    private fun loader(lora: String) = mutableMapOf<String, Any>("class_type" to "LoraLoader", "inputs" to mutableMapOf<String, Any>(
+        "lora_name" to lora, "strength_model" to 1.0, "strength_clip" to 1.0, "model" to listOf("4", 0), "clip" to listOf("4", 1)))
+
+    private fun loaderFields(node: String) = listOf(
+        AgentFieldSpec(node, "lora_name", "LoraLoader", AgentFieldKind.TEXT, options = options),
+        AgentFieldSpec(node, "strength_model", "LoraLoader", AgentFieldKind.DECIMAL, min = -10.0, max = 10.0),
+        AgentFieldSpec(node, "strength_clip", "LoraLoader", AgentFieldKind.DECIMAL, min = -10.0, max = 10.0))
+
+    private fun single(lora: String = "detail.safetensors") = AgentWorkflowSnapshot(mapOf("10" to loader(lora)), loaderFields("10"))
+
+    private val catalog = AgentLoraCatalog.from(listOf(
+        LocalModel(category = "LORA", present = true, name = "watercolor_v2", nodeModelName = watercolor, sha256 = "a".repeat(64),
+            annotation = ModelAnnotation(alias = "水彩画风", useCases = listOf("水彩", "插画"), preferredStrength = 0.7, notes = "背景很淡")),
+        LocalModel(category = "LORA", present = true, name = "miku", nodeModelName = miku,
+            provider = ModelProvider(trainedWords = listOf("hatsune miku"), description = "<p>Miku <b>character</b> LoRA</p>"))
+    ), mapOf("a".repeat(64) to ModelProvider(trainedWords = listOf("watercolor"), baseModel = "SDXL 1.0")))
+
+    private fun args(json: String): JsonObject = JsonParser.parseString(json).asJsonObject
+    private fun data(result: AgentToolResult) = result.data as Map<*, *>
+    private fun finalPrompt(result: AgentToolResult) = JsonParser.parseString(result.finalContent).asJsonObject["prompt"].asString
+
+    @Test fun briefingListsTheSlotsAndEveryLoadableLoraWithItsTriggerWords() {
+        val text = AgentDrawToolbox(single(), titles = mapOf("10" to "LoRA 加载"), loras = catalog).briefing()
+        assertTrue(text, text.startsWith("【LoRA 速查】"))
+        val lines = text.lines()
+        assertTrue(text, "- 10:lora_name（LoRA 加载）：detail.safetensors，强度 1.0" in lines)
+        val loras = lines.filter { it.startsWith("- ") && !it.startsWith("- 10:") }
+        assertEquals(listOf(
+            "- $watercolor｜水彩画风｜触发词 watercolor｜SDXL 1.0｜用途 水彩、插画｜推荐强度 0.7｜备注 背景很淡",
+            "- $miku｜触发词 hatsune miku",
+            "- detail.safetensors（没有资料）"), loras)
+        assertTrue(AgentDrawToolbox.instruction(8, text).endsWith(text))
+        assertEquals(AgentDrawToolbox.instruction(8), AgentDrawToolbox.instruction(8, ""))
+    }
+
+    @Test fun noSlotNoBriefing() {
+        val plain = AgentWorkflowSnapshot(mapOf("3" to mapOf("class_type" to "KSampler", "inputs" to mapOf("steps" to 20))),
+            listOf(AgentFieldSpec("3", "steps", "KSampler", AgentFieldKind.INTEGER)))
+        assertEquals("", AgentDrawToolbox(plain, loras = catalog).briefing())
+    }
+
+    @Test fun theOnlySlotNeedsNoSlotArgument() = runBlocking {
+        val box = AgentDrawToolbox(single(), loras = catalog)
+        val result = box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"miku"}"""))
+        assertTrue(result.error, result.ok)
+        assertEquals(miku, box.changes.single { it.key == "lora_name" }.value)
+        assertEquals("detail.safetensors", data(result)["replaced"])
+        assertTrue(data(result)["hint"].toString().contains("把触发词放进正向提示词"))
+    }
+
+    @Test fun severalSlotsNeedASlotUnlessOneAlreadyHoldsTheLora() = runBlocking {
+        val snapshot = AgentWorkflowSnapshot(mapOf("10" to loader("detail.safetensors"), "11" to loader(miku)),
+            loaderFields("10") + loaderFields("11"))
+        val box = AgentDrawToolbox(snapshot, loras = catalog)
+        val missing = box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"水彩画风"}"""))
+        assertFalse(missing.ok)
+        assertTrue(missing.error, missing.error!!.contains("请用 slot 指定") &&
+            missing.error!!.contains("10:lora_name（detail.safetensors，强度 1.0）") && missing.error!!.contains("11:lora_name（$miku，强度 1.0，触发词 hatsune miku）"))
+        val again = box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"miku","strength":0.5}"""))
+        assertTrue(again.error, again.ok)
+        assertEquals(setOf("11:lora_name", "11:strength_model", "11:strength_clip"), box.changes.map { "${it.nodeId}:${it.key}" }.toSet())
+    }
+
+    @Test fun submitAddsTheTriggerWordOfALoraLoadedThisTurn() = runBlocking {
+        val box = AgentDrawToolbox(single(), loras = catalog)
+        assertTrue(box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"miku"}""")).ok)
+        assertTrue(box.call(AgentDrawToolbox.SET_PROMPT, args("""{"prompt":"1girl, smile,"}""")).ok)
+        val submitted = box.call(AgentDrawToolbox.SUBMIT, args("""{"reply":"好"}"""))
+        assertTrue(submitted.error, submitted.ok)
+        assertEquals("1girl, smile, hatsune miku", finalPrompt(submitted))
+        assertEquals("1girl, smile, hatsune miku", box.prompt)
+        assertTrue(data(submitted)["summary"].toString().contains("已补上 LoRA 触发词：hatsune miku"))
+
+        val written = AgentDrawToolbox(single(), loras = catalog)
+        written.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"miku"}"""))
+        written.call(AgentDrawToolbox.SET_PROMPT, args("""{"prompt":"hatsune_miku, 1girl"}"""))
+        assertEquals("hatsune_miku, 1girl", finalPrompt(written.call(AgentDrawToolbox.SUBMIT, args("""{"reply":"好"}"""))))
+
+        // Already loaded before the turn: the user's prompt is left alone.
+        val kept = AgentDrawToolbox(single(miku), loras = catalog)
+        kept.call(AgentDrawToolbox.SET_PROMPT, args("""{"prompt":"1girl"}"""))
+        assertEquals("1girl", finalPrompt(kept.call(AgentDrawToolbox.SUBMIT, args("""{"reply":"好"}"""))))
+    }
+
+    @Test fun replacingALoraReportsItsLeftoverTriggerWordsWithoutRemovingThem() = runBlocking {
+        val box = AgentDrawToolbox(single(miku), loras = catalog)
+        assertTrue(box.call(AgentDrawToolbox.SET_PROMPT, args("""{"prompt":"hatsune miku, 1girl"}""")).ok)
+        val result = box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"水彩画风"}"""))
+        assertTrue(result.error, result.ok)
+        assertEquals(miku, data(result)["replaced"])
+        val hint = data(result)["hint"].toString()
+        assertTrue(hint, hint.contains("当前提示词里还没有这个 LoRA 的触发词"))
+        assertTrue(hint, hint.contains("提示词里还留着换下的「miku」的触发词：hatsune miku"))
+        assertEquals("hatsune miku, 1girl, watercolor", finalPrompt(box.call(AgentDrawToolbox.SUBMIT, args("""{"reply":"好"}"""))))
+    }
+
+    @Test fun slotsFollowStackCountsWeightNamesAndSwitches() {
+        val graph: Map<String, Any> = mapOf(
+            "1" to mapOf("class_type" to "LoRA Stacker", "inputs" to mapOf("input_mode" to "simple", "lora_count" to 2,
+                "lora_name_1" to "a", "lora_wt_1" to 0.8, "model_str_1" to 1.0, "clip_str_1" to 1.0,
+                "lora_name_2" to "b", "lora_wt_2" to 1.0, "model_str_2" to 1.0, "clip_str_2" to 1.0,
+                "lora_name_3" to "c", "lora_wt_3" to 1.0, "model_str_3" to 1.0, "clip_str_3" to 1.0)),
+            "2" to mapOf("class_type" to "CR LoRA Stack", "inputs" to mapOf(
+                "switch_1" to "On", "lora_name_1" to "a", "model_weight_1" to 1.0, "clip_weight_1" to 1.0,
+                "switch_2" to "Off", "lora_name_2" to "b", "model_weight_2" to 0.5, "clip_weight_2" to 0.5)),
+            "3" to mapOf("class_type" to "easy loraStack", "inputs" to mapOf("toggle" to false, "mode" to "simple", "num_loras" to 1,
+                "lora_1_name" to "a", "lora_1_strength" to 0.9, "lora_1_model_strength" to 1.0, "lora_1_clip_strength" to 1.0,
+                "lora_2_name" to "b", "lora_2_strength" to 1.0, "lora_2_model_strength" to 1.0, "lora_2_clip_strength" to 1.0)))
+        val slots = AgentLoraCatalog.slots(graph) { _, _ -> emptyList() }.associateBy { it.id }
+        assertEquals(setOf("1:lora_name_1", "1:lora_name_2", "2:lora_name_1", "2:lora_name_2", "3:lora_1_name"), slots.keys)
+        assertEquals(listOf("lora_wt_1", "model_str_1", "clip_str_1"), slots.getValue("1:lora_name_1").strengthKeys)
+        assertEquals(listOf("model_weight_2", "clip_weight_2"), slots.getValue("2:lora_name_2").strengthKeys)
+        assertTrue(slots.getValue("2:lora_name_1").switchedOn)
+        with(slots.getValue("2:lora_name_2")) { assertEquals("switch_2", switchKey); assertEquals("On", switchOn); assertFalse(switchedOn) }
+        with(slots.getValue("3:lora_1_name")) {
+            assertEquals(listOf("lora_1_strength", "lora_1_model_strength", "lora_1_clip_strength"), strengthKeys)
+            assertEquals("toggle", switchKey); assertEquals(true, switchOn); assertFalse(switchedOn)
+        }
+        assertNull(slots.getValue("1:lora_name_1").switchKey)
+    }
+
+    private fun easyStack(withToggle: Boolean): AgentWorkflowSnapshot {
+        val stackOptions = listOf("None", "a.safetensors", "b.safetensors")
+        val workflow = mapOf("13" to mapOf("class_type" to "easy loraStack", "inputs" to mapOf("toggle" to false, "mode" to "simple",
+            "num_loras" to 2, "lora_1_name" to "a.safetensors", "lora_1_strength" to 1.0, "lora_2_name" to "None", "lora_2_strength" to 1.0)))
+        return AgentWorkflowSnapshot(workflow, listOfNotNull(
+            AgentFieldSpec("13", "lora_1_name", "easy loraStack", AgentFieldKind.TEXT, options = stackOptions),
+            AgentFieldSpec("13", "lora_1_strength", "easy loraStack", AgentFieldKind.DECIMAL),
+            AgentFieldSpec("13", "lora_2_name", "easy loraStack", AgentFieldKind.TEXT, options = stackOptions),
+            AgentFieldSpec("13", "lora_2_strength", "easy loraStack", AgentFieldKind.DECIMAL),
+            if (withToggle) AgentFieldSpec("13", "toggle", "easy loraStack", AgentFieldKind.BOOLEAN) else null))
+    }
+
+    @Test fun loadingALoraTurnsItsGroupSwitchOnOrWarnsWhenItCannot() = runBlocking {
+        val box = AgentDrawToolbox(easyStack(withToggle = true))
+        assertTrue(box.briefing(), box.briefing().contains("13:lora_2_name（easy loraStack）：空，开关关着（装 LoRA 时会自动打开）"))
+        val result = box.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_2_name","lora":"b.safetensors"}"""))
+        assertTrue(result.error, result.ok)
+        assertTrue(data(result)["summary"].toString().contains("并打开了 toggle"))
+        assertEquals(mapOf("13:lora_2_name" to "b.safetensors", "13:lora_2_strength" to 1.0, "13:toggle" to true),
+            box.changes.associate { "${it.nodeId}:${it.key}" to it.value })
+        assertNull(data(result)["warning"])
+
+        val locked = AgentDrawToolbox(easyStack(withToggle = false))
+        val staged = locked.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_2_name","lora":"b.safetensors"}"""))
+        assertTrue(staged.error, staged.ok)
+        assertTrue(data(staged)["warning"].toString().contains("开关是关的"))
+        assertFalse(locked.changes.any { it.key == "toggle" })
+        val off = locked.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_1_name","lora":""}"""))
+        assertTrue(off.error, off.ok)
+        assertEquals("None", locked.changes.single { it.key == "lora_1_name" }.value)
+    }
+
+    @Test fun manyWordsThatNeverMatchTogetherFallBackToAnyWord() = runBlocking {
+        val box = AgentDrawToolbox(single(), loras = catalog)
+        val result = box.call(AgentDrawToolbox.LIST_LORAS, args("""{"query":"miku watercolor"}"""))
+        assertTrue(result.error, result.ok)
+        assertTrue(data(result)["summary"].toString().contains("没有同时命中全部检索词"))
+        assertEquals(listOf(watercolor, miku), (data(result)["loras"] as List<*>).map { (it as Map<*, *>)["file"] })
+        assertEquals(listOf("kawaii", "style", "xl"), AgentLoraCatalog.terms("Kawaii_Style-XL"))
+    }
+}

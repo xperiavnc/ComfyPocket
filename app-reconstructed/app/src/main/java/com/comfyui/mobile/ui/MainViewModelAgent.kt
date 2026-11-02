@@ -1404,7 +1404,9 @@ object MainViewModelAgent {
                         // LoRA loader fields are offered to the Agent even when not exposed as aux params.
                         val loraFields = vm.agentWorkflow?.let { graph ->
                             com.comfyui.mobile.agent.AgentLoraCatalog.slots(graph) { _, _ -> emptyList() }
-                                .flatMap { slot -> listOf(slot.id) + slot.strengthKeys.map { "${slot.nodeId}:$it" } }
+                                .flatMap { slot ->
+                                    listOf(slot.id) + (slot.strengthKeys + listOfNotNull(slot.switchKey)).map { "${slot.nodeId}:$it" }
+                                }
                         }.orEmpty()
                         val style = agentStyleNode(vm)?.let { "${it.nodeId}:${it.key}" }
                         vm.agentRuntime.workflowSnapshot(emptyList(), loraFields + listOfNotNull(style)) to style
@@ -1426,7 +1428,7 @@ object MainViewModelAgent {
                 }
             } else null
             val toolReserve = toolbox?.let {
-                (com.comfyui.mobile.agent.AgentDrawToolbox.instruction(com.comfyui.mobile.agent.AgentToolLoop.DEFAULT_MAX_STEPS) +
+                (com.comfyui.mobile.agent.AgentDrawToolbox.instruction(com.comfyui.mobile.agent.AgentToolLoop.DEFAULT_MAX_STEPS, it.briefing()) +
                     vm.gson.toJson(it.definitions)).toByteArray(Charsets.UTF_8).size + 4096
             } ?: 0
             val currentRequestIndex = messages.lastIndex
