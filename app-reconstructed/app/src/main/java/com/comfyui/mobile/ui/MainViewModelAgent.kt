@@ -25,8 +25,10 @@ import com.comfyui.mobile.model.LogType
 import com.comfyui.mobile.model.MediaOutput
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
 
@@ -1232,6 +1234,44 @@ object MainViewModelAgent {
             }.getOrDefault(emptyList())
         }
 
+    /**
+     * This turn's LoRA list: re-read from the computer when the phone's copy is missing or old (waiting a few
+     * seconds at most), else the phone cache. The flag tells the toolbox the list is already fresh.
+     */
+    private suspend fun loadAgentLoras(
+        vm: MainViewModel, library: com.comfyui.mobile.agent.AgentLoraLibrary?
+    ): Pair<List<com.comfyui.mobile.agent.AgentLoraInfo>, Boolean> {
+        val cached = loadAgentLoraCatalog(vm)
+        if (library == null) return cached to false
+        // Started outside the turn: when the computer is slow the turn goes on with the cache, and the re-read
+        // still finishes and saves the full list for the next turn.
+        val pending = vm.viewModelScope.async(Dispatchers.IO) {
+            try { library.refreshIfStale() } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) { null }
+        }
+        val fresh = withTimeoutOrNull(AGENT_LORA_REFRESH_MS) { pending.await() }?.loras ?: return cached to false
+        // An index still being rebuilt can come back empty; keep the cached list then.
+        return if (fresh.isEmpty() && cached.isNotEmpty()) cached to false else fresh to true
+    }
+
+    /**
+     * Background follow-up for the next turn's 【LoRA 速查】: the computer indexes files it does not know yet and
+     * the phone looks up missing Civitai sources. Runs beside the turn and never holds it up.
+     */
+    private fun completeAgentLoras(vm: MainViewModel, library: com.comfyui.mobile.agent.AgentLoraLibrary?, loadable: List<String>) {
+        if (library == null || loadable.isEmpty()) return
+        vm.viewModelScope.launch(Dispatchers.IO) {
+            val done = try { library.complete(loadable) } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) { return@launch }
+            val parts = listOfNotNull(
+                "已请电脑扫描新的模型文件".takeIf { done.scanStarted },
+                "从 Civitai 补到 ${done.fetched} 个 LoRA 的资料".takeIf { done.fetched > 0 },
+                "${done.failed} 个暂时没查到".takeIf { done.failed > 0 })
+            if (parts.isEmpty()) return@launch
+            withContext(Dispatchers.Main) { vm.addLog("Agent 后台补全 LoRA 资料：" + parts.joinToString("，"), LogType.INFO) }
+        }
+    }
+
     /** The Agent's live LoRA library for this turn; tells the user whenever the Agent writes a note. */
     private fun agentLoraLibrary(vm: MainViewModel): com.comfyui.mobile.agent.AgentLoraLibrary? {
         val base = vm.agentLoraLibrary() ?: return null
@@ -1392,21 +1432,26 @@ object MainViewModelAgent {
                 persona, characterContext.promptData(), com.comfyui.mobile.agent.AgentMode.DRAW)
             // Multi-step tool agent: only with native tool calls and a loaded workflow; the model may
             // touch nothing beyond the prompt targets and the fields the user exposed as aux params.
-            val toolbox = if (settings.tagSettings.toolLoop &&
-                !vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model)) {
+            val useTools = settings.tagSettings.toolLoop &&
+                !vm.llmClient.usesTextToolProtocol(settings.baseUrl, settings.model)
+            val loraLibrary = if (useTools) withContext(Dispatchers.Main) { agentLoraLibrary(vm) } else null
+            val toolbox = if (useTools) {
                 // The tools need the graph now, not at apply time; a cold first turn would otherwise
                 // silently skip the agent. Loading is idempotent and shared with prepare().
                 ensureAgentWorkflowLoaded(vm, silent = true)
                 checkCurrent()
-                val loras = loadAgentLoraCatalog(vm)
+                val (loras, freshLoras) = loadAgentLoras(vm, loraLibrary)
+                checkCurrent()
                 withContext(Dispatchers.Main) {
                     runCatching {
-                        // LoRA loader fields are offered to the Agent even when not exposed as aux params.
+                        // LoRA loader fields are offered to the Agent even when not exposed as aux params,
+                        // with the stack count so it can fill the next slot when adding a LoRA.
                         val loraFields = vm.agentWorkflow?.let { graph ->
                             com.comfyui.mobile.agent.AgentLoraCatalog.slots(graph) { _, _ -> emptyList() }
                                 .flatMap { slot ->
-                                    listOf(slot.id) + (slot.strengthKeys + listOfNotNull(slot.switchKey)).map { "${slot.nodeId}:$it" }
-                                }
+                                    listOf(slot.id) + (slot.strengthKeys + listOfNotNull(slot.switchKey, slot.countKey))
+                                        .map { "${slot.nodeId}:$it" }
+                                }.distinct()
                         }.orEmpty()
                         val style = agentStyleNode(vm)?.let { "${it.nodeId}:${it.key}" }
                         vm.agentRuntime.workflowSnapshot(emptyList(), loraFields + listOfNotNull(style)) to style
@@ -1423,10 +1468,11 @@ object MainViewModelAgent {
                                         }
                                     }
                                 }
-                            }, loraLibrary = agentLoraLibrary(vm))
+                            }, loraLibrary = loraLibrary, freshLoras = freshLoras)
                     }
                 }
             } else null
+            if (toolbox != null) completeAgentLoras(vm, loraLibrary, toolbox.loadableLoras)
             val toolReserve = toolbox?.let {
                 (com.comfyui.mobile.agent.AgentDrawToolbox.instruction(com.comfyui.mobile.agent.AgentToolLoop.DEFAULT_MAX_STEPS, it.briefing()) +
                     vm.gson.toJson(it.definitions)).toByteArray(Charsets.UTF_8).size + 4096
@@ -1694,6 +1740,8 @@ object MainViewModelAgent {
     }
 
     private const val MAX_IMAGES = 4
+    /** How long a drawing turn waits for the computer's LoRA list before using the phone's copy. */
+    private const val AGENT_LORA_REFRESH_MS = 4_000L
     private const val MAX_TEXT_FILE_BYTES = 100 * 1024
 
     /** Downscale to max 1024px long edge, JPEG q85. */
