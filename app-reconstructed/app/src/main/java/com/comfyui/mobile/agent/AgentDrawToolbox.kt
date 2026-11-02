@@ -31,12 +31,14 @@ class AgentDrawToolbox(
     /** Persists a character profile into the library; returns an error message or null. */
     private val saveCharacter: (suspend (CharacterLore) -> String?)? = null,
     /** Live model-center access: refresh, full descriptions and the Agent's own LoRA notes. */
-    private val loraLibrary: AgentLoraLibrary? = null
+    private val loraLibrary: AgentLoraLibrary? = null,
+    /** True when [loras] was just re-read from the computer, so list_loras needn't read it again this turn. */
+    freshLoras: Boolean = false
 ) : AgentToolbox {
     private var characters: List<CharacterLore> = characters
     private var loras: List<AgentLoraInfo> = loras
     /** True once this turn re-read the computer's LoRA list (or tried and fell back to the cache). */
-    private var lorasFresh = loraLibrary == null
+    private var lorasFresh = loraLibrary == null || freshLoras
     /** Set by submit(save_defaults=true): keep this turn's parameters as the workflow defaults. */
     var saveDefaults: Boolean = false
         private set
@@ -59,6 +61,42 @@ class AgentDrawToolbox(
         strengthKeys = slot.strengthKeys.filter { "${slot.nodeId}:$it" in allowedFields },
         // Without an editable switch the slot keeps switchedOn=false, so set_lora can warn instead.
         switchKey = slot.switchKey?.takeIf { "${slot.nodeId}:$it" in allowedFields }) }
+
+    /** The stack's slot count this turn (staged, else as in the workflow); null when the node has none. */
+    private fun countOf(slot: AgentLoraSlot): Int? =
+        slot.countKey?.let { (stagedValue(slot.nodeId, it) as? Number)?.toInt() }
+
+    /** Whether the node uses this slot: single loaders always, stack slots up to num_loras / lora_count. */
+    private fun applies(slot: AgentLoraSlot): Boolean {
+        val number = slot.number ?: return true
+        val count = countOf(slot) ?: return true
+        return number <= count
+    }
+
+    /** The first stack slot past the count, when the count field is open to the Agent and allows one more. */
+    private fun isNextSlot(slot: AgentLoraSlot): Boolean {
+        val number = slot.number ?: return false
+        val key = slot.countKey ?: return false
+        val spec = allowedFields["${slot.nodeId}:$key"] ?: return false
+        val count = countOf(slot) ?: return false
+        return number == count + 1 && (spec.max == null || number <= spec.max)
+    }
+
+    /** Slots set_lora can use now: the ones the node applies plus each stack's next slot. */
+    private fun usableSlots(): List<AgentLoraSlot> = loraSlots.filter { applies(it) || isNextSlot(it) }
+
+    /** Fields of stack slots past the count: the node ignores them, so inspect_workflow leaves them out. */
+    private fun unusedSlotFields(): Set<String> = loraSlots.filterNot(::applies)
+        .flatMap { slot -> listOf(slot.id) + slot.strengthKeys.map { "${slot.nodeId}:$it" } }.toSet()
+
+    /**
+     * LoRA files this workflow can load, the ones in use first. The model center completes their info in the
+     * background, so the next turn's 【LoRA 速查】 shows more than file names.
+     */
+    val loadableLoras: List<String>
+        get() = (usableSlots().mapNotNull(::loadedFile) +
+            loraSlots.flatMap { it.options }.filterNot { it.isBlank() || it.equals("None", ignoreCase = true) })
+            .distinctBy(AgentLoraCatalog::normalize)
 
     override val definitions: List<ChatToolDefinition> = listOf(
         tool(INSPECT, "查看本轮开放给你的工作流参数（节点、字段、当前值、可选项和范围）。修改参数前先调用。", obj(emptyMap())),
@@ -132,10 +170,10 @@ class AgentDrawToolbox(
                     "preferred_strength" to mapOf("type" to "number", "description" to "可选：推荐强度，-4 到 4")
                 ), "lora"))
         )
-        val set: List<ChatToolDefinition> = if (loraSlots.isEmpty()) emptyList() else listOf(
-            tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效；槽位所在 LoRA 组的开关关着时会一并打开。",
+        val set: List<ChatToolDefinition> = if (usableSlots().isEmpty()) emptyList() else listOf(
+            tool(SET_LORA, "把某个 LoRA 槽位换成指定 LoRA 并设置强度，或用 lora 为空字符串/strength 为 0 停用该槽位。修改会暂存，提交时生效；槽位所在 LoRA 组的开关关着时会一并打开，装进「新增槽位」时会一并调大 LoRA 数量。",
                 obj(mapOf(
-                    "slot" to text("槽位地址，形如 \"10:lora_name\"，见【LoRA 速查】或 list_loras；工作流只有一个槽位时可以不填"),
+                    "slot" to text("槽位地址，形如 \"10:lora_name\"，见【LoRA 速查】或 list_loras；只有一个在用的槽位时可以不填（表示替换它）；要在原有 LoRA 之外再加一个，填「新增槽位」的地址"),
                     "lora" to text("【LoRA 速查】或 list_loras 里的 file；空字符串表示停用"),
                     "strength" to mapOf("type" to "number", "description" to "强度，通常 0.4–1.2；不传则用推荐强度或 1.0")
                 ), "lora"))
@@ -167,7 +205,7 @@ class AgentDrawToolbox(
         PROFILE -> profile(arguments)
         SUBMIT -> submit(arguments)
         LIST_LORAS -> if (!offers(name)) unknown(name) else listLoras(arguments)
-        SET_LORA -> if (loraSlots.isEmpty()) unknown(name) else setLora(arguments)
+        SET_LORA -> if (!offers(name)) unknown(name) else setLora(arguments)
         READ_LORA -> if (!offers(name)) unknown(name) else readLora(arguments)
         REFRESH_LORAS -> if (!offers(name)) unknown(name) else refreshLoras(arguments)
         ANNOTATE_LORA -> if (!offers(name)) unknown(name) else annotateLora(arguments)
@@ -186,7 +224,9 @@ class AgentDrawToolbox(
     }
 
     private fun inspect(): AgentToolResult {
+        val unused = unusedSlotFields()
         val fields = inspectTool.execute(current()).getOrElse { return AgentToolResult(false, error = it.message) }
+            .filter { it.spec.address !in unused }
         return AgentToolResult(true, mapOf(
             "summary" to "${fields.size} 个可修改参数",
             "fields" to fields.map { field ->
@@ -266,18 +306,25 @@ class AgentDrawToolbox(
             bare = bareMatches(all = false)
         }
         bare = if (hits.size >= MAX_LORAS) emptyList() else bare.take(MAX_LORAS - hits.size)
+        val slots = usableSlots()
         return AgentToolResult(true, linkedMapOf(
-            "summary" to (if (loraSlots.isEmpty()) "当前工作流没有 LoRA 槽位（只能查看和写笔记，不能装载），" else "${loraSlots.size} 个 LoRA 槽位，") +
+            "summary" to (if (slots.isEmpty()) "当前工作流没有 LoRA 槽位（只能查看和写笔记，不能装载），" else "${slots.size} 个 LoRA 槽位，") +
                 "命中 ${hits.size + bare.size} 个 LoRA" + (if (loose) "（没有同时命中全部检索词，按命中词数列出）" else "") +
                 (if (loras.isEmpty()) "（模型中心还没有本地 LoRA 资料，只有文件名）" else "") +
                 (if (notice.isNotEmpty()) "；$notice" else ""),
-            "slots" to loraSlots.map { slot ->
+            "slots" to slots.map { slot ->
                 linkedMapOf<String, Any?>(
                     "slot" to slot.id,
-                    "node" to (titles[slot.nodeId] ?: (snapshot.workflow[slot.nodeId] as? Map<*, *>)?.get("class_type")),
-                    "current" to stagedValue(slot.nodeId, slot.nameKey),
-                    "strength" to slot.strengthKeys.associateWith { stagedValue(slot.nodeId, it) }
-                ).apply { if (!isOn(slot)) put("enabled", false) }
+                    "node" to (titles[slot.nodeId] ?: (snapshot.workflow[slot.nodeId] as? Map<*, *>)?.get("class_type"))
+                ).apply {
+                    if (applies(slot)) {
+                        put("current", stagedValue(slot.nodeId, slot.nameKey))
+                        put("strength", slot.strengthKeys.associateWith { stagedValue(slot.nodeId, it) })
+                    } else {
+                        put("new_slot", "空槽位，装上 LoRA 时会把 ${slot.countKey} 调到 ${slot.number}")
+                    }
+                    if (!isOn(slot)) put("enabled", false)
+                }
             },
             "loras" to hits.map { info ->
                 linkedMapOf<String, Any?>(
@@ -364,7 +411,7 @@ class AgentDrawToolbox(
             "outfit" to current.outfit.ifBlank { null },
             "preferred_strength" to current.preferredStrength,
             "favorite" to current.favorite.takeIf { it },
-            "loadable" to (loraSlots.isNotEmpty() && (offered.isEmpty() || AgentLoraCatalog.normalize(current.file) in offered)),
+            "loadable" to (usableSlots().isNotEmpty() && (offered.isEmpty() || AgentLoraCatalog.normalize(current.file) in offered)),
             "notice" to notice.ifBlank { null },
             "hint" to if (current.triggerWords.isEmpty() && current.fullDescription.isBlank() && library != null)
                 "没有简介和触发词：可以问用户这个 LoRA 的用途，确认后用 annotate_lora 记下" else null
@@ -389,7 +436,7 @@ class AgentDrawToolbox(
                 (if (result.note.isNotEmpty()) "；${result.note}" else ""),
             "added" to added.take(MAX_LORAS).takeIf { it.isNotEmpty() },
             "removed" to removed.take(MAX_LORAS).takeIf { it.isNotEmpty() },
-            "hint" to if (added.isNotEmpty() && loraSlots.isNotEmpty())
+            "hint" to if (added.isNotEmpty() && usableSlots().isNotEmpty())
                 "新文件要等工作流的可选项刷新后才能用 set_lora 装载，现在可以先用 read_lora 查看" else null
         ).filterValues { it != null })
     }
@@ -442,14 +489,27 @@ class AgentDrawToolbox(
         ).filterValues { it != null })
     }
 
-    /** By id (or node id when the node has one slot); without one: the only slot, or the slot already holding [requested]. */
+    /**
+     * By id, or by node id within that node. Without one: the slot already holding [requested], else the only
+     * slot in use. A stack's new slot has to be named, so a bare "换成 X" keeps replacing the LoRA in use.
+     */
     private fun pickSlot(slotId: String, requested: String?): AgentLoraSlot? {
-        if (slotId.isNotBlank()) return loraSlots.firstOrNull { it.id == slotId } ?: loraSlots.filter { it.nodeId == slotId }.singleOrNull()
-        loraSlots.singleOrNull()?.let { return it }
+        val usable = usableSlots()
+        if (slotId.isNotBlank()) {
+            usable.firstOrNull { it.id == slotId }?.let { return it }
+            val inNode = usable.filter { it.nodeId == slotId }
+            return holder(inNode, requested) ?: inNode.filter(::applies).singleOrNull() ?: inNode.singleOrNull()
+        }
+        return holder(usable, requested) ?: usable.filter(::applies).singleOrNull() ?: usable.singleOrNull()
+    }
+
+    /** The one slot among [slots] that already holds [requested]. */
+    private fun holder(slots: List<AgentLoraSlot>, requested: String?): AgentLoraSlot? {
         if (requested == null) return null
-        return loraSlots.filter { slot ->
+        return slots.filter { slot ->
             val file = AgentLoraCatalog.resolve(requested, slot.options, loras)
-            file != null && AgentLoraCatalog.normalize(stagedValue(slot.nodeId, slot.nameKey) as? String ?: "") == AgentLoraCatalog.normalize(file)
+            val loaded = loadedFile(slot)
+            file != null && loaded != null && AgentLoraCatalog.normalize(loaded) == AgentLoraCatalog.normalize(file)
         }.singleOrNull()
     }
 
@@ -470,8 +530,8 @@ class AgentDrawToolbox(
 
     private fun nodeName(nodeId: String): Any? = titles[nodeId] ?: (snapshot.workflow[nodeId] as? Map<*, *>)?.get("class_type")
 
-    /** The LoRA file a slot holds this turn, or null when it is empty. */
-    private fun loadedFile(slot: AgentLoraSlot): String? =
+    /** The LoRA file a slot holds this turn, or null when it is empty or past the stack's count. */
+    private fun loadedFile(slot: AgentLoraSlot): String? = if (!applies(slot)) null else
         (stagedValue(slot.nodeId, slot.nameKey) as? String)?.takeIf { it.isNotBlank() && !it.equals("None", ignoreCase = true) }
 
     /** "file，强度 0.8，触发词 x" or "空", plus the switch state, from this turn's staged values. */
@@ -481,6 +541,7 @@ class AgentDrawToolbox(
         val triggers = file?.let(::infoFor)?.let(::activators).orEmpty()
         return buildString {
             append(file ?: "空")
+            if (!applies(slot)) append("（新增槽位：装上 LoRA 时会把 ${slot.countKey} 调到 ${slot.number}）")
             if (file != null && strength != null) append("，强度 ").append(strength)
             if (triggers.isNotEmpty()) append("，触发词 ").append(triggers.take(3).joinToString(" / ") { short(it, 40) })
             if (!isOn(slot)) append(if (slot.switchKey != null) "，开关关着（装 LoRA 时会自动打开）" else "，开关关着（Agent 改不了，装上也不生效）")
@@ -511,8 +572,10 @@ class AgentDrawToolbox(
      */
     private fun missingTriggers(positive: String): List<String> = loraSlots.mapNotNull { slot ->
         val file = staged[slot.id]?.value as? String ?: return@mapNotNull null
-        if (file.equals("None", ignoreCase = true) || AgentLoraCatalog.normalize(file) == AgentLoraCatalog.normalize(slot.current)) return@mapNotNull null
-        if (!isOn(slot)) return@mapNotNull null
+        if (file.equals("None", ignoreCase = true) || !applies(slot) || !isOn(slot)) return@mapNotNull null
+        // In use when the turn started: its trigger words are already the user's call. A slot past the count
+        // was not in use, whatever file name it kept.
+        if (slot.active && AgentLoraCatalog.normalize(file) == AgentLoraCatalog.normalize(slot.current)) return@mapNotNull null
         if (slot.strengthKeys.isNotEmpty() && slot.strengthKeys.all { (stagedValue(slot.nodeId, it) as? Number)?.toDouble() == 0.0 }) return@mapNotNull null
         val words = words(infoFor(file))
         if (words.isEmpty() || words.size > MAX_AUTO_TRIGGERS || words.any { mentions(positive, it) }) null
@@ -549,6 +612,19 @@ class AgentDrawToolbox(
         }
     }
 
+    /** The count change that makes a stack apply [slot], typed like the workflow's value; null when it applies. */
+    private fun growTo(slot: AgentLoraSlot): AgentFieldChange? {
+        if (applies(slot)) return null
+        val key = slot.countKey ?: return null
+        val number = slot.number ?: return null
+        val value: Any = when (stagedValue(slot.nodeId, key)) {
+            is Int -> number
+            is Long -> number.toLong()
+            else -> number.toDouble()
+        }
+        return AgentFieldChange(slot.nodeId, key, value)
+    }
+
     private fun setLora(arguments: JsonObject): AgentToolResult {
         val slotId = AgentInteractionProtocol.string(arguments, "slot")
         val requested = AgentInteractionProtocol.string(arguments, "lora")
@@ -556,12 +632,15 @@ class AgentDrawToolbox(
         val strength = strengthElement?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble
         if (strengthElement != null && !strengthElement.isJsonNull && strength == null) return AgentToolResult(false, error = "strength 必须是数字")
         val named = requested.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) }
-        val slot = pickSlot(slotId, named) ?: return AgentToolResult(false, error =
-            (if (slotId.isBlank()) "工作流有 ${loraSlots.size} 个 LoRA 槽位，请用 slot 指定：" else "没有槽位「$slotId」。可用：") +
-                loraSlots.joinToString("、") { "${it.id}（${describeSlot(it)}）" })
+        val slot = pickSlot(slotId, named) ?: return usableSlots().let { usable ->
+            AgentToolResult(false, error =
+                (if (slotId.isBlank()) "工作流有 ${usable.size} 个 LoRA 槽位，请用 slot 指定：" else "没有槽位「$slotId」。可用：") +
+                    usable.joinToString("、") { "${it.id}（${describeSlot(it)}）" })
+        }
         val previous = loadedFile(slot)
         val disable = named == null || strength == 0.0
         if (disable) {
+            if (!applies(slot)) return AgentToolResult(false, error = "${slot.id} 是还没启用的新增槽位，不用停用")
             // Strength 0 alone still leaves the file name, which ComfyUI validates against its list.
             val none = slot.options.firstOrNull { it.equals("None", ignoreCase = true) }
             if (slot.strengthKeys.isEmpty() && none == null) return AgentToolResult(false, error = "这个槽位没有可修改的强度字段，无法停用；可以换成别的 LoRA")
@@ -579,10 +658,12 @@ class AgentDrawToolbox(
         val replaced = previous?.takeIf { AgentLoraCatalog.normalize(it) != AgentLoraCatalog.normalize(file) }
         // A switched-off LoRA group ignores its slots, so loading a LoRA there turns the switch on.
         val turnOn = slot.switchKey?.takeIf { !isOn(slot) }?.let { AgentFieldChange(slot.nodeId, it, switchValue(slot, it)) }
+        // A stack only applies slots up to num_loras / lora_count, so filling the next slot raises the count.
+        val grow = growTo(slot)
         val changes = listOf(AgentFieldChange(slot.nodeId, slot.nameKey, file)) +
-            slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, value) } + listOfNotNull(turnOn)
+            slot.strengthKeys.map { AgentFieldChange(slot.nodeId, it, value) } + listOfNotNull(turnOn, grow)
         val result = stage(changes, "已暂存：${slot.id} → ${info?.name ?: file}，强度 $value" +
-            (turnOn?.let { "，并打开了 ${it.key}" } ?: ""))
+            (turnOn?.let { "，并打开了 ${it.key}" } ?: "") + (grow?.let { "，并把 ${it.key} 调到 ${slot.number}" } ?: ""))
         if (!result.ok) return result
         val words = info?.triggerWords.orEmpty()
         val hints = triggerHints(file, replaced)
@@ -691,13 +772,14 @@ class AgentDrawToolbox(
      * "换成 X 画风" needs no list_loras round trip. Built from the turn's starting state; empty without slots.
      */
     override fun briefing(): String {
-        if (loraSlots.isEmpty()) return ""
+        val slots = usableSlots()
+        if (slots.isEmpty()) return ""
         val options = loraSlots.flatMap { it.options }.filterNot { it.equals("None", ignoreCase = true) }
             .distinctBy(AgentLoraCatalog::normalize)
         val offered = options.map(AgentLoraCatalog::normalize).toSet()
         // Same rule as list_loras: only what the server can load; without combo options trust the index.
         val usable = if (offered.isEmpty()) loras else loras.filter { AgentLoraCatalog.normalize(it.file) in offered }
-        val loaded = loraSlots.mapNotNull { loadedFile(it)?.let(AgentLoraCatalog::normalize) }.toSet()
+        val loaded = slots.mapNotNull { loadedFile(it)?.let(AgentLoraCatalog::normalize) }.toSet()
         val ranked = usable.sortedWith(compareByDescending<AgentLoraInfo> { AgentLoraCatalog.normalize(it.file) in loaded }
             .thenByDescending { it.favorite }
             .thenByDescending { it.notes.isNotBlank() || it.agentNotes.isNotBlank() || it.useCases.isNotEmpty() || it.tags.isNotEmpty() }
@@ -710,7 +792,7 @@ class AgentDrawToolbox(
         return buildString {
             append("【LoRA 速查】本轮工作流的 LoRA 槽位和服务器上能装的 LoRA。换 LoRA 时直接用这里的槽位和 file 调用 set_lora，不必先 list_loras；")
             append("这里没有、要按用途筛选或要看完整简介时再用 list_loras / read_lora。\n槽位：\n")
-            loraSlots.forEach { slot -> append("- ${slot.id}（${nodeName(slot.nodeId) ?: "LoRA"}）：${describeSlot(slot)}\n") }
+            slots.forEach { slot -> append("- ${slot.id}（${nodeName(slot.nodeId) ?: "LoRA"}）：${describeSlot(slot)}\n") }
             if (lines.isEmpty()) {
                 append("服务器没有报告可选的 LoRA 文件，用 list_loras 检索。")
                 return@buildString
@@ -871,7 +953,7 @@ class AgentDrawToolbox(
 **要出图时必须调用 submit_workflow**：用 set_prompt 写入提示词后，必须接着调用 submit_workflow 才能出图；patch_workflow 修改参数后也要调用 submit_workflow 才能生效；只有用户明确说"不出图""先别画"时才不提交。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
 正反向提示词重复标签：系统会自动从负面提示词中移除与正面重复的标签，不影响出图，你会在 set_prompt 的返回值中看到 warning；无需再次调用或修改提示词，继续 submit_workflow 即可。
-有 LoRA 工具时：list_loras 按关键词检索本地 LoRA（含你以前写的笔记），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，用户没提就保持原样；按标注、笔记和简介挑选，强度优先用推荐强度，新 LoRA 的触发词写进提示词。SD1.5、SDXL 系（Illustrious、Pony、NoobAI 等）、Flux 等不同架构的 LoRA 互不通用：自己挑选时选底模和当前模型相符的；用户点名要用的照常装上，底模明显不符时在回复里提一句。
+有 LoRA 工具时：list_loras 按关键词检索本地 LoRA（含你以前写的笔记），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。用户要在原有 LoRA 之外再加一个时，装进速查里的「新增槽位」（会一并调大 LoRA 数量），不要替换原有的。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，用户没提就保持原样；按标注、笔记和简介挑选，强度优先用推荐强度，新 LoRA 的触发词写进提示词。SD1.5、SDXL 系（Illustrious、Pony、NoobAI 等）、Flux 等不同架构的 LoRA 互不通用：自己挑选时选底模和当前模型相符的；用户点名要用的照常装上，底模明显不符时在回复里提一句。
 有 refresh_loras / annotate_lora 时：用户说放了新 LoRA 或列表里找不到时先 refresh_loras；读懂简介或出图确认了效果后，用 annotate_lora 记下简短笔记（用途、效果、推荐强度、注意事项），方便以后的新会话直接使用；用户告诉你某个 LoRA 的触发词、用途、推荐强度或效果时，同一批调用 annotate_lora 记下；只记确认过的内容，不写猜测。
 画风/画师字段在 inspect_workflow 中标为 role="画风/画师"，用户要求换画风或画师时用 patch_workflow 修改；用户说保存、记住、以后都用、设为默认时，submit_workflow 传 save_defaults=true，设置页会同步。
 有 save_character_profile 时：用户介绍了词库里没有的新角色、要求记住某个角色，或给已登记角色补充新服装/外貌时，把整理好的英文绘画标签写入词库；不要擅自覆盖用户没要求改动的已有档案。

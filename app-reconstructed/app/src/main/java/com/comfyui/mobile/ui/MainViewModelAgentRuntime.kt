@@ -441,7 +441,8 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
     internal fun workflowSnapshot(targets: List<Pair<String, String>>, extraAllowed: Collection<String> = emptyList()): AgentWorkflowSnapshot {
         val graph = vm.agentWorkflow ?: throw AgentExecutionException("工作流为空")
         val allowed = vm._agentAuxNodeKeys.value + targets.map { "${it.first}:${it.second}" } + extraAllowed
-        val fields = vm._agentEditableNodes.value.mapNotNull { node ->
+        val editable = vm._agentEditableNodes.value
+        val fields = (editable + unusedStackSlots(graph, editable)).mapNotNull { node ->
             val key: String
             val kind: AgentFieldKind
             var options: List<String>? = null
@@ -470,6 +471,27 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
             }
         }
         return AgentWorkflowSnapshot(graph, fields)
+    }
+
+    /**
+     * Fields of LoRA stack slots past num_loras / lora_count. The editable nodes leave them out because the stack
+     * ignores them; they are parsed here with the count raised so set_lora can fill the next slot (raising the
+     * count with it). Only addresses the caller allows become fields, as for every other node.
+     */
+    private fun unusedStackSlots(graph: Map<String, Any>, editable: List<EditableNode>): List<EditableNode> {
+        val expanded = com.comfyui.mobile.agent.AgentLoraCatalog.expandedStacks(graph) ?: return emptyList()
+        val stacks = expanded.keys.filter { expanded[it] !== graph[it] }.toSet()
+        val known = editable.mapTo(HashSet()) { "${it.nodeId}:${editableKey(it)}" }
+        return runCatching { vm.parseWorkflowNodes(expanded, vm._objectInfo.value, emptyMap(), emptyMap()) }
+            .getOrDefault(emptyList())
+            .filter { it.nodeId in stacks && "${it.nodeId}:${editableKey(it)}" !in known }
+    }
+
+    private fun editableKey(node: EditableNode): String = when (node) {
+        is EditableNode.TextInput -> node.key
+        is EditableNode.ImageInput -> node.key
+        is EditableNode.BooleanInput -> node.key
+        is EditableNode.NumberInput -> node.key
     }
 
     private fun Int?.orZero(): Int = this ?: 0

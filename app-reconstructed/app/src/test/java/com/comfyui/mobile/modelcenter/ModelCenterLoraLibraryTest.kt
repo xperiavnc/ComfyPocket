@@ -1,6 +1,7 @@
 package com.comfyui.mobile.modelcenter
 
 import com.comfyui.mobile.agent.AgentLoraCatalog
+import com.comfyui.mobile.agent.AgentLoraCompletion
 import com.comfyui.mobile.agent.AgentLoraNote
 import com.google.gson.Gson
 import kotlinx.coroutines.runBlocking
@@ -92,6 +93,114 @@ class ModelCenterLoraLibraryTest {
             val failure = runCatching { library.annotate(item, AgentLoraNote(notes = "画风 LoRA")) }.exceptionOrNull()
             assertTrue(failure?.message, failure?.message.orEmpty().contains("refresh_loras"))
             assertEquals(2, server.requestCount)
+        }
+    }
+
+    /** Phone-side Civitai stand-in: finds [found] by hash and answers 404 for the rest, or fails like a dead network. */
+    private class FakeSource(private val found: Set<String>, private val offline: Boolean = false) : LocalModelSource {
+        val asked = mutableListOf<String>()
+        override val sourceScope = "phone-test"
+        override suspend fun fetchSource(sha256: String, refresh: Boolean): ModelSourceResult {
+            asked += sha256
+            if (offline) throw java.io.IOException("连接 civitai.com 超时")
+            if (sha256 !in found) throw ModelSourceException("Civitai 上没有这个文件", 404)
+            return ModelSourceResult(ModelProvider(provider = "civitai", matchedHash = sha256, name = "Known Style",
+                trainedWords = listOf("known style"), baseModel = "Illustrious"))
+        }
+    }
+
+    private fun hashed(id: String, hash: String?, provider: ModelProvider? = null) = lora(id).copy(sha256 = hash, provider = provider)
+
+    private fun listed(directory: java.io.File, identity: String, items: List<LocalModel>, savedAt: Long) =
+        LocalModelCache(directory, ModelCenterLoraLibrary.listIdentity(identity))
+            .save(ModelCacheSnapshot(bridgeServerId = "pc", items = items, savedAt = savedAt, lastSync = savedAt))
+
+    @Test fun completeAsksForAScanOfUnknownFilesAndLooksUpMissingSourcesOnce() = runBlocking {
+        MockWebServer().use { server ->
+            val directory = temporary.newFolder()
+            val identity = "pc|" + server.url("/").toString()
+            // Hashes are unique per test: the retry times live for the whole process.
+            val known = "1".repeat(64)
+            val lost = "2".repeat(64)
+            val bridge = "3".repeat(64)
+            listed(directory, identity, listOf(hashed("known", known), hashed("lost", lost),
+                hashed("sourced", bridge, ModelProvider(provider = "civitai", matchedHash = bridge)), hashed("plain", null)),
+                System.currentTimeMillis() - 1_000)
+            server.enqueue(json(ModelCapabilities(1, "pc", listOf("model-index"))))
+            server.enqueue(json(ModelScan(status = "scanning")))
+            val source = FakeSource(found = setOf(known))
+            val library = ModelCenterLoraLibrary(directory, identity, server.url("/").toString(), OkHttpClient()) { source }
+            val loadable = listOf("known.safetensors", "lost.safetensors", "sourced.safetensors", "plain.safetensors", "new.safetensors")
+
+            // new.safetensors is not in the computer's index yet; a 404 from Civitai is an answer, not a failure.
+            assertEquals(AgentLoraCompletion(scanStarted = true, fetched = 1, failed = 0), library.complete(loadable))
+            assertEquals("/api/mobile/model-center/capabilities", server.takeRequest().path)
+            val scan = server.takeRequest()
+            assertEquals("POST", scan.method)
+            assertEquals("/api/mobile/model-center/scan", scan.path)
+            assertTrue(scan.body.readUtf8().contains("start"))
+            assertEquals(listOf(known, lost), source.asked)
+            val saved = LocalModelCache(directory, identity).load().phoneSources.getValue(known)
+            assertEquals("phone", saved.fetchedBy)
+            assertEquals("phone-test", saved.cacheScope)
+            assertEquals(listOf("known style"), ModelCenterLoraLibrary.cached(directory, identity)
+                .single { it.file == "known.safetensors" }.triggerWords)
+
+            // The next turn neither asks for another scan within half an hour nor repeats the lookups.
+            assertEquals(AgentLoraCompletion(), library.complete(loadable))
+            assertEquals(2, server.requestCount)
+            assertEquals(listOf(known, lost), source.asked)
+
+            // The list saved before the scan request is re-read once, then counts as fresh again.
+            server.enqueue(json(ModelCapabilities(1, "pc", listOf("model-index"))))
+            server.enqueue(json(ModelPage(serverId = "pc", items = listOf(hashed("known", known), lora("new")))))
+            assertEquals(listOf("known.safetensors", "new.safetensors"), library.refreshIfStale()?.loras?.map { it.file })
+            assertNull(library.refreshIfStale())
+            assertEquals(4, server.requestCount)
+        }
+    }
+
+    @Test fun refreshIfStaleOnlyReReadsAMissingOrOldList() = runBlocking {
+        MockWebServer().use { server ->
+            val directory = temporary.newFolder()
+            val identity = "pc|" + server.url("/").toString()
+            val library = ModelCenterLoraLibrary(directory, identity, server.url("/").toString(), OkHttpClient())
+            // Never listed: read it now.
+            server.enqueue(json(ModelCapabilities(1, "pc", listOf("model-index"))))
+            server.enqueue(json(ModelPage(serverId = "pc", items = listOf(lora("a")))))
+            assertEquals(listOf("a.safetensors"), library.refreshIfStale()?.loras?.map { it.file })
+            // Just listed: the turn uses the phone's copy without asking the computer.
+            assertNull(library.refreshIfStale())
+            assertEquals(2, server.requestCount)
+            // Older than ten minutes: read again.
+            listed(directory, identity, listOf(lora("a")), System.currentTimeMillis() - 11 * 60_000L)
+            server.enqueue(json(ModelCapabilities(1, "pc", listOf("model-index"))))
+            server.enqueue(json(ModelPage(serverId = "pc", items = listOf(lora("a"), lora("b")))))
+            assertEquals(listOf("a.safetensors", "b.safetensors"), library.refreshIfStale()?.loras?.map { it.file })
+            // A computer that cannot answer leaves the turn on the cache instead of failing it.
+            listed(directory, identity, listOf(lora("a")), System.currentTimeMillis() - 11 * 60_000L)
+            server.enqueue(MockResponse().setResponseCode(500))
+            assertNull(library.refreshIfStale())
+        }
+    }
+
+    @Test fun completeStopsAfterTwoNetworkFailuresAndWaitsBeforeRetrying() = runBlocking {
+        MockWebServer().use { server ->
+            val directory = temporary.newFolder()
+            val identity = "pc|" + server.url("/").toString()
+            val hashes = listOf("4", "5", "6").map { it.repeat(64) }
+            listed(directory, identity, hashes.mapIndexed { index, hash -> hashed("l$index", hash) }, System.currentTimeMillis())
+            val source = FakeSource(found = hashes.toSet(), offline = true)
+            val library = ModelCenterLoraLibrary(directory, identity, server.url("/").toString(), OkHttpClient()) { source }
+            val loadable = listOf("l0.safetensors", "l1.safetensors", "l2.safetensors")
+            // Civitai unreachable from this network: two failures in a row end the run instead of waiting out all three.
+            assertEquals(AgentLoraCompletion(failed = 2), library.complete(loadable))
+            assertEquals(hashes.take(2), source.asked)
+            // Every file is indexed, so the computer is not asked to scan.
+            assertEquals(0, server.requestCount)
+            // The failed ones wait half an hour; only the one never tried is looked up on the next turn.
+            assertEquals(AgentLoraCompletion(failed = 1), library.complete(loadable))
+            assertEquals(hashes, source.asked)
         }
     }
 }

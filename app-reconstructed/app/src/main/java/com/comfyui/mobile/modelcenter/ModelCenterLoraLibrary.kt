@@ -2,6 +2,7 @@ package com.comfyui.mobile.modelcenter
 
 import com.comfyui.mobile.agent.AgentLoraAnnotated
 import com.comfyui.mobile.agent.AgentLoraCatalog
+import com.comfyui.mobile.agent.AgentLoraCompletion
 import com.comfyui.mobile.agent.AgentLoraDetail
 import com.comfyui.mobile.agent.AgentLoraInfo
 import com.comfyui.mobile.agent.AgentLoraLibrary
@@ -14,6 +15,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Call
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The Agent's view of the computer's LoRAs, through the same model-center endpoints and cache files as the
@@ -22,7 +24,7 @@ import java.io.File
  */
 internal class ModelCenterLoraLibrary(
     directory: File,
-    identity: String,
+    private val identity: String,
     baseUrl: String,
     callFactory: Call.Factory,
     /** Phone-side Civitai lookup for descriptions the computer has not fetched. */
@@ -113,6 +115,96 @@ internal class ModelCenterLoraLibrary(
         return AgentLoraAnnotated(AgentLoraCatalog.info(saved, provider), merge.applied, merge.skipped)
     }
 
+    override suspend fun refreshIfStale(): AgentLoraRefresh? {
+        val saved = withContext(Dispatchers.IO) { listCache.load() }
+        val age = System.currentTimeMillis() - saved.savedAt
+        // A scan asked for since, or still running then, can have changed the list.
+        val recent = saved.savedAt > 0 && age in 0 until LIST_MAX_AGE_MS &&
+            saved.savedAt >= (scanRequestedAt[identity] ?: 0L) && saved.capabilities?.scan?.active != true
+        // One re-read at a time: a slow one left running by the previous turn is still saving the list.
+        if (recent || !refreshing.add(identity)) return null
+        return try {
+            refresh()
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (_: Exception) { null
+        } finally {
+            refreshing.remove(identity)
+        }
+    }
+
+    override suspend fun complete(loadable: List<String>): AgentLoraCompletion {
+        if (loadable.isEmpty() || !running.add(identity)) return AgentLoraCompletion()
+        try {
+            val saved = withContext(Dispatchers.IO) { listCache.load() }
+            // Nothing to compare against until refresh has written the full list once.
+            if (saved.savedAt <= 0) return AgentLoraCompletion()
+            val indexed = saved.items.filter { it.category.equals(LORA, ignoreCase = true) && it.present }
+                .associateBy { AgentLoraCatalog.normalize(AgentLoraCatalog.info(it).file) }
+            val wanted = loadable.map(AgentLoraCatalog::normalize).distinct()
+            val scanStarted = wanted.any { it !in indexed } && requestScan()
+            val client = phone?.invoke() ?: return AgentLoraCompletion(scanStarted)
+            val sources = phoneSources(saved.bridgeServerId)
+            val now = System.currentTimeMillis()
+            // Same by-hash lookup as the Model Center list does for the items it shows, for files this workflow can load.
+            val lookups = wanted.mapNotNull { indexed[it] }.filter { model ->
+                val hash = modelHash(model.sha256)
+                hash != null && model.provider == null && hash !in sources &&
+                    (lookupRetryAt["${client.sourceScope}|$hash"] ?: 0L) <= now
+            }.distinctBy { modelHash(it.sha256) }.take(MAX_SOURCE_LOOKUPS)
+            var fetched = 0
+            var failed = 0
+            var failuresInARow = 0
+            for (model in lookups) {
+                // Civitai unreachable from this network: stop instead of waiting out every timeout.
+                if (failuresInARow >= MAX_LOOKUP_FAILURES) break
+                val hash = modelHash(model.sha256) ?: continue
+                val key = "${client.sourceScope}|$hash"
+                val found = try {
+                    withTimeoutOrNull(LOOKUP_TIMEOUT_MS) { client.fetchSource(hash) }?.provider
+                        ?.takeIf { modelHash(it.matchedHash) == hash }
+                } catch (cancelled: CancellationException) { throw cancelled
+                } catch (error: ModelSourceException) {
+                    if (error.code == 404) {
+                        // Civitai answered; this LoRA is just not there. Not a network failure.
+                        lookupRetryAt[key] = now + NOT_FOUND_RETRY_MS
+                        failuresInARow = 0
+                        continue
+                    }
+                    null
+                } catch (_: Exception) { null }
+                if (found == null) {
+                    failed++
+                    failuresInARow++
+                    lookupRetryAt[key] = System.currentTimeMillis() + ERROR_RETRY_MS
+                    continue
+                }
+                failuresInARow = 0
+                val provider = found.copy(fetchedBy = "phone", cacheScope = client.sourceScope)
+                withContext(Dispatchers.IO) { repo.cache.savePhoneSource(model.serverId.ifBlank { saved.bridgeServerId }, provider) }
+                fetched++
+            }
+            return AgentLoraCompletion(scanStarted, fetched, failed)
+        } finally {
+            running.remove(identity)
+        }
+    }
+
+    /** Asks the computer to look for new model files, at most every half hour; true when a scan was started. */
+    private suspend fun requestScan(): Boolean {
+        val now = System.currentTimeMillis()
+        val last = scanRequestedAt[identity]
+        if (last != null && now - last in 0 until SCAN_REQUEST_GAP_MS) return false
+        return try {
+            if (repo.capabilities().scan.active) return false
+            // Recorded first so a refused request (files being moved, say) is not retried every turn.
+            scanRequestedAt[identity] = now
+            // Incremental on the computer: unchanged files keep their hash; only new ones are hashed.
+            repo.scan("start")
+            true
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (_: Exception) { false }
+    }
+
     private suspend fun fresh(item: AgentLoraInfo): LocalModel {
         check(item.id.isNotBlank()) { "「${item.name}」还没有进入电脑的模型索引，先调用 refresh_loras" }
         val capabilities = repo.capabilities()
@@ -147,6 +239,19 @@ internal class ModelCenterLoraLibrary(
         private const val SCAN_WAIT_MS = 45_000L
         private const val SCAN_POLL_MS = 1_500L
         private const val SOURCE_TIMEOUT_MS = 8_000L
+        /** A turn re-reads the computer's LoRA list when the phone's copy is older than this. */
+        private const val LIST_MAX_AGE_MS = 10 * 60_000L
+        private const val SCAN_REQUEST_GAP_MS = 30 * 60_000L
+        private const val MAX_SOURCE_LOOKUPS = 20
+        private const val MAX_LOOKUP_FAILURES = 2
+        private const val LOOKUP_TIMEOUT_MS = 15_000L
+        private const val NOT_FOUND_RETRY_MS = 24 * 60 * 60_000L
+        private const val ERROR_RETRY_MS = 30 * 60_000L
+        // Per process, shared by the short-lived instances each Agent turn creates.
+        private val running: MutableSet<String> = ConcurrentHashMap.newKeySet()
+        private val refreshing: MutableSet<String> = ConcurrentHashMap.newKeySet()
+        private val scanRequestedAt = ConcurrentHashMap<String, Long>()
+        private val lookupRetryAt = ConcurrentHashMap<String, Long>()
 
         /** Cache identity of the Agent's full LoRA list, next to the Model Center snapshot of [identity]. */
         fun listIdentity(identity: String) = "$identity|agent-loras"

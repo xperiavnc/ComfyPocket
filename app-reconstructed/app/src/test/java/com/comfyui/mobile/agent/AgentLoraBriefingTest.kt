@@ -124,7 +124,13 @@ class AgentLoraBriefingTest {
                 "lora_1_name" to "a", "lora_1_strength" to 0.9, "lora_1_model_strength" to 1.0, "lora_1_clip_strength" to 1.0,
                 "lora_2_name" to "b", "lora_2_strength" to 1.0, "lora_2_model_strength" to 1.0, "lora_2_clip_strength" to 1.0)))
         val slots = AgentLoraCatalog.slots(graph) { _, _ -> emptyList() }.associateBy { it.id }
-        assertEquals(setOf("1:lora_name_1", "1:lora_name_2", "2:lora_name_1", "2:lora_name_2", "3:lora_1_name"), slots.keys)
+        // Slots past the count stay listed, marked unused, so the Agent can grow the stack into them.
+        assertEquals(setOf("1:lora_name_1", "1:lora_name_2", "1:lora_name_3", "2:lora_name_1", "2:lora_name_2",
+            "3:lora_1_name", "3:lora_2_name"), slots.keys)
+        assertEquals(setOf("1:lora_name_3", "3:lora_2_name"), slots.values.filterNot { it.active }.map { it.id }.toSet())
+        with(slots.getValue("1:lora_name_3")) { assertEquals("lora_count", countKey); assertEquals(3, number) }
+        with(slots.getValue("3:lora_2_name")) { assertEquals("num_loras", countKey); assertEquals(2, number) }
+        assertNull(slots.getValue("2:lora_name_1").countKey)
         assertEquals(listOf("lora_wt_1", "model_str_1", "clip_str_1"), slots.getValue("1:lora_name_1").strengthKeys)
         assertEquals(listOf("model_weight_2", "clip_weight_2"), slots.getValue("2:lora_name_2").strengthKeys)
         assertTrue(slots.getValue("2:lora_name_1").switchedOn)
@@ -175,5 +181,82 @@ class AgentLoraBriefingTest {
         assertTrue(data(result)["summary"].toString().contains("没有同时命中全部检索词"))
         assertEquals(listOf(watercolor, miku), (data(result)["loras"] as List<*>).map { (it as Map<*, *>)["file"] })
         assertEquals(listOf("kawaii", "style", "xl"), AgentLoraCatalog.terms("Kawaii_Style-XL"))
+    }
+
+    /** easy loraStack using one of three slots; slot 2 still names a file from an earlier setup. */
+    private fun growingStack(max: Double?, openCount: Boolean = true): AgentWorkflowSnapshot {
+        val stackOptions = listOf("None", "a.safetensors", "b.safetensors")
+        val workflow = mapOf("13" to mapOf("class_type" to "easy loraStack", "inputs" to mapOf("toggle" to true, "mode" to "simple",
+            "num_loras" to 1, "lora_1_name" to "a.safetensors", "lora_1_strength" to 1.0,
+            "lora_2_name" to "b.safetensors", "lora_2_strength" to 1.0, "lora_3_name" to "None", "lora_3_strength" to 1.0)))
+        val fields = (1..3).flatMap { n -> listOf(
+            AgentFieldSpec("13", "lora_${n}_name", "easy loraStack", AgentFieldKind.TEXT, options = stackOptions),
+            AgentFieldSpec("13", "lora_${n}_strength", "easy loraStack", AgentFieldKind.DECIMAL, min = -10.0, max = 10.0)) } +
+            listOfNotNull(if (openCount) AgentFieldSpec("13", "num_loras", "easy loraStack", AgentFieldKind.INTEGER, min = 1.0, max = max) else null)
+        return AgentWorkflowSnapshot(workflow, fields)
+    }
+
+    private val stackCatalog = AgentLoraCatalog.from(listOf(
+        LocalModel(category = "LORA", present = true, name = "b", nodeModelName = "b.safetensors",
+            provider = ModelProvider(trainedWords = listOf("bstyle")))), emptyMap())
+
+    private fun fieldNames(result: AgentToolResult) = (data(result)["fields"] as List<*>).map { (it as Map<*, *>)["field"] }
+
+    @Test fun addingALoraFillsTheStacksNextSlotAndRaisesItsCount() = runBlocking {
+        val box = AgentDrawToolbox(growingStack(max = 10.0), loras = stackCatalog)
+        val brief = box.briefing()
+        assertTrue(brief, brief.contains("- 13:lora_1_name（easy loraStack）：a.safetensors，强度 1.0"))
+        assertTrue(brief, brief.contains("- 13:lora_2_name（easy loraStack）：空（新增槽位：装上 LoRA 时会把 num_loras 调到 2）"))
+        assertFalse(brief, brief.contains("13:lora_3_name"))
+        // The stack ignores slots past the count, so inspect_workflow leaves them out.
+        val before = fieldNames(box.call(AgentDrawToolbox.INSPECT, JsonObject()))
+        assertFalse(before.toString(), before.contains("13:lora_2_name"))
+        assertTrue(before.toString(), before.contains("13:num_loras"))
+        assertFalse(box.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_2_name","lora":""}""")).ok)
+
+        val added = box.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_2_name","lora":"b.safetensors","strength":0.8}"""))
+        assertTrue(added.error, added.ok)
+        assertTrue(data(added)["summary"].toString(), data(added)["summary"].toString().contains("并把 num_loras 调到 2"))
+        assertEquals(mapOf("13:lora_2_name" to "b.safetensors", "13:lora_2_strength" to 0.8, "13:num_loras" to 2),
+            box.changes.associate { "${it.nodeId}:${it.key}" to it.value })
+        assertTrue(fieldNames(box.call(AgentDrawToolbox.INSPECT, JsonObject())).contains("13:lora_2_name"))
+        // Adding one more uses slot 3.
+        val third = box.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_3_name","lora":"a.safetensors"}"""))
+        assertTrue(third.error, third.ok)
+        assertEquals(3, box.changes.single { it.key == "num_loras" }.value)
+
+        // Slot 2 kept its old file name while unused; the LoRA is new to this picture, so submit adds its trigger word.
+        box.call(AgentDrawToolbox.SET_PROMPT, args("""{"prompt":"1girl, smile"}"""))
+        assertEquals("1girl, smile, bstyle", finalPrompt(box.call(AgentDrawToolbox.SUBMIT, args("""{"reply":"好"}"""))))
+    }
+
+    @Test fun theStackOnlyGrowsWhenItsCountIsOpenAndBelowItsMaximum() = runBlocking {
+        val capped = AgentDrawToolbox(growingStack(max = 2.0), loras = stackCatalog)
+        assertTrue(capped.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_2_name","lora":"b.safetensors"}""")).ok)
+        val full = capped.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_3_name","lora":"a.safetensors"}"""))
+        assertFalse(full.ok)
+        assertTrue(full.error, full.error.orEmpty().contains("没有槽位「13:lora_3_name」"))
+
+        val closed = AgentDrawToolbox(growingStack(max = 10.0, openCount = false), loras = stackCatalog)
+        assertFalse(closed.briefing(), closed.briefing().contains("新增槽位"))
+        assertFalse(closed.call(AgentDrawToolbox.SET_LORA, args("""{"slot":"13:lora_2_name","lora":"b.safetensors"}""")).ok)
+
+        // Without a slot, "换成 b" replaces the LoRA in use instead of adding one.
+        val swapped = AgentDrawToolbox(growingStack(max = 10.0), loras = stackCatalog)
+        assertTrue(swapped.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"b.safetensors"}""")).ok)
+        assertEquals(mapOf("13:lora_1_name" to "b.safetensors", "13:lora_1_strength" to 1.0),
+            swapped.changes.associate { "${it.nodeId}:${it.key}" to it.value })
+    }
+
+    @Test fun expandedStacksRaisesOnlyCountsBelowTheHighestSlot() {
+        val single = loader("detail.safetensors")
+        val graph: Map<String, Any> = mapOf("10" to single,
+            "13" to mapOf("class_type" to "easy loraStack", "inputs" to mapOf("num_loras" to 1.0,
+                "lora_1_name" to "a", "lora_1_strength" to 1.0, "lora_2_name" to "None", "lora_2_strength" to 1.0, "lora_3_name" to "None")))
+        val expanded = AgentLoraCatalog.expandedStacks(graph)!!
+        assertEquals(3.0, ((expanded["13"] as Map<*, *>)["inputs"] as Map<*, *>)["num_loras"])
+        assertSame(single, expanded["10"])
+        assertEquals(1.0, ((graph["13"] as Map<*, *>)["inputs"] as Map<*, *>)["num_loras"])
+        assertNull(AgentLoraCatalog.expandedStacks(mapOf("10" to single)))
     }
 }

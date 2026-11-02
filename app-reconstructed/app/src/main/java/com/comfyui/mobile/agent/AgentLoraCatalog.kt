@@ -57,7 +57,13 @@ data class AgentLoraSlot(
     /** Value of [switchKey] that turns the slot on (`true` or `"On"`). */
     val switchOn: Any? = null,
     /** False while the switch is off in the workflow. */
-    val switchedOn: Boolean = true
+    val switchedOn: Boolean = true,
+    /** The stack's `num_loras` / `lora_count`: the node applies only slots up to that number. */
+    val countKey: String? = null,
+    /** Slot number inside a stack node; null for a single `lora_name` loader. */
+    val number: Int? = null,
+    /** False for stack slots past the count in the workflow as given; the node ignores them. */
+    val active: Boolean = true
 ) {
     val id: String get() = "$nodeId:$nameKey"
 }
@@ -322,8 +328,9 @@ object AgentLoraCatalog {
     /**
      * LoRA loader slots in [workflow]: `lora_name` with `strength_model`/`strength_clip`/`strength`, and
      * stack nodes with numbered `lora_N` / `lora_N_name` plus their own weight inputs. Stack slots beyond
-     * `num_loras` / `lora_count` are left out because the node ignores them. A node `toggle`/`enabled` or a
-     * stack's `switch_N` is recorded so loading a LoRA can turn it on.
+     * `num_loras` / `lora_count` are kept with [AgentLoraSlot.active] false, so a LoRA can go into the next
+     * one by raising the count. A node `toggle`/`enabled` or a stack's `switch_N` is recorded so loading a
+     * LoRA can turn it on.
      */
     fun slots(workflow: Map<String, Any>, options: (nodeId: String, key: String) -> List<String>): List<AgentLoraSlot> {
         val result = mutableListOf<AgentLoraSlot>()
@@ -333,12 +340,12 @@ object AgentLoraCatalog {
             val inputs = node["inputs"] as? Map<*, *> ?: continue
             if (!classType.contains("lora", ignoreCase = true)) continue
             val keys = inputs.keys.filterIsInstance<String>()
-            val count = stackCountKeys.firstNotNullOfOrNull { (inputs[it] as? Number)?.toInt() }
+            val countKey = stackCountKeys.firstOrNull { inputs[it] is Number }
+            val count = countKey?.let { (inputs[it] as Number).toInt() }
             val nodeSwitch = nodeSwitchKeys.firstOrNull { inputs[it] is Boolean }
             for (key in keys) {
                 val value = inputs[key] as? String ?: continue
                 val number = if (key == "lora_name") null else stackKey.matchEntire(key)?.groupValues?.get(2) ?: continue
-                if (number != null && count != null && number.toInt() > count) continue
                 val strengthKeys = if (number == null) {
                     listOf("strength_model", "strength_clip", "strength").filter { k -> inputs[k] is Number }
                 } else {
@@ -346,15 +353,49 @@ object AgentLoraCatalog {
                     keys.filter { k -> inputs[k] is Number && own.containsMatchIn(k) && stackStrength.containsMatchIn(k) }
                 }
                 val slotSwitch = number?.let { n -> keys.firstOrNull { k -> k.equals("switch_$n", ignoreCase = true) && inputs[k] is String } }
-                result += when {
+                val slot = when {
                     slotSwitch != null -> AgentLoraSlot(nodeId, key, strengthKeys, value, options(nodeId, key),
                         slotSwitch, "On", (inputs[slotSwitch] as String).equals("On", ignoreCase = true))
                     nodeSwitch != null -> AgentLoraSlot(nodeId, key, strengthKeys, value, options(nodeId, key),
                         nodeSwitch, true, inputs[nodeSwitch] == true)
                     else -> AgentLoraSlot(nodeId, key, strengthKeys, value, options(nodeId, key))
                 }
+                val slotNumber = number?.toIntOrNull()
+                result += if (slotNumber == null) slot else slot.copy(countKey = countKey, number = slotNumber,
+                    active = count == null || slotNumber <= count)
             }
         }
-        return result.sortedWith(compareBy({ it.nodeId.toIntOrNull() ?: Int.MAX_VALUE }, { it.nodeId }, { it.nameKey }))
+        return result.sortedWith(compareBy({ it.nodeId.toIntOrNull() ?: Int.MAX_VALUE }, { it.nodeId }, { it.number ?: 0 }, { it.nameKey }))
+    }
+
+    /**
+     * [workflow] with every LoRA stack's `num_loras` / `lora_count` raised to its highest slot, or null when no
+     * stack has slots past its count. The workflow editor hides those slots; parsing this copy gives their
+     * fields, so the Agent can fill the next slot and raise the count in one validated patch.
+     */
+    fun expandedStacks(workflow: Map<String, Any>): Map<String, Any>? {
+        var result: MutableMap<String, Any>? = null
+        for ((nodeId, rawNode) in workflow) {
+            val node = rawNode as? Map<*, *> ?: continue
+            val classType = node["class_type"] as? String ?: continue
+            if (!classType.contains("lora", ignoreCase = true)) continue
+            val inputs = node["inputs"] as? Map<*, *> ?: continue
+            val countKey = stackCountKeys.firstOrNull { inputs[it] is Number } ?: continue
+            val count = inputs[countKey] as Number
+            val highest = inputs.entries.filter { it.value is String }
+                .mapNotNull { (key, _) -> stackKey.matchEntire(key.toString())?.groupValues?.get(2)?.toIntOrNull() }
+                .maxOrNull() ?: continue
+            if (highest <= count.toInt()) continue
+            val raised: Any = when (count) {
+                is Int -> highest
+                is Long -> highest.toLong()
+                else -> highest.toDouble()
+            }
+            val copy = node.entries.associate { (key, value) -> key.toString() to value }.toMutableMap<String, Any?>()
+            copy["inputs"] = inputs.entries.associate { (key, value) -> key.toString() to value } + (countKey to raised)
+            @Suppress("UNCHECKED_CAST")
+            (result ?: workflow.toMutableMap().also { result = it })[nodeId] = copy as Map<String, Any>
+        }
+        return result
     }
 }
