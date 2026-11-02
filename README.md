@@ -138,7 +138,7 @@ Bridge **不依赖 Lora Manager**，也不打包进 APK。更新时替换完整�
 校验和确认替换，旧备份不清除会话。本版继续使用现有 Agent 页面，
 P2 独立会话管理已实现；P3 项目管理及 P4 真机完整验收仍待推进。`0.0.51` 继续修复
 模板并发加载、SDXL 双文本写入和清空聊天后的迟到历史分页。详见
-[Agent 文档](app-reconstructed/AGENT.md) 与 [工作区计划](app-reconstructed/AGENT_WORKSPACE_PLAN.md)。
+[Agent 文档](app-reconstructed/AGENT.md)。
 
 Agent 的系统人设与绘图规则不再内置长提示词。进入 **Agent 设置 → 提示词规则**，
 分别导入自己的 TXT / Markdown 对话规则和绘图规则；文件会复制到应用配置，可替换、查看和移除。
