@@ -1505,10 +1505,20 @@ object MainViewModelAgent {
                 else onProgress?.invoke("", "", progress.reasoning, progress.content)
             }
             // A draw reply whose JSON can't be read used to end the turn with "未出图"; ask once for a fix.
+            // A text-only reply to a draw request (typical right after switching from chat mode, whose
+            // plain replies fill the history) gets one reminder to actually submit.
+            var nudged = false
             val validate: (String) -> String? = { content ->
                 val check = com.comfyui.mobile.data.AgentReplyParser.parse(
                     sanitizeThinkingContent(content), preserveNaturalLanguage = true)
                 check.error.takeIf { it == "模型返回的 JSON 无法解析" && check.prompt.isBlank() && check.clarification == null }
+                    ?: if (!nudged && check.clarification == null && check.prompt.isBlank() && check.shouldDraw != true &&
+                        com.comfyui.mobile.agent.AgentDrawNudge.wanted(userText, check.reply.ifBlank { content },
+                            declined = check.shouldDraw == false || check.action == com.comfyui.mobile.agent.AgentAction.RESPOND)) {
+                        nudged = true
+                        vm.addLog("Agent 绘图模式只回了文字，已提醒模型提交出图", LogType.WARNING)
+                        com.comfyui.mobile.agent.AgentDrawNudge.message(toolbox != null)
+                    } else null
             }
             val outcome = toolbox?.let {
                 try {

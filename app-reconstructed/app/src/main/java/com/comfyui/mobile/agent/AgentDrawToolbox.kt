@@ -951,6 +951,7 @@ class AgentDrawToolbox(
 - 替换角色外貌：用户给了角色标签或说"换成 xxx"时，直接替换提示词里对应的角色和外貌标签，再 set_prompt + submit_workflow；不认识这个角色或缺关键外貌时才 get_character_profile / lookup_tags。
 - 只改提示词：不用 inspect_workflow，直接 set_prompt + submit_workflow。
 **要出图时必须调用 submit_workflow**：用 set_prompt 写入提示词后，必须接着调用 submit_workflow 才能出图；patch_workflow 修改参数后也要调用 submit_workflow 才能生效；只有用户明确说"不出图""先别画"时才不提交。
+现在是绘图模式。对话记录里只有文字、没有提示词的回复来自聊天模式，不要照着只回文字；用户这一轮要画就调用工具出图。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
 正反向提示词重复标签：系统会自动从负面提示词中移除与正面重复的标签，不影响出图，你会在 set_prompt 的返回值中看到 warning；无需再次调用或修改提示词，继续 submit_workflow 即可。
 有 LoRA 工具时：list_loras 按关键词检索本地 LoRA（含你以前写的笔记），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。用户要在原有 LoRA 之外再加一个时，装进速查里的「新增槽位」（会一并调大 LoRA 数量），不要替换原有的。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，用户没提就保持原样；按标注、笔记和简介挑选，强度优先用推荐强度，新 LoRA 的触发词写进提示词。SD1.5、SDXL 系（Illustrious、Pony、NoobAI 等）、Flux 等不同架构的 LoRA 互不通用：自己挑选时选底模和当前模型相符的；用户点名要用的照常装上，底模明显不符时在回复里提一句。
