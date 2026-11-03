@@ -16,8 +16,8 @@ android {
         minSdk = 33
         targetSdk = 36
         // Installed 0.0.56-agent-drawer used versionCode 58; continue above it so updates install.
-        versionCode = 100
-        versionName = "0.0.98"
+        versionCode = 101
+        versionName = "0.0.99"
     }
 
     buildFeatures {

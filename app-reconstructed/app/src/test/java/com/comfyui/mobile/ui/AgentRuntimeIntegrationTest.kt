@@ -868,6 +868,22 @@ class AgentRuntimeIntegrationTest {
         assertNull(vm.agentMessages.value.last().expandedPrompt)
     }
 
+    @Test fun switchingFromChatToDrawRemindsATextOnlyReplyToSubmit() {
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
+        responses += success("海边的猫娘很可爱。")
+        vm.sendAgentMessage("聊聊猫娘")
+        awaitDone()
+        vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_DRAW
+        responses += success("好的，这就为你画一张海边的猫娘。")
+        responses += success("""{"action":"draw","reply":"画好了","prompt":"catgirl, beach","should_draw":true}""")
+        vm.sendAgentMessage("画一张")
+        awaitDone()
+        assertTrue(llmBodies.last().contains("不要照搬"))
+        assertEquals(1, promptBodies.size)
+        assertEquals("catgirl, beach", graphText())
+        assertEquals(AgentPhase.COMPLETED, vm.agentSessionState.value.turn!!.phase)
+    }
+
     @Test fun chatCanAutonomouslyAskAndResumeWithoutAnyWorkflowSideEffect() {
         vm._agentInteractionMode.value = MainViewModel.AGENT_MODE_CHAT
         responses += success(askThree)
