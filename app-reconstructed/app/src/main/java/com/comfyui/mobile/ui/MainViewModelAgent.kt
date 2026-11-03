@@ -1468,7 +1468,14 @@ object MainViewModelAgent {
                                         }
                                     }
                                 }
-                            }, loraLibrary = loraLibrary, freshLoras = freshLoras)
+                            }, loraLibrary = loraLibrary, freshLoras = freshLoras,
+                            reloadOptions = {
+                                val addresses = snapshot.fields.map { it.address }
+                                if (!vm.refreshObjectInfoForAgent()) null else withContext(Dispatchers.Main) {
+                                    vm.agentRuntime.workflowSnapshot(emptyList(), addresses).fields
+                                        .associate { it.address to it.options.orEmpty() }
+                                }
+                            })
                     }
                 }
             } else null
