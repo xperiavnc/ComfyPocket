@@ -19,7 +19,7 @@ import java.util.Locale
  * submitted, so a cancelled or failed turn leaves the workflow as it was.
  */
 class AgentDrawToolbox(
-    private val snapshot: AgentWorkflowSnapshot,
+    snapshot: AgentWorkflowSnapshot,
     private val titles: Map<String, String> = emptyMap(),
     characters: List<CharacterLore> = emptyList(),
     private val searchTags: (suspend (query: String, kind: String) -> List<LocalTagEntry>)? = null,
@@ -33,8 +33,16 @@ class AgentDrawToolbox(
     /** Live model-center access: refresh, full descriptions and the Agent's own LoRA notes. */
     private val loraLibrary: AgentLoraLibrary? = null,
     /** True when [loras] was just re-read from the computer, so list_loras needn't read it again this turn. */
-    freshLoras: Boolean = false
+    freshLoras: Boolean = false,
+    /**
+     * Re-reads the server's node info and returns the current choices per field address. The workflow's
+     * LoRA lists are cached since connect, so a LoRA added on the PC is missing from them until reloaded.
+     */
+    private val reloadOptions: (suspend () -> Map<String, List<String>>?)? = null
 ) : AgentToolbox {
+    private var snapshot: AgentWorkflowSnapshot = snapshot
+    /** Set once the options were reloaded this turn; reloading again would only repeat the same request. */
+    private var optionsReloaded = reloadOptions == null
     private var characters: List<CharacterLore> = characters
     private var loras: List<AgentLoraInfo> = loras
     /** True once this turn re-read the computer's LoRA list (or tried and fell back to the cache). */
@@ -53,14 +61,42 @@ class AgentDrawToolbox(
     /** Validated edits to apply when the turn is submitted. */
     val changes: List<AgentFieldChange> get() = staged.values.toList()
 
-    private val allowedFields = snapshot.fields.associateBy { it.address }
+    private var allowedFields = snapshot.fields.associateBy { it.address }
     /** LoRA loader slots whose file field is part of the snapshot; strength partners only when also present. */
-    private val loraSlots: List<AgentLoraSlot> = AgentLoraCatalog.slots(snapshot.workflow) { node, key ->
-        allowedFields["$node:$key"]?.options.orEmpty()
-    }.filter { it.id in allowedFields }.map { slot -> slot.copy(
-        strengthKeys = slot.strengthKeys.filter { "${slot.nodeId}:$it" in allowedFields },
-        // Without an editable switch the slot keeps switchedOn=false, so set_lora can warn instead.
-        switchKey = slot.switchKey?.takeIf { "${slot.nodeId}:$it" in allowedFields }) }
+    private var loraSlots: List<AgentLoraSlot> = slotsOf(snapshot)
+
+    private fun slotsOf(snapshot: AgentWorkflowSnapshot): List<AgentLoraSlot> {
+        val fields = snapshot.fields.associateBy { it.address }
+        return AgentLoraCatalog.slots(snapshot.workflow) { node, key -> fields["$node:$key"]?.options.orEmpty() }
+            .filter { it.id in fields }.map { slot -> slot.copy(
+                strengthKeys = slot.strengthKeys.filter { "${slot.nodeId}:$it" in fields },
+                // Without an editable switch the slot keeps switchedOn=false, so set_lora can warn instead.
+                switchKey = slot.switchKey?.takeIf { "${slot.nodeId}:$it" in fields }) }
+    }
+
+    /**
+     * Reloads the LoRA choices once per turn. Returns the files the server now offers that it didn't
+     * before, or null when nothing was reloaded (no loader, already done, or the server didn't answer).
+     */
+    private suspend fun reloadLoraOptions(): List<String>? {
+        if (optionsReloaded || loraSlots.isEmpty()) return null
+        optionsReloaded = true
+        val fresh = try {
+            withTimeoutOrNull(FRESH_TIMEOUT_MS) { reloadOptions?.invoke() }
+        } catch (cancelled: CancellationException) { throw cancelled
+        } catch (_: Exception) { null } ?: return null
+        val before = loraSlots.flatMap { it.options }.map(AgentLoraCatalog::normalize).toSet()
+        val slotFields = loraSlots.map { it.id }.toSet()
+        val fields = snapshot.fields.map { spec ->
+            val options = fresh[spec.address]?.takeIf { spec.address in slotFields && it.isNotEmpty() }
+            if (options == null) spec else spec.copy(options = options)
+        }
+        snapshot = snapshot.copy(fields = fields)
+        allowedFields = fields.associateBy { it.address }
+        loraSlots = slotsOf(snapshot)
+        return loraSlots.flatMap { it.options }.distinct()
+            .filter { AgentLoraCatalog.normalize(it) !in before && !it.equals("None", ignoreCase = true) }
+    }
 
     /** The stack's slot count this turn (staged, else as in the workflow); null when the node has none. */
     private fun countOf(slot: AgentLoraSlot): Int? =
@@ -286,6 +322,15 @@ class AgentDrawToolbox(
     private suspend fun listLoras(arguments: JsonObject): AgentToolResult {
         val notice = ensureFresh()
         val query = AgentInteractionProtocol.string(arguments, "query")
+        val first = listLorasNow(query, notice, emptyList())
+        // Nothing found: the server may have a LoRA the cached node info doesn't list yet.
+        if (query.isBlank() || first.second > 0) return first.first
+        val added = reloadLoraOptions() ?: return first.first
+        return listLorasNow(query, notice, added).first
+    }
+
+    /** The list_loras result and its hit count. */
+    private fun listLorasNow(query: String, notice: String, added: List<String>): Pair<AgentToolResult, Int> {
         val offered = loraSlots.flatMap { it.options }.map(AgentLoraCatalog::normalize).toSet()
         // Only LoRAs the server can actually load; without combo options trust the index.
         val usable = if (offered.isEmpty()) loras else loras.filter { AgentLoraCatalog.normalize(it.file) in offered }
@@ -311,6 +356,7 @@ class AgentDrawToolbox(
             "summary" to (if (slots.isEmpty()) "当前工作流没有 LoRA 槽位（只能查看和写笔记，不能装载），" else "${slots.size} 个 LoRA 槽位，") +
                 "命中 ${hits.size + bare.size} 个 LoRA" + (if (loose) "（没有同时命中全部检索词，按命中词数列出）" else "") +
                 (if (loras.isEmpty()) "（模型中心还没有本地 LoRA 资料，只有文件名）" else "") +
+                (if (added.isNotEmpty()) "；已重新读取服务器的 LoRA 列表，新增 ${added.size} 个文件" else "") +
                 (if (notice.isNotEmpty()) "；$notice" else ""),
             "slots" to slots.map { slot ->
                 linkedMapOf<String, Any?>(
@@ -342,7 +388,7 @@ class AgentDrawToolbox(
                     "favorite" to info.favorite.takeIf { it }
                 ).filterValues { it != null }
             } + bare.map { mapOf("file" to it, "note" to "没有本地资料") }
-        ))
+        )) to hits.size + bare.size
     }
 
     /** Re-reads the computer's LoRA list once per turn so a new session sees new files and notes. */
@@ -428,16 +474,21 @@ class AgentDrawToolbox(
         }
         lorasFresh = true
         loras = result.loras
+        val loadable = reloadLoraOptions()
         val after = result.loras.associateBy { AgentLoraCatalog.normalize(it.file) }
         val added = result.loras.filter { AgentLoraCatalog.normalize(it.file) !in before }.map { it.file }
         val removed = before.filterKeys { it !in after }.values.map { it.file }
+        val offered = loraSlots.flatMap { it.options }.map(AgentLoraCatalog::normalize).toSet()
+        val waiting = added.filter { offered.isNotEmpty() && AgentLoraCatalog.normalize(it) !in offered }
         return AgentToolResult(true, linkedMapOf<String, Any?>(
             "summary" to "电脑上共 ${result.loras.size} 个 LoRA，新增 ${added.size} 个，移除 ${removed.size} 个" +
+                (if (!loadable.isNullOrEmpty()) "；工作流可选的 LoRA 新增 ${loadable.size} 个，可以直接 set_lora" else "") +
                 (if (result.note.isNotEmpty()) "；${result.note}" else ""),
             "added" to added.take(MAX_LORAS).takeIf { it.isNotEmpty() },
+            "loadable_added" to loadable?.take(MAX_LORAS)?.takeIf { it.isNotEmpty() },
             "removed" to removed.take(MAX_LORAS).takeIf { it.isNotEmpty() },
-            "hint" to if (added.isNotEmpty() && usableSlots().isNotEmpty())
-                "新文件要等工作流的可选项刷新后才能用 set_lora 装载，现在可以先用 read_lora 查看" else null
+            "hint" to if (waiting.isNotEmpty() && usableSlots().isNotEmpty())
+                "${waiting.size} 个新文件 ComfyUI 还没列进可选项（可能要在电脑上刷新节点或重启 ComfyUI），现在可以先用 read_lora 查看" else null
         ).filterValues { it != null })
     }
 
@@ -625,13 +676,15 @@ class AgentDrawToolbox(
         return AgentFieldChange(slot.nodeId, key, value)
     }
 
-    private fun setLora(arguments: JsonObject): AgentToolResult {
+    private suspend fun setLora(arguments: JsonObject): AgentToolResult {
         val slotId = AgentInteractionProtocol.string(arguments, "slot")
         val requested = AgentInteractionProtocol.string(arguments, "lora")
         val strengthElement = arguments["strength"]
         val strength = strengthElement?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asDouble
         if (strengthElement != null && !strengthElement.isJsonNull && strength == null) return AgentToolResult(false, error = "strength 必须是数字")
         val named = requested.takeUnless { it.isBlank() || it.equals("none", ignoreCase = true) }
+        // A file no slot offers may just be newer than the cached node info: reload once and look again.
+        if (named != null && usableSlots().none { AgentLoraCatalog.resolve(named, it.options, loras) != null }) reloadLoraOptions()
         val slot = pickSlot(slotId, named) ?: return usableSlots().let { usable ->
             AgentToolResult(false, error =
                 (if (slotId.isBlank()) "工作流有 ${usable.size} 个 LoRA 槽位，请用 slot 指定：" else "没有槽位「$slotId」。可用：") +

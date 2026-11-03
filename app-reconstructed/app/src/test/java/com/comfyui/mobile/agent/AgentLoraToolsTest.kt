@@ -108,4 +108,39 @@ class AgentLoraToolsTest {
         assertEquals(listOf("strength_1"), slots.getValue("lora_1").strengthKeys)
         assertEquals(listOf("strength_12"), slots.getValue("lora_12").strengthKeys)
     }
+
+    @Test fun aLoraAddedOnThePcIsFoundAfterReloadingTheServerChoicesOnce() = runBlocking {
+        val ichika = AgentLoraCatalog.from(listOf(LocalModel(category = "LORA", present = true, name = "ichika",
+            nodeModelName = "ichika.safetensors", provider = ModelProvider(trainedWords = listOf("misono ichika")))), emptyMap())
+        var reloads = 0
+        val reload: suspend () -> Map<String, List<String>>? = {
+            reloads++
+            mapOf("10:lora_name" to options + "ichika.safetensors")
+        }
+        val box = AgentDrawToolbox(snapshot(), loras = catalog + ichika, reloadOptions = reload)
+        val found = box.call(AgentDrawToolbox.LIST_LORAS, args("""{"query":"ichika"}"""))
+        assertTrue(found.error, found.ok)
+        val data = found.data as Map<*, *>
+        assertTrue(data["summary"].toString().contains("新增 1 个文件"))
+        assertEquals(listOf("ichika.safetensors"), (data["loras"] as List<*>).map { (it as Map<*, *>)["file"] })
+        val set = box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"ichika"}"""))
+        assertTrue(set.error, set.ok)
+        assertEquals("ichika.safetensors", box.changes.first { it.key == "lora_name" }.value)
+        box.call(AgentDrawToolbox.LIST_LORAS, args("""{"query":"nothing-like-this"}"""))
+        assertEquals(1, reloads)
+    }
+
+    @Test fun setLoraReloadsTheChoicesBeforeRejectingAnUnknownFile() = runBlocking {
+        var reloads = 0
+        val box = AgentDrawToolbox(snapshot(), loras = catalog, reloadOptions = {
+            reloads++
+            mapOf("10:lora_name" to options + "fresh.safetensors")
+        })
+        val set = box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"fresh.safetensors"}"""))
+        assertTrue(set.error, set.ok)
+        assertEquals(1, reloads)
+        val missing = box.call(AgentDrawToolbox.SET_LORA, args("""{"lora":"nope"}"""))
+        assertFalse(missing.ok)
+        assertEquals(1, reloads)
+    }
 }

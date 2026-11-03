@@ -3204,6 +3204,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application), C
         return enqueueCurrentWorkflowOnce(batchCount, turnId)
     }
 
+    /**
+     * Re-reads object_info for the Agent (a LoRA added on the PC is missing from the copy cached at
+     * connect) and re-parses the Agent's editable nodes so the apply step accepts the new choices.
+     * False when the server didn't answer or changed meanwhile.
+     */
+    internal suspend fun refreshObjectInfoForAgent(): Boolean {
+        if (currentServerProfile()?.isRunningHub == true) return false
+        val sid = _currentServerId.value
+        val fresh = repository.getObjectInfo(force = true) ?: return false
+        if (_currentServerId.value != sid) return false
+        _objectInfo.value = fresh
+        agentWorkflow?.let { MainViewModelAgent.parseAgentEditableNodes(this, it) }
+        addLog("Agent：已重新读取服务器的模型列表", LogType.INFO)
+        return true
+    }
+
     private suspend fun enqueueCurrentWorkflowOnce(batchCount: Int, turnId: String): Result<String> {
         if (isSending) {
             return Result.failure(IllegalStateException("正在发送中，请稍候再试"))
