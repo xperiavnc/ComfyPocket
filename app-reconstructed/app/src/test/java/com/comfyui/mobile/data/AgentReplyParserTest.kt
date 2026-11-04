@@ -289,4 +289,27 @@ class AgentReplyParserTest {
         assertEquals(listOf("冬装", "便服"), result.clarification?.options)
         assertNull(AgentReplyParser.parse("""{"prompt":"cat","question":"picture caption"}""").clarification)
     }
+
+    @Test fun malformedJsonStillKeepsUnescapedEmoticonQuotesInsidePrompt() {
+        val result = AgentReplyParser.parse(
+            """{"action":"draw","reply":"好了","prompt":"kohubun 画风 2.5, 白裙 + 猫娘 tag, 嘴型用 ":<" 撒嘴表情。","negative_prompt":"","should_draw":true}""",
+            preserveNaturalLanguage = true
+        )
+        assertEquals(
+            """kohubun 画风 2.5, 白裙 + 猫娘 tag, 嘴型用 ":<" 撒嘴表情。""",
+            result.prompt
+        )
+        assertEquals("", result.negativePrompt)
+        assertEquals(true, result.shouldDraw)
+    }
+
+    @Test fun validEscapedEmoticonQuotesAlsoRemainPromptContent() {
+        val result = AgentReplyParser.parse(
+            """{"action":"draw","prompt":"嘴型用 \":<\" 撒嘴表情","negative_prompt":"","should_draw":true}""",
+            preserveNaturalLanguage = true
+        )
+        assertEquals("""嘴型用 ":<" 撒嘴表情""", result.prompt)
+        assertEquals("", result.negativePrompt)
+        assertEquals(true, result.shouldDraw)
+    }
 }

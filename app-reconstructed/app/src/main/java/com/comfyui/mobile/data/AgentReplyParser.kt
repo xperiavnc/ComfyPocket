@@ -298,16 +298,68 @@ object AgentReplyParser {
         else -> null
     }
 
-    /** `"key" : "value"` with a fully closed string. */
+    /**
+     * Read a string field from a response that may contain an unescaped quote in its value.
+     *
+     * Some models emit prompt text such as `嘴型用 ":<" 撒嘴表情` directly inside JSON
+     * instead of escaping the two quote characters. A normal JSON parser correctly rejects
+     * that response, but those quotes are prompt content rather than field delimiters. When
+     * parsing has already failed, use the following JSON field boundary (`,"next_key":` or
+     * `}`) to find the real closing quote while preserving the emoticon verbatim.
+     */
     private fun salvageString(text: String, keys: List<String>): String =
         salvageOptionalString(text, keys).orEmpty()
 
     private fun salvageOptionalString(text: String, keys: List<String>): String? {
         for (k in keys) {
-            val m = Regex(""""${Regex.escape(k)}"\s*:\s*"((?:\\.|[^"\\])*)"""").find(text) ?: continue
-            return unescape(m.groupValues[1])
+            val token = "\"$k\""
+            val keyStart = text.indexOf(token)
+            if (keyStart < 0) continue
+            var valueStart = keyStart + token.length
+            while (valueStart < text.length && text[valueStart].isWhitespace()) valueStart++
+            if (valueStart >= text.length || text[valueStart] != ':') continue
+            valueStart++
+            while (valueStart < text.length && text[valueStart].isWhitespace()) valueStart++
+            val value = salvageJsonStringValue(text, valueStart) ?: continue
+            return unescape(value)
         }
         return null
+    }
+
+    /**
+     * Returns the raw contents after an opening JSON quote. Quotes are content unless the
+     * following characters can close this field: a comma followed by another quoted key, or
+     * the end of the containing object/response. An unterminated field still returns null so
+     * truncated responses keep the existing "no prompt" behavior.
+     */
+    private fun salvageJsonStringValue(text: String, valueStart: Int): String? {
+        if (valueStart >= text.length || text[valueStart] != '"') return null
+        val out = StringBuilder()
+        var i = valueStart + 1
+        while (i < text.length) {
+            val c = text[i]
+            if (c == '\\' && i + 1 < text.length) {
+                out.append(c).append(text[i + 1])
+                i += 2
+                continue
+            }
+            if (c == '"' && isSalvageStringTerminator(text, i)) {
+                return out.toString()
+            }
+            out.append(c)
+            i++
+        }
+        return null
+    }
+
+    private fun isSalvageStringTerminator(text: String, quoteIndex: Int): Boolean {
+        var i = quoteIndex + 1
+        while (i < text.length && text[i].isWhitespace()) i++
+        if (i >= text.length) return true
+        if (text[i] == '}') return true
+        // A later property can be truncated (e.g. `"should_dr`) after this complete string.
+        // The comma is still an unambiguous field boundary; an emoticon quote is not followed by it.
+        return text[i] == ','
     }
 
     private fun salvageBool(text: String, keys: List<String>): Boolean? {
@@ -349,6 +401,7 @@ object AgentReplyParser {
 
     private val KEY_PREFIX = Regex("""(?i)^["'\s]*(negative_prompt|negativePrompt|negative|prompt|reply|tip|tags|positive|should_draw|shoulddraw|draw|message)["'\s]*[:：]\s*""")
     private val JSONISH = Regex("""(?i)("\s*:|:\s*"|\bshould_draw\b)""")
+    private val JSON_OBJECT_PREFIX = Regex("""(?is)^\s*\{\s*"(?:prompt|reply|negative_prompt|should_draw|action)"\s*:""")
 
     /**
      * Tag mode strips leaked envelope keys and conversational filler without damaging model syntax.
@@ -360,7 +413,9 @@ object AgentReplyParser {
         var text = stripFences(raw).trim()
         if (preserveNaturalLanguage) {
             text = text.replace(KEY_PREFIX, "").trim()
-            if (JSONISH.containsMatchIn(text) || text.startsWith("{\"")) return ""
+            // Do not reject ordinary prompt punctuation such as the quoted emoticon `":<"`.
+            // Only reject a value that itself looks like a leaked response envelope.
+            if (JSON_OBJECT_PREFIX.containsMatchIn(text)) return ""
             return text
         }
         text = text.lines().filterNot { it.trim().startsWith("---") }.joinToString(",")
