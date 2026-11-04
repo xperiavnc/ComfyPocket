@@ -1332,19 +1332,22 @@ object MainViewModelAgent {
 
         // AgentContextBudget.fit() trims in aligned chunks; pre-trimming here would defeat that.
         val recentHistory = validHistory.takeLast(200)
-        val lastAssistantIdx = recentHistory.indexOfLast { it.role == "assistant" }
+        // Keep the prompt of the latest draws, not just of the last reply: without them "把上次那张的雨改成雪"
+        // has nothing to refer to, and the model has to guess what it drew two turns ago.
+        val promptCarriers = com.comfyui.mobile.agent.AgentHistoryWindow.promptCarriers(recentHistory)
         for ((idx, hist) in recentHistory.withIndex()) {
             if (hist.role == "user") {
                 messages.add(com.comfyui.mobile.network.ChatMessageDto("user", chatText(hist)))
             } else if (hist.role == "assistant") {
-                val promptForHistory = if (idx == lastAssistantIdx) hist.expandedPrompt.orEmpty() else ""
+                val carriesPrompt = idx in promptCarriers
+                val promptForHistory = if (carriesPrompt) hist.expandedPrompt.orEmpty() else ""
                 val assistantJson = buildString {
                     append("{")
                     append(""""reply": ${vm.gson.toJson(hist.content)}""")
                     if (promptForHistory.isNotBlank()) {
                         append(""", "prompt": ${vm.gson.toJson(promptForHistory)}""")
                     }
-                    if (idx == lastAssistantIdx && hist.expandedNegativePrompt != null) {
+                    if (carriesPrompt && hist.expandedNegativePrompt != null) {
                         append(""", "negative_prompt": ${vm.gson.toJson(hist.expandedNegativePrompt)}""")
                     }
                     hist.clarification?.let { clarification ->
@@ -1473,6 +1476,8 @@ object MainViewModelAgent {
                                     }
                                 }
                             }, loraLibrary = loraLibrary, freshLoras = freshLoras,
+                            currentPrompt = vm._agentPromptOutput.value.positive,
+                            activeCharacters = characterContext.characters.map { it.lore },
                             reloadOptions = {
                                 val addresses = snapshot.fields.map { it.address }
                                 if (!vm.refreshObjectInfoForAgent()) null else withContext(Dispatchers.Main) {
@@ -1499,7 +1504,10 @@ object MainViewModelAgent {
                 messages.drop(1 + historyCount).mapIndexed { index, message ->
                     com.comfyui.mobile.agent.AgentContextMessage(message,
                         if (index + 1 + historyCount == currentRequestIndex) imageDataUrls else emptyList())
-                }, settings.generationLimits, defaultHistoryMessages = 4,
+                }, settings.generationLimits,
+                // Five turns (request + reply): the three draws that still carry their prompt, plus the
+                // exchange around them. Four messages dropped those prompts before the model could use them.
+                defaultHistoryMessages = 10,
                 reservedInputTokens = com.comfyui.mobile.agent.AgentInteractionProtocol.contextReserve(finalSystem, decisionSystem) +
                     toolReserve,
                 growthHeadroom = if (toolbox != null) com.comfyui.mobile.agent.AgentContextBudget.TOOL_GROWTH else 0)

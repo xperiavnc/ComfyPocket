@@ -44,6 +44,12 @@ object AgentNegativePromptPolicy {
         return ConflictResolution(kept.joinToString(", "), removed.values.toList())
     }
 
+    /** One tag per entry, brackets/quotes/commas respected; shared with the prompt editor. */
+    internal fun splitTags(value: String): List<String> = pieces(value)
+
+    /** Comparison form of a tag (case, `_`, `(x:1.2)` weights); null when the piece is not a plain tag. */
+    internal fun tagOf(raw: String): String? = canonicalTag(raw)
+
     private fun canonicalTag(raw: String): String? {
         var tag = Normalizer.normalize(raw.trim(), Normalizer.Form.NFKC)
         repeat(3) {

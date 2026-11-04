@@ -27,6 +27,10 @@ class AgentDrawToolbox(
     loras: List<AgentLoraInfo> = emptyList(),
     /** Address of the 画风 / 画师 text field shown in the style settings, when bound. */
     private val styleField: String? = null,
+    /** The positive prompt already in the workflow: edit_prompt edits this instead of a full rewrite. */
+    private val currentPrompt: String = "",
+    /** Characters this turn resolved to; their own LoRAs are installed into free slots on submit. */
+    private val activeCharacters: List<CharacterLore> = emptyList(),
     private val favoriteArtists: List<String> = emptyList(),
     /** Persists a character profile into the library; returns an error message or null. */
     private val saveCharacter: (suspend (CharacterLore) -> String?)? = null,
@@ -146,6 +150,17 @@ class AgentDrawToolbox(
                 "prompt" to text("完整正向提示词，按系统中的写法规则"),
                 "negative_prompt" to text("完整反向提示词；不传则保留工作流原值，传空字符串表示清空。要去掉的标签只从 prompt 删除，不要放进反向，除非用户明确要避免")
             ), "prompt")),
+        tool(EDIT_PROMPT, "在现有提示词上增删改标签，不用整段重写：只动你点名的标签，其余标签原样保留，改了什么会回报。用户说\"换成 X\"\"加上 Y\"\"去掉 Z\"时优先用它，自己重写整段容易改错别的标签。",
+            obj(mapOf(
+                "remove" to array(text("要去掉的标签，按系统写法；不存在的会回报但不算失败"), 20),
+                "replace" to array(obj(mapOf(
+                    "from" to text("要被替换的标签"),
+                    "to" to text("替换成的标签，可含多个逗号分隔的标签")
+                ), "from", "to"), 20),
+                "add" to array(text("要新增的标签"), 20),
+                "position" to mapOf("type" to "string", "enum" to listOf("append", "prepend"), "description" to "新增的标签放在末尾（默认）还是开头"),
+                "base" to text("可选：以这个提示词为起点；不传则用本轮已写入的提示词，其次用工作流当前正向提示词")
+            ))),
         tool(LOOKUP_TAGS, "在本地词库中查绘画标签或角色名的标准写法与中文释义。拿不准标签拼写时使用。",
             obj(mapOf(
                 "query" to text("要查的词，中英文均可，一次一个"),
@@ -239,6 +254,7 @@ class AgentDrawToolbox(
         INSPECT -> inspect()
         PATCH -> patch(arguments)
         SET_PROMPT -> setPrompt(arguments)
+        EDIT_PROMPT -> editPrompt(arguments)
         LOOKUP_TAGS -> lookup(arguments)
         PROFILE -> profile(arguments)
         SUBMIT -> submit(arguments)
@@ -765,6 +781,131 @@ class AgentDrawToolbox(
         })
     }
 
+    /**
+     * Edits the prompt already in hand instead of asking for a full rewrite: "把这件外套换成红色" becomes
+     * remove/replace/add over the existing tags, so tags the user never mentioned keep their exact text.
+     */
+    private fun editPrompt(arguments: JsonObject): AgentToolResult {
+        val baseElement = arguments["base"]?.takeUnless { it.isJsonNull }
+        if (baseElement != null && (!baseElement.isJsonPrimitive || !baseElement.asJsonPrimitive.isString)) {
+            return AgentToolResult(false, error = "base 必须是字符串")
+        }
+        val removals = stringList(arguments, "remove") ?: return AgentToolResult(false, error = "remove 必须是字符串数组")
+        val additions = stringList(arguments, "add") ?: return AgentToolResult(false, error = "add 必须是字符串数组")
+        val replaceElement = arguments["replace"]?.takeUnless { it.isJsonNull }
+        if (replaceElement != null && !replaceElement.isJsonArray) return AgentToolResult(false, error = "replace 必须是数组")
+        val replacements = mutableListOf<Pair<String, List<String>>>()
+        if (replaceElement != null) {
+            for (item in replaceElement.asJsonArray) {
+                if (!item.isJsonObject) return AgentToolResult(false, error = "replace 的每一项必须是 {from, to} 对象")
+                val from = AgentInteractionProtocol.string(item.asJsonObject, "from").trim()
+                if (from.isEmpty()) return AgentToolResult(false, error = "replace 的 from 不能为空")
+                val to = listOf(AgentInteractionProtocol.string(item.asJsonObject, "to"))
+                replacements += from to to
+            }
+        }
+        if (removals.isEmpty() && additions.isEmpty() && replacements.isEmpty()) {
+            return AgentToolResult(false, error = "remove、replace、add 至少要有一项")
+        }
+        val position = AgentInteractionProtocol.string(arguments, "position").ifBlank { "append" }.lowercase(Locale.ROOT)
+        if (position != "append" && position != "prepend") return AgentToolResult(false, error = "position 只能是 append 或 prepend")
+        val base = baseElement?.asString?.takeIf(String::isNotBlank)
+            ?: prompt?.takeIf(String::isNotBlank)
+            ?: currentPrompt.takeIf(String::isNotBlank)
+            ?: return AgentToolResult(false,
+                error = "还没有可改的提示词：用 base 传入起点，或先用 submit_workflow 的 prompt 写好完整提示词")
+
+        fun keyOf(raw: String): String =
+            AgentNegativePromptPolicy.tagOf(raw) ?: raw.trim().lowercase(Locale.ROOT).replace(Regex("[\\s_]+"), " ")
+
+        val removeKeys = removals.map(::keyOf).toSet()
+        val replaceMap = replacements.groupBy({ keyOf(it.first) }, { it.second })
+            .mapValues { (_, lists) -> lists.flatten() }
+        val removed = mutableListOf<String>()
+        val replaced = mutableListOf<String>()
+        val result = mutableListOf<String>()
+        for (piece in AgentNegativePromptPolicy.splitTags(base)) {
+            val text = piece.trim()
+            if (text.isEmpty()) continue
+            val key = keyOf(text)
+            if (key in removeKeys) {
+                removed += text
+                continue
+            }
+            val to = replaceMap[key]
+            if (to == null) {
+                result += text
+                continue
+            }
+            replaced += "$text → ${to.joinToString(", ")}"
+            to.forEach { value ->
+                AgentNegativePromptPolicy.splitTags(value).map(String::trim)
+                    .filter(String::isNotEmpty).forEach { result += it }
+            }
+        }
+        val trimmed = result.toMutableList()
+        val present = trimmed.map(::keyOf).toMutableSet()
+        val added = mutableListOf<String>()
+        val already = mutableListOf<String>()
+        for (raw in additions) {
+            for (tag in AgentNegativePromptPolicy.splitTags(raw).map(String::trim).filter(String::isNotEmpty)) {
+                if (!present.add(keyOf(tag))) {
+                    already += tag
+                    continue
+                }
+                added += tag
+            }
+        }
+        if (added.isNotEmpty()) {
+            if (position == "prepend") trimmed.addAll(0, added) else trimmed.addAll(added)
+        }
+        val positive = trimmed.joinToString(", ").trim()
+        if (positive.isBlank()) return AgentToolResult(false, error = "改完提示词为空了：提示词不能为空，保留几个标签或改用 set_prompt")
+        if (positive.length > MAX_PROMPT) return AgentToolResult(false, error = "prompt 过长（${positive.length} 字符，上限 $MAX_PROMPT）")
+        val collision = AgentNegativePromptPolicy.removePositiveCollisions(positive, negativePrompt)
+        val appliedNegative = negativePrompt?.let { collision.negativePrompt }
+        prompt = positive
+        negativePrompt = appliedNegative
+        val hitKeys = removed.map(::keyOf).toSet()
+        val missing = removals.filter { keyOf(it) !in hitKeys }
+        val summary = buildString {
+            append("已改提示词（${positive.length} 字符）")
+            if (removed.isNotEmpty()) append("；移除：${removed.take(6).joinToString("、") { short(it, 40) }}")
+            if (replaced.isNotEmpty()) append("；替换：${replaced.take(6).joinToString("、") { short(it, 60) }}")
+            if (added.isNotEmpty()) append("；新增：${added.take(6).joinToString("、") { short(it, 40) }}")
+            if (missing.isNotEmpty()) append("；没找到：${missing.take(6).joinToString("、") { short(it, 40) }}")
+        }
+        return AgentToolResult(true, buildMap<String, Any> {
+            put("summary", summary)
+            put("prompt", positive)
+            put("negative", when (appliedNegative) {
+                null -> "保留工作流原值"
+                "" -> "清空"
+                else -> "${appliedNegative.length} 字符"
+            })
+            if (removed.isNotEmpty()) put("removed", removed)
+            if (replaced.isNotEmpty()) put("replaced", replaced)
+            if (added.isNotEmpty()) put("added", added)
+            if (missing.isNotEmpty()) put("missing", missing)
+            if (already.isNotEmpty()) put("already_present", already)
+            if (collision.removedTags.isNotEmpty()) {
+                put("warning", "已从反向提示词移除与正向重复的标签：${collision.removedTags.joinToString("、")}")
+            }
+        })
+    }
+
+    /** Optional array-of-strings argument; null when it is present but not an array of strings. */
+    private fun stringList(arguments: JsonObject, name: String): List<String>? {
+        val element = arguments[name]?.takeUnless { it.isJsonNull } ?: return emptyList()
+        if (!element.isJsonArray) return null
+        val values = mutableListOf<String>()
+        for (item in element.asJsonArray) {
+            if (!item.isJsonPrimitive || !item.asJsonPrimitive.isString) return null
+            values += item.asString
+        }
+        return values
+    }
+
     private suspend fun lookup(arguments: JsonObject): AgentToolResult {
         val search = searchTags ?: return AgentToolResult(false, error = "本地词库未启用，按自己的知识书写标签即可")
         val query = AgentInteractionProtocol.string(arguments, "query")
@@ -803,7 +944,7 @@ class AgentDrawToolbox(
         ))
     }
 
-    private fun submit(arguments: JsonObject): AgentToolResult {
+    private suspend fun submit(arguments: JsonObject): AgentToolResult {
         // One-call form: the prompt may arrive with the submission, so "just draw this" costs a single model step.
         val inline = arguments["prompt"]?.takeUnless { it.isJsonNull }
         if (inline != null && (!inline.isJsonPrimitive || !inline.asJsonPrimitive.isString)) {
@@ -814,6 +955,10 @@ class AgentDrawToolbox(
         val inlineWarning = (inlineResult?.data as? Map<*, *>)?.get("warning") as? String
         val written = prompt ?: return AgentToolResult(false,
             error = "还没有提示词：把完整提示词写进 prompt 参数，或先调用 set_prompt")
+        // Forgetting set_lora is the usual way a character comes out without its own LoRA, so the turn
+        // installs it into a free slot itself and only asks the model when no slot is free.
+        val (installedLoras, loraProblem) = autoInstallCharacterLoras()
+        if (loraProblem != null) return AgentToolResult(false, error = loraProblem)
         // A LoRA loaded this turn whose trigger word never made it into the prompt often does nothing visible;
         // adding the word beats failing the turn over it.
         val added = missingTriggers(written)
@@ -833,11 +978,52 @@ class AgentDrawToolbox(
         }
         return AgentToolResult(true, buildMap<String, Any> {
             put("summary", (if (draw) "已提交出图" else "已写入提示词，未出图") +
+                (if (installedLoras.isEmpty()) "" else "；已自动装上角色 LoRA：${installedLoras.joinToString("、")}") +
                 (if (added.isEmpty()) "" else "；已补上 LoRA 触发词：${added.joinToString("、")}"))
             put("staged_changes", staged.size)
             put("save_defaults", saveDefaults)
             inlineWarning?.let { put("warning", it) }
         }, finalContent = final.toString())
+    }
+
+    /** LoRAs the turn's resolved characters ship with, from the model center's 角色 annotation. */
+    private fun characterLoras(): List<AgentLoraInfo> {
+        if (activeCharacters.isEmpty() || loras.isEmpty()) return emptyList()
+        val names = activeCharacters.flatMap { lore -> listOf(lore.name) + lore.aliases.orEmpty() }
+            .map(::promptText).filter(String::isNotBlank).toSet()
+        if (names.isEmpty()) return emptyList()
+        return loras.filter { info -> info.character.isNotBlank() && promptText(info.character) in names }
+    }
+
+    /**
+     * Installs a character's own LoRA into a free slot before submitting. It never replaces a LoRA that is
+     * already in a slot; when every slot is taken the turn stops with the slot list, so the model can decide
+     * which one to swap instead of quietly drawing the character without its LoRA.
+     */
+    private suspend fun autoInstallCharacterLoras(): Pair<List<String>, String?> {
+        val wanted = characterLoras().filter { info ->
+            val key = AgentLoraCatalog.normalize(info.file)
+            loraSlots.none { slot -> loadedFile(slot)?.let(AgentLoraCatalog::normalize) == key }
+        }
+        if (wanted.isEmpty()) return emptyList<String>() to null
+        val installed = mutableListOf<String>()
+        for (info in wanted) {
+            val slot = usableSlots().firstOrNull { loadedFile(it) == null }
+            if (slot == null) {
+                val character = activeCharacters.firstOrNull { promptText(it.name) == promptText(info.character) }
+                    ?.name ?: info.character
+                return installed to ("本轮角色「$character」配套 LoRA「${info.name.ifBlank { info.file }}」还没装，" +
+                    "但槽位都被占用了：" + usableSlots().joinToString("、") { "${it.id}（${describeSlot(it)}）" } +
+                    "。用 set_lora 换掉一个不需要的再提交；这次确实不用它的 LoRA 时，在回复里说明。")
+            }
+            val result = setLora(JsonObject().apply {
+                addProperty("slot", slot.id)
+                addProperty("lora", info.file)
+            })
+            if (!result.ok) return installed to (result.error ?: "没有装上角色 LoRA「${info.name.ifBlank { info.file }}」")
+            installed += "${info.name.ifBlank { info.file }} → ${slot.id}"
+        }
+        return installed to null
     }
 
     /**
@@ -864,7 +1050,12 @@ class AgentDrawToolbox(
             .map { "- " + short(it, MAX_BRIEF_LINE) + "（没有资料）" }
         return buildString {
             append("【LoRA 速查】本轮工作流的 LoRA 槽位和服务器上能装的 LoRA。换 LoRA 时直接用这里的槽位和 file 调用 set_lora，不必先 list_loras；")
-            append("这里没有、要按用途筛选或要看完整简介时再用 list_loras / read_lora。\n槽位：\n")
+            append("这里没有、要按用途筛选或要看完整简介时再用 list_loras / read_lora。\n")
+            characterLoras().takeIf { it.isNotEmpty() }?.let { infos ->
+                append("本轮角色 LoRA（submit_workflow 会自动装进空槽位，不用调用 set_lora）：")
+                append(infos.joinToString("、") { "${it.character} → ${it.file}" }).append('\n')
+            }
+            append("槽位：\n")
             slots.forEach { slot -> append("- ${slot.id}（${nodeName(slot.nodeId) ?: "LoRA"}）：${describeSlot(slot)}\n") }
             if (lines.isEmpty()) {
                 append("服务器没有报告可选的 LoRA 文件，用 list_loras 检索。")
@@ -989,6 +1180,7 @@ class AgentDrawToolbox(
         const val INSPECT = "inspect_workflow"
         const val PATCH = "patch_workflow"
         const val SET_PROMPT = "set_prompt"
+        const val EDIT_PROMPT = "edit_prompt"
         const val LOOKUP_TAGS = "lookup_tags"
         const val PROFILE = "get_character_profile"
         const val SUBMIT = "submit_workflow"
@@ -1023,11 +1215,13 @@ class AgentDrawToolbox(
 - 换 LoRA（包括用 LoRA 换画风）：按【LoRA 速查】直接 set_lora，同一批 submit_workflow 并在 prompt 里带上新 LoRA 的触发词、去掉换下的 LoRA 的触发词；速查里没有或拿不准用哪个时才 list_loras / read_lora。
 - 替换角色外貌：用户给了角色标签或说"换成 xxx"时，直接替换提示词里对应的角色和外貌标签，再 submit_workflow（带 prompt）；不认识这个角色或缺关键外貌时才 get_character_profile / lookup_tags。
 - 只改提示词或直接画：不用 inspect_workflow，也不用先 set_prompt，把完整提示词写进 submit_workflow 的 prompt 参数即可。
+- 改已有提示词里的几个词（加、删、换）：用 edit_prompt，不要整段重写。它只动你点名的标签，其余标签原样保留并在返回值里告诉你改了哪些；改完再 submit_workflow（不用再传 prompt）。
 **要出图时必须调用 submit_workflow**：提示词写在 set_prompt 里或直接写在 submit_workflow 的 prompt 参数里都行，但只有调用 submit_workflow 才会出图；patch_workflow 修改参数后也要调用 submit_workflow 才能生效；只有用户明确说"不出图""先别画"时才不提交（此时 submit_workflow 传 draw=false）。
 现在是绘图模式。对话记录里只有文字、没有提示词的回复来自聊天模式，不要照着只回文字；用户这一轮要画就调用工具出图。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
 正反向提示词重复标签：系统会自动从负面提示词中移除与正面重复的标签，不影响出图，你会在 set_prompt 或 submit_workflow 的返回值中看到 warning；不需要再改提示词，还没提交就继续 submit_workflow。
 有 LoRA 工具时：list_loras 按关键词检索本地 LoRA（含你以前写的笔记），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。用户要在原有 LoRA 之外再加一个时，装进速查里的「新增槽位」（会一并调大 LoRA 数量），不要替换原有的。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，用户没提就保持原样；按标注、笔记和简介挑选，强度优先用推荐强度，新 LoRA 的触发词写进提示词。SD1.5、SDXL 系（Illustrious、Pony、NoobAI 等）、Flux 等不同架构的 LoRA 互不通用：自己挑选时选底模和当前模型相符的；用户点名要用的照常装上，底模明显不符时在回复里提一句。
+本轮角色自带 LoRA 时（速查里的「本轮角色 LoRA」）：submit_workflow 会自动把它装进空槽位并把触发词补进提示词，你不用再调用 set_lora；槽位都占满时 submit_workflow 会报错并列出槽位，那时才用 set_lora 换掉一个不需要的。
 有 refresh_loras / annotate_lora 时：用户说放了新 LoRA 或列表里找不到时先 refresh_loras；读懂简介或出图确认了效果后，用 annotate_lora 记下简短笔记（用途、效果、推荐强度、注意事项），方便以后的新会话直接使用；用户告诉你某个 LoRA 的触发词、用途、推荐强度或效果时，同一批调用 annotate_lora 记下；只记确认过的内容，不写猜测。
 画风/画师字段在 inspect_workflow 中标为 role="画风/画师"，用户要求换画风或画师时用 patch_workflow 修改；用户说保存、记住、以后都用、设为默认时，submit_workflow 传 save_defaults=true，设置页会同步。
 有 save_character_profile 时：用户介绍了词库里没有的新角色、要求记住某个角色，或给已登记角色补充新服装/外貌时，把整理好的英文绘画标签写入词库；不要擅自覆盖用户没要求改动的已有档案。
