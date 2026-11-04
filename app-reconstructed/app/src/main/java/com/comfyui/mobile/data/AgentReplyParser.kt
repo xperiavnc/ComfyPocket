@@ -400,8 +400,7 @@ object AgentReplyParser {
     // ---- sanitizers ----
 
     private val KEY_PREFIX = Regex("""(?i)^["'\s]*(negative_prompt|negativePrompt|negative|prompt|reply|tip|tags|positive|should_draw|shoulddraw|draw|message)["'\s]*[:：]\s*""")
-    private val JSONISH = Regex("""(?i)("\s*:|:\s*"|\bshould_draw\b)""")
-    private val JSON_OBJECT_PREFIX = Regex("""(?is)^\s*\{\s*"(?:prompt|reply|negative_prompt|should_draw|action)"\s*:""")
+    private val JSONISH = Regex("""(?i)("\s*:(?!<)|:\s*"|\bshould_draw\b)""")
 
     /**
      * Tag mode strips leaked envelope keys and conversational filler without damaging model syntax.
@@ -413,9 +412,9 @@ object AgentReplyParser {
         var text = stripFences(raw).trim()
         if (preserveNaturalLanguage) {
             text = text.replace(KEY_PREFIX, "").trim()
-            // Do not reject ordinary prompt punctuation such as the quoted emoticon `":<"`.
-            // Only reject a value that itself looks like a leaked response envelope.
-            if (JSON_OBJECT_PREFIX.containsMatchIn(text)) return ""
+            // A colon immediately after a quote is part of the quoted emoticon `":<"`,
+            // not evidence that the prompt contains a leaked JSON property.
+            if (JSONISH.containsMatchIn(text) || text.startsWith("{\"")) return ""
             return text
         }
         text = text.lines().filterNot { it.trim().startsWith("---") }.joinToString(",")
