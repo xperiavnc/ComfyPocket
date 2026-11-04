@@ -145,4 +145,55 @@ class AgentToolLoopTest {
         val tags = box.call(AgentDrawToolbox.LOOKUP_TAGS, JsonParser.parseString("""{"query":"rain"}""").asJsonObject)
         assertFalse(tags.ok)
     }
+
+    @Test fun submitCanCarryThePromptSoDrawingIsOneModelStep() = runBlocking {
+        // The common "draw this" turn: submit carries the prompt, so the whole turn is a single model request.
+        val box = toolbox()
+        val fixture = Fixture(call(AgentDrawToolbox.SUBMIT,
+            """{"reply":"画好了","prompt":"rain, night","negative_prompt":"blurry"}"""))
+        val steps = mutableListOf<AgentToolStep>()
+        val outcome = AgentToolLoop(fixture, box).run(messages, "tools", onStep = { steps += it })
+
+        assertEquals(1, fixture.requests.size)
+        assertEquals(listOf(AgentDrawToolbox.SUBMIT), steps.map { it.tool })
+        assertEquals("rain, night", box.prompt)
+        assertEquals("blurry", box.negativePrompt)
+        val final = JsonParser.parseString(outcome.output!!.content).asJsonObject
+        assertEquals("rain, night", final["prompt"].asString)
+        assertEquals("blurry", final["negative_prompt"].asString)
+        assertTrue(final["should_draw"].asBoolean)
+        assertEquals("draw", final["action"].asString)
+        // The log line shows how long the step took; the value must at least be wired through.
+        assertTrue(steps.single().millis >= 0)
+    }
+
+    @Test fun inlineSubmitRemovesDuplicateNegativeTagsAndReportsThem() = runBlocking {
+        val box = toolbox()
+        val submitted = box.call(AgentDrawToolbox.SUBMIT,
+            JsonParser.parseString("""{"reply":"好","prompt":"rain, smile","negative_prompt":"smile, blurry"}""").asJsonObject)
+
+        assertTrue(submitted.ok)
+        assertEquals("rain, smile", box.prompt)
+        assertEquals("blurry", box.negativePrompt)
+        assertTrue(submitted.data.toString().contains("warning"))
+        val final = JsonParser.parseString(submitted.finalContent!!).asJsonObject
+        assertEquals("blurry", final["negative_prompt"].asString)
+    }
+
+    @Test fun inlineSubmitValidatesThePromptLikeSetPrompt() = runBlocking {
+        val box = toolbox()
+        val blank = box.call(AgentDrawToolbox.SUBMIT, JsonParser.parseString("""{"reply":"好","prompt":"  "}""").asJsonObject)
+        assertFalse(blank.ok)
+        assertTrue(blank.error!!.contains("不能为空"))
+        val notAString = box.call(AgentDrawToolbox.SUBMIT, JsonParser.parseString("""{"reply":"好","prompt":1}""").asJsonObject)
+        assertFalse(notAString.ok)
+        assertTrue(notAString.error!!.contains("字符串"))
+        assertNull(box.prompt)
+        // A rejected prompt must not end the turn: the loop still has to submit.
+        val fixture = Fixture(
+            call(AgentDrawToolbox.SUBMIT, """{"reply":"好","prompt":""}"""),
+            call(AgentDrawToolbox.SUBMIT, """{"reply":"好","prompt":"rain"}"""))
+        val outcome = AgentToolLoop(fixture, toolbox()).run(messages, "tools")
+        assertTrue(outcome.output!!.content.contains("rain"))
+    }
 }

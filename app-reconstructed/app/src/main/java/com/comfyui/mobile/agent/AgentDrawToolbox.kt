@@ -141,7 +141,7 @@ class AgentDrawToolbox(
                 "field" to text("inspect_workflow 返回的字段地址，形如 \"12:steps\""),
                 "value" to mapOf("description" to "新值；类型须与字段一致（文本/整数/小数/布尔），有可选项时只能取其中之一")
             ), "field", "value"), 20)), "changes")),
-        tool(SET_PROMPT, "写入本轮正向提示词和可选的反向提示词。可以多次调用，以最后一次为准。",
+        tool(SET_PROMPT, "写入本轮正向提示词和可选的反向提示词。可以多次调用，以最后一次为准。只写提示词时也可以改用 submit_workflow 的 prompt 参数，省掉一次调用。",
             obj(mapOf(
                 "prompt" to text("完整正向提示词，按系统中的写法规则"),
                 "negative_prompt" to text("完整反向提示词；不传则保留工作流原值，传空字符串表示清空。要去掉的标签只从 prompt 删除，不要放进反向，除非用户明确要避免")
@@ -153,9 +153,11 @@ class AgentDrawToolbox(
             ), "query")),
         tool(PROFILE, "读取一个已登记角色的档案：外貌绘画词、必须保留的固定词、服装列表及其绘画词。",
             obj(mapOf("name" to text("角色名称、别名或 character_id")), "name")),
-        tool(SUBMIT, "提交本轮结果并结束。需要先调用 set_prompt。draw=true 立即出图，false 只写入提示词不出图。",
+        tool(SUBMIT, "提交本轮结果并结束。推荐把完整提示词写进 prompt 参数，一次调用完成写入和提交；已经用 set_prompt 写入过时可以只传 reply。draw=true 立即出图，false 只写入提示词不出图。",
             obj(mapOf(
                 "reply" to text("给用户的简短回复，说明这次画了什么或改了什么"),
+                "prompt" to text("完整正向提示词，按系统中的写法规则。还没调用 set_prompt 时用它一次完成写入和提交"),
+                "negative_prompt" to text("完整反向提示词，只在同一个调用里传了 prompt 时有意义；不传则保留工作流原值，传空字符串表示清空"),
                 "draw" to mapOf("type" to "boolean", "description" to "是否立即出图，默认 true"),
                 "save_defaults" to mapOf("type" to "boolean", "description" to
                     "把本轮画风与辅助参数（含 patch_workflow / set_lora 的修改）保存为这个工作流的默认值，新会话也沿用；用户说保存、记住、以后都这样、设为默认时传 true"),
@@ -728,11 +730,16 @@ class AgentDrawToolbox(
         ).filterValues { it != null })
     }
 
-    private fun setPrompt(arguments: JsonObject): AgentToolResult {
-        val positive = AgentInteractionProtocol.string(arguments, "prompt")
+    private fun setPrompt(arguments: JsonObject): AgentToolResult =
+        writePrompt(AgentInteractionProtocol.string(arguments, "prompt"), arguments["negative_prompt"])
+
+    /**
+     * Writes this turn's prompt pair. Shared by set_prompt and the one-call submit_workflow, so a turn that only
+     * writes a prompt and draws needs one model step instead of two.
+     */
+    private fun writePrompt(positive: String, negativeElement: JsonElement?): AgentToolResult {
         if (positive.isBlank()) return AgentToolResult(false, error = "prompt 不能为空")
         if (positive.length > MAX_PROMPT) return AgentToolResult(false, error = "prompt 过长（${positive.length} 字符，上限 $MAX_PROMPT）")
-        val negativeElement = arguments["negative_prompt"]
         val negative = when {
             negativeElement == null || negativeElement.isJsonNull -> null
             negativeElement.isJsonPrimitive && negativeElement.asJsonPrimitive.isString -> negativeElement.asString.trim()
@@ -797,7 +804,16 @@ class AgentDrawToolbox(
     }
 
     private fun submit(arguments: JsonObject): AgentToolResult {
-        val written = prompt ?: return AgentToolResult(false, error = "还没有提示词，先调用 set_prompt")
+        // One-call form: the prompt may arrive with the submission, so "just draw this" costs a single model step.
+        val inline = arguments["prompt"]?.takeUnless { it.isJsonNull }
+        if (inline != null && (!inline.isJsonPrimitive || !inline.asJsonPrimitive.isString)) {
+            return AgentToolResult(false, error = "prompt 必须是字符串")
+        }
+        val inlineResult = inline?.let { writePrompt(it.asString, arguments["negative_prompt"]) }
+        if (inlineResult != null && !inlineResult.ok) return inlineResult
+        val inlineWarning = (inlineResult?.data as? Map<*, *>)?.get("warning") as? String
+        val written = prompt ?: return AgentToolResult(false,
+            error = "还没有提示词：把完整提示词写进 prompt 参数，或先调用 set_prompt")
         // A LoRA loaded this turn whose trigger word never made it into the prompt often does nothing visible;
         // adding the word beats failing the turn over it.
         val added = missingTriggers(written)
@@ -815,9 +831,13 @@ class AgentDrawToolbox(
             addProperty("action", if (draw) "draw" else "apply_prompt")
             arguments["outfit_selections"]?.takeIf { it.isJsonArray }?.let { add("outfit_selections", it) }
         }
-        return AgentToolResult(true, mapOf("summary" to (if (draw) "已提交出图" else "已写入提示词，未出图") +
-                (if (added.isEmpty()) "" else "；已补上 LoRA 触发词：${added.joinToString("、")}"),
-            "staged_changes" to staged.size, "save_defaults" to saveDefaults), finalContent = final.toString())
+        return AgentToolResult(true, buildMap<String, Any> {
+            put("summary", (if (draw) "已提交出图" else "已写入提示词，未出图") +
+                (if (added.isEmpty()) "" else "；已补上 LoRA 触发词：${added.joinToString("、")}"))
+            put("staged_changes", staged.size)
+            put("save_defaults", saveDefaults)
+            inlineWarning?.let { put("warning", it) }
+        }, finalContent = final.toString())
     }
 
     /**
@@ -998,15 +1018,15 @@ class AgentDrawToolbox(
         /** Appended after the user's request; the system message keeps the drawing rules and output format. */
         fun instruction(maxSteps: Int) = """
 【智能体工具模式】本轮通过工具完成任务，最多 $maxSteps 步，每步可调用一个或多个工具，工具结果会返回给你。
-建议流程：需要时 get_character_profile 核对角色、lookup_tags 查标签写法、inspect_workflow 查看参数并用 patch_workflow 修改；然后 set_prompt 写入提示词，最后 submit_workflow 提交。
+建议流程：需要时 get_character_profile 核对角色、lookup_tags 查标签写法、inspect_workflow 查看参数并用 patch_workflow 修改；最后调用 submit_workflow，把完整提示词写进它的 prompt 参数（一次调用完成写入和提交）。
 能确定的步骤放进同一批调用，少走来回：
-- 换 LoRA（包括用 LoRA 换画风）：按【LoRA 速查】直接 set_lora，同一批 set_prompt（加上新 LoRA 的触发词，去掉换下的 LoRA 的触发词）再 submit_workflow；速查里没有或拿不准用哪个时才 list_loras / read_lora。
-- 替换角色外貌：用户给了角色标签或说"换成 xxx"时，直接替换提示词里对应的角色和外貌标签，再 set_prompt + submit_workflow；不认识这个角色或缺关键外貌时才 get_character_profile / lookup_tags。
-- 只改提示词：不用 inspect_workflow，直接 set_prompt + submit_workflow。
-**要出图时必须调用 submit_workflow**：用 set_prompt 写入提示词后，必须接着调用 submit_workflow 才能出图；patch_workflow 修改参数后也要调用 submit_workflow 才能生效；只有用户明确说"不出图""先别画"时才不提交。
+- 换 LoRA（包括用 LoRA 换画风）：按【LoRA 速查】直接 set_lora，同一批 submit_workflow 并在 prompt 里带上新 LoRA 的触发词、去掉换下的 LoRA 的触发词；速查里没有或拿不准用哪个时才 list_loras / read_lora。
+- 替换角色外貌：用户给了角色标签或说"换成 xxx"时，直接替换提示词里对应的角色和外貌标签，再 submit_workflow（带 prompt）；不认识这个角色或缺关键外貌时才 get_character_profile / lookup_tags。
+- 只改提示词或直接画：不用 inspect_workflow，也不用先 set_prompt，把完整提示词写进 submit_workflow 的 prompt 参数即可。
+**要出图时必须调用 submit_workflow**：提示词写在 set_prompt 里或直接写在 submit_workflow 的 prompt 参数里都行，但只有调用 submit_workflow 才会出图；patch_workflow 修改参数后也要调用 submit_workflow 才能生效；只有用户明确说"不出图""先别画"时才不提交（此时 submit_workflow 传 draw=false）。
 现在是绘图模式。对话记录里只有文字、没有提示词的回复来自聊天模式，不要照着只回文字；用户这一轮要画就调用工具出图。
 系统消息中的提示词写法规则、角色档案和冲突必问规则仍然适用：有会实质改变结果的冲突时调用 ask_user_question 并等待。
-正反向提示词重复标签：系统会自动从负面提示词中移除与正面重复的标签，不影响出图，你会在 set_prompt 的返回值中看到 warning；无需再次调用或修改提示词，继续 submit_workflow 即可。
+正反向提示词重复标签：系统会自动从负面提示词中移除与正面重复的标签，不影响出图，你会在 set_prompt 或 submit_workflow 的返回值中看到 warning；不需要再改提示词，还没提交就继续 submit_workflow。
 有 LoRA 工具时：list_loras 按关键词检索本地 LoRA（含你以前写的笔记），read_lora 看完整简介和触发词；set_lora 只在工作流有 LoRA 槽位时提供。用户要在原有 LoRA 之外再加一个时，装进速查里的「新增槽位」（会一并调大 LoRA 数量），不要替换原有的。只有用户提到角色、画风、用途或明确要求时才更换 LoRA，用户没提就保持原样；按标注、笔记和简介挑选，强度优先用推荐强度，新 LoRA 的触发词写进提示词。SD1.5、SDXL 系（Illustrious、Pony、NoobAI 等）、Flux 等不同架构的 LoRA 互不通用：自己挑选时选底模和当前模型相符的；用户点名要用的照常装上，底模明显不符时在回复里提一句。
 有 refresh_loras / annotate_lora 时：用户说放了新 LoRA 或列表里找不到时先 refresh_loras；读懂简介或出图确认了效果后，用 annotate_lora 记下简短笔记（用途、效果、推荐强度、注意事项），方便以后的新会话直接使用；用户告诉你某个 LoRA 的触发词、用途、推荐强度或效果时，同一批调用 annotate_lora 记下；只记确认过的内容，不写猜测。
 画风/画师字段在 inspect_workflow 中标为 role="画风/画师"，用户要求换画风或画师时用 patch_workflow 修改；用户说保存、记住、以后都用、设为默认时，submit_workflow 传 save_defaults=true，设置页会同步。

@@ -17,8 +17,19 @@ data class AgentToolResult(
     val finalContent: String? = null
 )
 
-/** One executed tool step, kept for the progress line and the reasoning trace. */
-data class AgentToolStep(val index: Int, val tool: String, val label: String, val ok: Boolean, val note: String)
+/**
+ * One executed tool step, kept for the progress line and the reasoning trace.
+ * [millis] is the wall clock from this step's model request to this tool result, so a slow turn can be attributed
+ * to a step instead of being a single opaque wait.
+ */
+data class AgentToolStep(
+    val index: Int,
+    val tool: String,
+    val label: String,
+    val ok: Boolean,
+    val note: String,
+    val millis: Long = 0
+)
 
 /** The tools a loop may call. Implementations validate their own arguments and never throw for bad input. */
 interface AgentToolbox {
@@ -59,6 +70,7 @@ class AgentToolLoop(
         var corrections = 0
         for (round in 1..maxSteps) {
             checkCurrent()
+            val stepStarted = System.nanoTime()
             val stepTitle = "第 $round/$maxSteps 步"
             val before = trace(reasoning, steps)
             onProgress(AgentProgress(before, "", "$stepTitle · 正在思考下一步…"))
@@ -112,7 +124,7 @@ class AgentToolLoop(
                 } catch (e: Exception) { AgentToolResult(false, error = e.message ?: e.javaClass.simpleName) }
                 checkCurrent()
                 val step = AgentToolStep(steps.size + 1, call.function.name, label, result.ok,
-                    result.error ?: summary(result.data))
+                    result.error ?: summary(result.data), millis = (System.nanoTime() - stepStarted) / 1_000_000)
                 steps += step
                 onStep(step)
                 transcript += toolMessage(call, result)

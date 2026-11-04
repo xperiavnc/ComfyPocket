@@ -325,6 +325,9 @@ object AgentLoraCatalog {
         return if (options.isEmpty()) byName ?: wanted.takeIf { '.' in it } else null
     }
 
+    /** True when the workflow has any LoRA slot at all; without one the agent exposes no LoRA tool. */
+    fun hasSlots(workflow: Map<String, Any>): Boolean = slots(workflow) { _, _ -> emptyList() }.isNotEmpty()
+
     /**
      * LoRA loader slots in [workflow]: `lora_name` with `strength_model`/`strength_clip`/`strength`, and
      * stack nodes with numbered `lora_N` / `lora_N_name` plus their own weight inputs. Stack slots beyond

@@ -16,6 +16,7 @@ import com.comfyui.mobile.model.EditableNode
 import com.comfyui.mobile.model.LogType
 import com.comfyui.mobile.network.ChatMessageDto
 import java.io.File
+import java.util.Locale
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -429,13 +430,26 @@ internal class MainViewModelAgentRuntime(private val vm: MainViewModel) {
         progress: suspend (AgentProgress) -> Unit = {},
         validate: ((String) -> String?)? = null,
         historyCount: Int = 0
-    ): AgentInteractionOutcome = AgentToolLoop(model(requestId, settings, images, streaming, checkCurrent, historyCount), toolbox)
-        .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS, toolbox.briefing()), checkCurrent, progress,
-            onStep = { step ->
-                vm.addLog("Agent 工具第 ${step.index} 步：${step.label}${if (step.ok) "" else "（失败）"}" +
-                    step.note.takeIf { it.isNotBlank() }?.let { " · ${it.take(160)}" }.orEmpty(),
-                    if (step.ok) LogType.INFO else LogType.WARNING)
-            }, validate = validate)
+    ): AgentInteractionOutcome {
+        val started = System.currentTimeMillis()
+        val steps = mutableListOf<AgentToolStep>()
+        val outcome = AgentToolLoop(model(requestId, settings, images, streaming, checkCurrent, historyCount), toolbox)
+            .run(messages, AgentDrawToolbox.instruction(AgentToolLoop.DEFAULT_MAX_STEPS, toolbox.briefing()), checkCurrent, progress,
+                onStep = { step ->
+                    steps += step
+                    vm.addLog("Agent 工具第 ${step.index} 步：${step.label}${if (step.ok) "" else "（失败）"}" +
+                        " · 用时 ${seconds(step.millis)}" +
+                        step.note.takeIf { it.isNotBlank() }?.let { " · ${it.take(160)}" }.orEmpty(),
+                        if (step.ok) LogType.INFO else LogType.WARNING)
+                }, validate = validate)
+        vm.addLog("Agent 工具：本轮 ${steps.size} 步共 ${seconds(System.currentTimeMillis() - started)}" +
+            (steps.maxOfOrNull { it.millis }?.takeIf { it > 0 }?.let { "，最慢一步 ${seconds(it)}" } ?: ""),
+            LogType.INFO)
+        return outcome
+    }
+
+    /** Elapsed time as it appears in the agent log lines. */
+    private fun seconds(millis: Long) = String.format(Locale.ROOT, "%.1fs", millis / 1000.0)
 
     /** Read-only view of the agent workflow limited to the allowed field addresses. */
     internal fun workflowSnapshot(targets: List<Pair<String, String>>, extraAllowed: Collection<String> = emptyList()): AgentWorkflowSnapshot {

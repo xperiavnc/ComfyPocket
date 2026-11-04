@@ -1440,7 +1440,11 @@ object MainViewModelAgent {
                 // silently skip the agent. Loading is idempotent and shared with prepare().
                 ensureAgentWorkflowLoaded(vm, silent = true)
                 checkCurrent()
-                val (loras, freshLoras) = loadAgentLoras(vm, loraLibrary)
+                // Without a LoRA slot the toolbox exposes no LoRA tool, so waiting for a stale server list would
+                // only delay the first model request of the turn.
+                val hasLoraSlots = vm.agentWorkflow?.let { com.comfyui.mobile.agent.AgentLoraCatalog.hasSlots(it) } == true
+                val (loras, freshLoras) = if (hasLoraSlots) loadAgentLoras(vm, loraLibrary)
+                    else emptyList<com.comfyui.mobile.agent.AgentLoraInfo>() to false
                 checkCurrent()
                 withContext(Dispatchers.Main) {
                     runCatching {

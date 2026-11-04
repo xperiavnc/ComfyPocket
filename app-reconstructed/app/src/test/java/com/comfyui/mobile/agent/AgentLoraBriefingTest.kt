@@ -111,6 +111,15 @@ class AgentLoraBriefingTest {
         assertEquals("hatsune miku, 1girl, watercolor", finalPrompt(box.call(AgentDrawToolbox.SUBMIT, args("""{"reply":"好"}"""))))
     }
 
+    @Test fun hasSlotsDecidesWhetherTheTurnWaitsForTheServerLoraList() {
+        // No LoRA slot means no LoRA tool, so the turn must not wait for a possibly stale server list first.
+        val plain: Map<String, Any> = mapOf("3" to mapOf("class_type" to "KSampler", "inputs" to mapOf("seed" to 1)))
+        assertFalse(AgentLoraCatalog.hasSlots(plain))
+        val loaded: Map<String, Any> = mapOf("4" to mapOf("class_type" to "LoraLoader",
+            "inputs" to mapOf("lora_name" to "a.safetensors", "strength_model" to 1.0, "strength_clip" to 1.0)))
+        assertTrue(AgentLoraCatalog.hasSlots(loaded))
+    }
+
     @Test fun slotsFollowStackCountsWeightNamesAndSwitches() {
         val graph: Map<String, Any> = mapOf(
             "1" to mapOf("class_type" to "LoRA Stacker", "inputs" to mapOf("input_mode" to "simple", "lora_count" to 2,
