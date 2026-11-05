@@ -92,6 +92,10 @@ Agent、控制页和应用页共用的**本地模型选择器**接通模型中�
   debug / release 构建与 150 个测试类 / 1117 项测试通过（新增 1 类 / 7 项），0 失败 / 错误 / 跳过。
   APK SHA-256：`fd6fa82afcf0fa97d4fc59eb0df7bd78e9728e2cbb33914c8c734ebdfe74f3a6`
   （`ComfyPocket-0.0.103.apk`，release，44,835,618 字节）。
+  配套插件包 `ComfyUI-Mobile-Bridge-2.2.6.zip`（58,363 字节，12 个条目，只含运行文件）
+  SHA-256 `b8e304ab7eacdd6e3f1070386c4e95ed141ae58278f0149c8c54e08e4b42a69f`，
+  由 `python tools/pack_mobile_bridge.py` 生成；解压后把 `ComfyUI-Mobile-Bridge/` 放进
+  `custom_nodes/` 并重启，打包出的运行文件在解压目录下通过插件自带 124 项 `unittest`。
 
 - `0.0.102-agent-memory-edit-lora`（versionCode 104）：对话历史保留最近 3 次出图的正向与反向提示词，
   默认历史窗口由 4 条放宽到 10 条，改动上一张时不必重述整段；新增 `edit_prompt` 工具按标签增删改，

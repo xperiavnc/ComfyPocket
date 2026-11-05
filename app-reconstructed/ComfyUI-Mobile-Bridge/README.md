@@ -48,6 +48,9 @@ ComfyUI-Manager 仅用于可选的已装插件列表查询，不参与模型下�
 
 ## 安装 / 从单文件版升级
 
+发布包 `ComfyUI-Mobile-Bridge-<版本>.zip` 解压后就是一个同名目录，直接放进 `custom_nodes/`；
+包内只含运行所需的 `__init__.py`、各功能模块与 `web/`，不含 `tests/`。
+
 1. 停止 ComfyUI，备份原 `custom_nodes/ComfyUI-Mobile-Bridge` 目录。
 2. 将此处的**整个目录**放到 `ComfyUI/custom_nodes/ComfyUI-Mobile-Bridge/`。
    保持 `__init__.py`、配套 Python 模块及 `web/` 的相对位置；不再是只覆盖

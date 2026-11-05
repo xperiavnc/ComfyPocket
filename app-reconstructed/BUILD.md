@@ -61,6 +61,20 @@ gradlew.bat :app:assembleDebug :app:testDebugUnitTest --no-daemon --console=plai
 - 单元测试 HTML：`app/build/reports/tests/testDebugUnitTest/index.html`
 - 单元测试 XML：`app/build/test-results/testDebugUnitTest/`
 
+## 打包 ComfyUI 插件
+
+服务端插件不打入 APK，单独提供 ZIP：解压后把 `ComfyUI-Mobile-Bridge/` 整个目录放进
+`ComfyUI/custom_nodes/`，替换旧目录并重启 ComfyUI。
+
+```bat
+rem 在 app-reconstructed 目录：
+python tools\pack_mobile_bridge.py
+```
+
+输出 `build/outputs/ComfyUI-Mobile-Bridge/ComfyUI-Mobile-Bridge-<版本>.zip`。
+压缩包只含运行所需的 `__init__.py`、各功能模块与 `web/`，不含 `tests/` 和 `__pycache__`；
+条目时间戳固定，同一份源码重复打包得到相同的 SHA-256。版本号取自插件 `README.md` 首行。
+
 ## 重要限制
 
 - 这是调试构建，使用构建机器的 Android debug 签名，没有配置正式发布签名。
