@@ -164,7 +164,9 @@ class AgentInteractionLoop(
             )), tool_call_id = decisionOutput.toolCalls.single().id)
         } else transcript += ChatMessageDto("user",
             "【智能体已完成的执行决策，仅作本轮数据】\n${gson.toJson(plan)}\n$COMPOSE_STEP")
-        for (attempt in 0..1) {
+        // Two repair rounds: one is often not enough when the model keeps omitting the prompt, and a
+        // second correction costs one request while turning a dead-end turn into a picture.
+        for (attempt in 0..2) {
             val output = request(false)
             checkCurrent()
             if (output.toolCalls.isEmpty()) {
@@ -175,7 +177,9 @@ class AgentInteractionLoop(
                         thinking = reasoning(decisionOutput, output), clarification = parsed.clarification,
                         action = AgentAction.ASK_USER), plan = plan)
                 if (output.content.isBlank()) throw AgentExecutionException("模型只返回了推理，尚无最终结果；本轮未提交。")
-                val invalid = if (attempt == 0) validate?.invoke(output.content) else null
+                // The last attempt is returned as is: a reply the model already failed twice to fix is
+                // better surfaced than silently retried forever.
+                val invalid = if (attempt < 2) validate?.invoke(output.content) else null
                 if (invalid != null) {
                     onProgress(AgentProgress("", "", "结果格式有误，正在让模型修正…"))
                     transcript += ChatMessageDto("assistant", output.content)
@@ -195,7 +199,7 @@ class AgentInteractionLoop(
                     .copy(thinking = reasoning(decisionOutput, output)), plan = plan)
             } catch (e: CancellationException) { throw e
             } catch (e: Exception) {
-                if (attempt == 1) throw AgentExecutionException("模型提问格式仍有误，本轮未提交。${e.message.orEmpty()}")
+                if (attempt == 2) throw AgentExecutionException("模型提问格式仍有误，本轮未提交。${e.message.orEmpty()}")
                 repair(output, e.message.orEmpty(), false)
             }
         }
@@ -213,7 +217,7 @@ class AgentInteractionLoop(
         /** Appended (never merged into the system message) so the cached prefix stays byte-identical. */
         const val COMPOSE_STEP = "【当前步骤：编写结果】按系统中的输出格式返回最终结果。" +
             "如果发现新的必要冲突，调用 ask_user_question 并等待，不要只在普通回复中问完就继续出图；不要再调用 continue_task。"
-        const val RESULT_REPAIR_PREFIX = "【结果格式修正，仅此一次】上一条结果无法解析："
+        const val RESULT_REPAIR_PREFIX = "【结果格式修正】上一条结果无法解析："
         const val RESULT_REPAIR_RULES = "。请按原任务重新输出一个完整、合法的 JSON 对象：" +
             "字符串内的双引号写成 \\\"，不要在字符串里直接换行，不要截断，JSON 前后不要附加解释或代码块之外的文字。"
         fun explicitlyRejectsTools(error: LlmException): Boolean {

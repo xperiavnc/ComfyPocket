@@ -312,4 +312,32 @@ class AgentReplyParserTest {
         assertEquals("", result.negativePrompt)
         assertEquals(true, result.shouldDraw)
     }
+
+    @Test fun promptThatQuotesSignageIsNotMistakenForALeakedEnvelope() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"好了","prompt":"1girl, sign: \"OPEN\", night street","should_draw":true}""",
+            preserveNaturalLanguage = true
+        )
+        // A quote next to a colon is normal drawing text, not evidence of a leaked JSON property:
+        // dropping the whole prompt here is what ended turns with "JSON 中没有有效的 prompt".
+        assertEquals("""1girl, sign: "OPEN", night street""", result.prompt)
+        assertNull(result.error)
+    }
+
+    @Test fun dumpedEnvelopeInsideThePromptIsStillDropped() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"好了","prompt":"{\"prompt\": \"1girl\"}"}""",
+            preserveNaturalLanguage = true
+        )
+        assertEquals("", result.prompt)
+        assertTrue(result.error != null)
+    }
+
+    @Test fun envelopeKeyWithoutItsLeadingQuoteIsAlsoDropped() {
+        val result = AgentReplyParser.parse(
+            """{"reply":"好了","prompt":"{, prompt": "1girl, red dress","should_draw":true}""",
+            preserveNaturalLanguage = true
+        )
+        assertEquals("", result.prompt)
+    }
 }

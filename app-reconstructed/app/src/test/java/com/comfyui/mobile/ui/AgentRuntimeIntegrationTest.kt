@@ -1106,9 +1106,14 @@ class AgentRuntimeIntegrationTest {
         vm.sendAgentMessage("画星澜")
         awaitDone()
         responses += success("""{"reply":"好","prompt":"","negative_prompt":"","should_draw":true}""")
+        // Two repair rounds: the turn now asks again instead of failing on the first blank prompt.
+        responses += success("""{"reply":"好","prompt":"","negative_prompt":"","should_draw":true}""")
+        responses += success("""{"reply":"好","prompt":"","negative_prompt":"","should_draw":true}""")
         vm.sendAgentMessage("画月汐")
         awaitDone()
         assertEquals(AgentPhase.FAILED, vm.agentSessionState.value.turn!!.phase)
+        // Three compose requests: the first answer plus two correction rounds, all still promptless.
+        assertEquals(4, llmBodies.size)
         assertEquals(1, promptBodies.size)
         assertEquals("1girl, a_token", graphText())
         assertNull(vm.agentMessages.value.last().expandedPrompt)

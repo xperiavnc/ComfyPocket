@@ -1523,21 +1523,40 @@ object MainViewModelAgent {
                 if (onAgentProgress != null) onAgentProgress(progress)
                 else onProgress?.invoke("", "", progress.reasoning, progress.content)
             }
-            // A draw reply whose JSON can't be read used to end the turn with "未出图"; ask once for a fix.
-            // A text-only reply to a draw request (typical right after switching from chat mode, whose
+            // A draw reply that carries no prompt used to end the turn with "未解析到有效提示词，未出图";
+            // a text-only reply to a draw request (typical right after switching from chat mode, whose
             // plain replies fill the history) gets one reminder to actually submit.
             var nudged = false
             val validate: (String) -> String? = { content ->
                 val check = com.comfyui.mobile.data.AgentReplyParser.parse(
                     sanitizeThinkingContent(content), preserveNaturalLanguage = true)
-                check.error.takeIf { it == "模型返回的 JSON 无法解析" && check.prompt.isBlank() && check.clarification == null }
-                    ?: if (!nudged && check.clarification == null && check.prompt.isBlank() && check.shouldDraw != true &&
-                        com.comfyui.mobile.agent.AgentDrawNudge.wanted(userText, check.reply.ifBlank { content },
-                            declined = check.shouldDraw == false || check.action == com.comfyui.mobile.agent.AgentAction.RESPOND)) {
+                val paused = check.clarification != null
+                val declined = check.shouldDraw == false ||
+                    check.action == com.comfyui.mobile.agent.AgentAction.RESPOND
+                // Only a turn that is supposed to end in a picture can miss a prompt; a chat turn in
+                // draw mode must stay an ordinary answer.
+                val drawWanted = !paused && !declined &&
+                    (check.action == com.comfyui.mobile.agent.AgentAction.DRAW || check.shouldDraw == true ||
+                        com.comfyui.mobile.agent.AgentDrawNudge.wanted(userText, check.reply.ifBlank { content }))
+                // An unreadable envelope still deserves a repair round even when the nudge heuristic
+                // cannot tell what the user wanted.
+                val envelope = content.trimStart().startsWith("{") ||
+                    content.contains("\"should_draw\"", ignoreCase = true) ||
+                    content.contains("\"prompt\"", ignoreCase = true)
+                val missingPrompt = check.prompt.isBlank() && !paused && !declined
+                when {
+                    !missingPrompt -> null
+                    drawWanted && !envelope && !nudged -> {
                         nudged = true
                         vm.addLog("Agent 绘图模式只回了文字，已提醒模型提交出图", LogType.WARNING)
                         com.comfyui.mobile.agent.AgentDrawNudge.message(toolbox != null)
-                    } else null
+                    }
+                    drawWanted || envelope -> {
+                        vm.addLog("Agent 结果没有可用提示词（${check.error ?: "prompt 为空"}），已要求模型补上", LogType.WARNING)
+                        com.comfyui.mobile.agent.AgentDrawRepair.missingPrompt(check.error)
+                    }
+                    else -> null
+                }
             }
             val outcome = toolbox?.let {
                 try {
@@ -1731,7 +1750,10 @@ object MainViewModelAgent {
             LogType.INFO
     )
         if (parsed.error != null) {
-            vm.addLog("Agent 提示词解析: ${parsed.error}（原始 ${raw.length} 字）", LogType.WARNING)
+            // Keep a short head of the raw answer: without it a "no usable prompt" report cannot be
+            // traced back to what the model actually returned.
+            vm.addLog("Agent 提示词解析: ${parsed.error}（原始 ${raw.length} 字，开头 ${raw.take(160).replace("\n", " ")}）",
+                LogType.WARNING)
         }
         return AgentLlmResult(
             tip = parsed.reply,

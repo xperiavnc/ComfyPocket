@@ -106,18 +106,27 @@ class AgentInteractionLoopTest {
         assertNull(result.output)
     }
 
-    @Test fun unreadableResultGetsOneRepairRoundThenIsReturnedAsIs() = runBlocking {
+    @Test fun unreadableResultGetsTwoRepairRoundsThenIsReturnedAsIs() = runBlocking {
+        val broken = LlmCompletionOutput("""{"reply":"好嘞","prompt":"1girl, "wariza", closed mouth""")
+        val validate: (String) -> String? = { if (it.endsWith("}")) null else "JSON 无法解析" }
+        // One correction is often not enough when the model keeps omitting the prompt, so the compose
+        // step gets a second fix before the answer is taken as it is.
+        val fixture = Fixture(ready(), broken, broken, broken)
+        val stillBroken = AgentInteractionLoop(fixture).run(messages, "decision", validate = validate)
+        assertEquals(broken.content, stillBroken.output!!.content)
+        assertEquals(4, fixture.requests.size)
+        assertEquals(2, fixture.requests.count { it.messages.last().content!!.startsWith(AgentInteractionLoop.RESULT_REPAIR_PREFIX) })
+        assertTrue(fixture.requests.last().messages.last().content!!.startsWith(AgentInteractionLoop.RESULT_REPAIR_PREFIX))
+    }
+
+    @Test fun aSecondCorrectionCanStillRescueAnUnreadableResult() = runBlocking {
         val broken = LlmCompletionOutput("""{"reply":"好嘞","prompt":"1girl, "wariza", closed mouth""")
         val fixed = LlmCompletionOutput("""{"reply":"好嘞","prompt":"1girl, wariza, closed mouth"}""")
         val validate: (String) -> String? = { if (it.endsWith("}")) null else "JSON 无法解析" }
-        val repaired = AgentInteractionLoop(Fixture(ready(), broken, fixed)).run(messages, "decision", validate = validate)
+        val fixture = Fixture(ready(), broken, broken, fixed)
+        val repaired = AgentInteractionLoop(fixture).run(messages, "decision", validate = validate)
         assertEquals(fixed.content, repaired.output!!.content)
-
-        val fixture = Fixture(ready(), broken, broken)
-        val stillBroken = AgentInteractionLoop(fixture).run(messages, "decision", validate = validate)
-        assertEquals(broken.content, stillBroken.output!!.content)
-        assertEquals(3, fixture.requests.size)
-        assertTrue(fixture.requests.last().messages.last().content!!.startsWith(AgentInteractionLoop.RESULT_REPAIR_PREFIX))
+        assertEquals(4, fixture.requests.size)
     }
 
     @Test fun unknownActionGetsOneExplicitToolErrorAndThenTheModelCanAsk() = runBlocking {

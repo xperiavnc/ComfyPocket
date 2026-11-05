@@ -401,6 +401,9 @@ object AgentReplyParser {
 
     private val KEY_PREFIX = Regex("""(?i)^["'\s]*(negative_prompt|negativePrompt|negative|prompt|reply|tip|tags|positive|should_draw|shoulddraw|draw|message)["'\s]*[:：]\s*""")
     private val JSONISH = Regex("""(?i)("\s*:(?!<)|:\s*"|\bshould_draw\b)""")
+    /** A leaked reply envelope: a `"prompt":`-style key, with or without its leading quote. */
+    private val ENVELOPE_KEY = Regex(
+        """(?i)(?:^|[\s,{(])"?(?:prompt|reply|tip|message|tags|positive|negative_prompt|negativeprompt|negative|should_draw|shoulddraw|draw|action)"?\s*:""")
 
     /**
      * Tag mode strips leaked envelope keys and conversational filler without damaging model syntax.
@@ -412,9 +415,11 @@ object AgentReplyParser {
         var text = stripFences(raw).trim()
         if (preserveNaturalLanguage) {
             text = text.replace(KEY_PREFIX, "").trim()
-            // A colon immediately after a quote is part of the quoted emoticon `":<"`,
-            // not evidence that the prompt contains a leaked JSON property.
-            if (JSONISH.containsMatchIn(text) || text.startsWith("{\"")) return ""
+            // Only a real `"prompt":`-style key proves a leaked envelope. Treating any quote next to a
+            // colon as one threw away prompts that quote signage, e.g. `1girl, sign: "OPEN"`, and the
+            // turn then died with "JSON 中没有有效的 prompt".
+            if (ENVELOPE_KEY.containsMatchIn(text) || text.contains("should_draw", ignoreCase = true) ||
+                text.startsWith("{\"")) return ""
             return text
         }
         text = text.lines().filterNot { it.trim().startsWith("---") }.joinToString(",")

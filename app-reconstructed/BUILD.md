@@ -28,12 +28,13 @@
 | Coroutines | 1.10.2 |
 
 这些版本用于复现当前源码的接口，不声称与丢失的原始版本清单相同。
-当前构建版本名为 `0.0.102`，版本号为 `104`。显示名 **ComfyPocket**；
+当前构建版本名为 `0.0.103`，版本号为 `105`。显示名 **ComfyPocket**；
 模型中心的手机直连资料 / 代理预览与详情说明见 `MODEL_CENTER.md`，Agent 见 `AGENT.md`，
 在线画廊见 `DANBOORU_GALLERY_PLAN.md`，底栏与动画说明见 `MATERIAL.md`。
-本批 Agent 出图流程定向回归 3 个测试类 / 17 项通过；全量 149 个测试类 / 1110 项通过，
-0 失败 / 错误 / 跳过，Debug 与 Release 构建通过，分别导出 `ComfyPocket-0.0.102-debug.apk`
-与 `ComfyPocket-0.0.102.apk`。
+本批 Agent 出图流程回归 7 项新增用例（分布在 3 个测试类，其中 `AgentDrawRepairTest` 为新建）；
+全量 150 个测试类 / 1117 项通过，
+0 失败 / 错误 / 跳过，Debug 与 Release 构建通过，分别导出 `ComfyPocket-0.0.103-debug.apk`
+与 `ComfyPocket-0.0.103.apk`。
 安装包名（applicationId）改为 `com.comfyui.mobile.rebuilt`，与原版区分；
 源码 namespace 和类名仍为 `com.comfyui.mobile`，FileProvider 标识随安装包名生成。
 
